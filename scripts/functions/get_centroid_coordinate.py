@@ -6,7 +6,7 @@ import sys
 
 import cv2
 import numpy as np
-import param
+from functions import param
 
 
 # 重心座標の取得
