@@ -6,7 +6,7 @@ profile = "black"
 
 [tool.ruff]
 line-length = 120
-ignore = ["E203"]
+ignore = ["E203", "E402"]
 
 [tool.mypy]
 check_untyped_defs = true
