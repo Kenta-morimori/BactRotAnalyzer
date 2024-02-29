@@ -1,0 +1,29 @@
+[tool.black]
+line-length = 120
+
+[tool.isort]
+profile = "black"
+
+[tool.ruff]
+line-length = 120
+ignore = ["E203"]
+
+[tool.mypy]
+check_untyped_defs = true
+ignore_missing_imports = true
+install_types = true
+non_interactive = true
+show_error_codes = true
+
+[tool.pytest.ini_options]
+testpaths = [
+    "tests",
+]
+
+[tool.coverage.run]
+omit = [
+    "tests/*"
+]
+
+[tool.pydocstyle]
+ignore = "D100, D2, D3, D4"

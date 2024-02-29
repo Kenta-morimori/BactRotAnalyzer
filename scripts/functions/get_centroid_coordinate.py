@@ -6,6 +6,14 @@ import sys
 
 import cv2
 import numpy as np
+
+# 現在のスクリプトのディレクトリパスを取得
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# current_dir の親ディレクトリパスを取得（functionsディレクトリの親、つまりscriptsディレクトリを指す）
+parent_dir = os.path.dirname(current_dir)
+# 親ディレクトリをシステムパスに追加
+sys.path.append(parent_dir)
+
 from functions import param
 
 
@@ -13,11 +21,9 @@ from functions import param
 def contours(img):
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     _, img_binary = cv2.threshold(img_gray, 120, 255, cv2.THRESH_BINARY)
-    contours, _ = cv2.findContours(
-        img_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-    )
+    contours, _ = cv2.findContours(img_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    max_area = 0
+    max_area = 0.0
     max_contour = None
     for contour in contours:
         area = cv2.contourArea(contour)
@@ -48,11 +54,7 @@ def save_centorid_cordinate(save_dir, save_name, data_num, x_list, y_list):
         # データを書き込む
         for i in range(data_len):
             # xとyのデータを交互に配置
-            row = [
-                item
-                for pair in zip(x_list, y_list)
-                for item in [pair[0][i], pair[1][i]]
-            ]
+            row = [item for pair in zip(x_list, y_list) for item in [pair[0][i], pair[1][i]]]
             csvwriter.writerow(row)
 
 
@@ -63,9 +65,14 @@ def extract_centroid(day):
     csv_save_name = "saved_centroid_coordinate.csv"
     # input dataのファイル名を取得
     file_name_list_bef = glob.glob(f"{input_dir}/*.avi")
-    file_name_list_aft = sorted(
-        file_name_list_bef, key=lambda x: int(re.search(r"(\d+)\.avi$", x).group(1))
-    )
+    # file_name_list_aft = sorted(
+    #     file_name_list_bef, key=lambda x: int(re.search(r"(\d+)\.avi$", x).group(1))
+    # )
+    file_name_list_aft = []
+    for x in file_name_list_bef:
+        match = re.search(r"(\d+)\.avi$", x)
+        if match:  # ここで match が None でないことを確認
+            file_name_list_aft.append(x)
 
     x_list, y_list = [], []
     for file_name in file_name_list_aft:
