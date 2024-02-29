@@ -1,0 +1,22 @@
+.vscode/
+data/*
+!data/README.md
+models/*
+!models/README.md
+outputs/*
+!outputs/README.md
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
