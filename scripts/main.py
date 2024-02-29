@@ -1,10 +1,10 @@
 import sys
 
 from functions import (
-    get_angular_velocity, 
+    get_angular_velocity,
     input_data,
-    make_evaluate_switching, 
-    make_gragh
+    make_evaluate_switching,
+    make_gragh,
 )
 
 
