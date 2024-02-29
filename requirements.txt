@@ -1,0 +1,10 @@
+black
+ruff
+isort
+mypy
+psutil
+pydocstyle
+numpy
+opencv-python
+pandas
+matplotlib
