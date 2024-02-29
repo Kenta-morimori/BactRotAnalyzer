@@ -33,8 +33,8 @@ def contours(img):
 
     if max_contour is not None:
         # 輪郭ポイントの平均値を重心とする
-        mean_x = np.mean(max_contour[:, 0, 0])
-        mean_y = np.mean(max_contour[:, 0, 1])
+        mean_x = np.mean(max_contour[:, 0, 0].astype(float))
+        mean_y = np.mean(max_contour[:, 0, 1].astype(float))
         return mean_x, mean_y
     else:
         # 輪郭が見つからない場合はNoneを返す
