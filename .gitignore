@@ -6,6 +6,11 @@ models/*
 outputs/*
 !outputs/README.md
 
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
 # Unit test / coverage reports
 htmlcov/
 .tox/
