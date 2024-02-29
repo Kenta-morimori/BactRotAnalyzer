@@ -4,8 +4,6 @@ isort
 mypy
 psutil
 pydocstyle
-pytest
-pytest-cov
 numpy
 opencv-python
 pandas

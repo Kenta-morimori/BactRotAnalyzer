@@ -1,11 +1,11 @@
+import csv
+import glob
+import os
+import re
 import sys
+
 import cv2
 import numpy as np
-import glob
-import re
-import os
-import csv
-
 import param
 
 

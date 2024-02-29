@@ -1,11 +1,7 @@
 import sys
 
-from functions import (
-    input_data,
-    make_gragh,
-    get_angular_velocity,
-    make_evaluate_switching,
-)
+from functions import (get_angular_velocity, input_data,
+                       make_evaluate_switching, make_gragh)
 
 
 # 回転解析
