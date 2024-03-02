@@ -1,7 +1,6 @@
 import configparser
 import os
 
-
 # ディレクトリ
 curr_dir = os.getcwd()
 input_dir_bef = f"{curr_dir}/../data"
