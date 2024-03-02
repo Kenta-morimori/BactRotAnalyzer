@@ -8,7 +8,7 @@ save_dir_bef = f"{curr_dir}/../outputs"
 
 
 def get_config(day):
-    config_dir = f"{input_dir_bef}/config.ini"
+    config_dir = f"{input_dir_bef}/{day}/config.ini"
     config = configparser.ConfigParser()
     config.read(config_dir)
 
