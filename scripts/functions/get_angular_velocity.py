@@ -30,9 +30,8 @@ def get_center_coordinate(X, Y):
     return center_x, center_y
 
 
-def get_angular_velocity(x_list, y_list):
-    sample_num = param.sample_num
-    FrameRate = param.FrameRate
+def get_angular_velocity(x_list, y_list, day):
+    sample_num, FrameRate, _ = param.get_config(day)
     angle_list, angular_velocity_list = [], []
 
     for i in range(sample_num):

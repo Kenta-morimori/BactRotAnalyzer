@@ -5,7 +5,7 @@ from . import param
 
 def save_switching_value(switching_value_list, day):
     csv_save_dir = f"{param.save_dir_bef}/{day}/switching_value.csv"
-    sample_num = param.sample_num
+    sample_num, _, _ = param.get_config(day)
 
     with open(csv_save_dir, "w", newline="") as csvfile:
         csvwriter = csv.writer(csvfile)

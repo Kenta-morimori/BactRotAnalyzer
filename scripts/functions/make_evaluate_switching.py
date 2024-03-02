@@ -2,7 +2,7 @@ from . import param, save2csv
 
 
 def evaluate_switching(angular_velocity_list, day):
-    sample_num = param.sample_num
+    sample_num, _, _ = param.get_config(day)
     # スイッチング頻度をCCW/CWと定義
     switching_value_list = []
     for i in range(sample_num):

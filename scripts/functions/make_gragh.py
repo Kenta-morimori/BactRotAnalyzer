@@ -7,7 +7,8 @@ from . import param
 
 
 def plot_centroid_coordinate(x_list, y_list, day):
-    sample_num = param.sample_num
+    sample_num, FrameRate, total_time = param.get_config(day)
+
     save_dir = f"{param.save_dir_bef}/{day}/centroid_coordinate"
     os.makedirs(save_dir, exist_ok=True)
 
@@ -26,7 +27,7 @@ def plot_centroid_coordinate(x_list, y_list, day):
     plt.savefig(f"{save_dir}/trajectory.png")
 
     # x座標, y座標をplot
-    time_list = np.linspace(0, param.total_time, param.total_time * param.FrameRate)
+    time_list = np.linspace(0, total_time, total_time * FrameRate)
     xy_plot_label = ["x [pixel]", "y [pixel]"]
     xy_save_label = ["x_coordinate.png", "y_coordinate.png"]
 
@@ -45,10 +46,10 @@ def plot_centroid_coordinate(x_list, y_list, day):
 
 
 def plot_angular_velocity(angle_list, angular_velocity_list, day):
-    sample_num = param.sample_num
+    sample_num, FrameRate, total_time = param.get_config(day)
     save_dir = f"{param.save_dir_bef}/{day}/angular_velocity"
     os.makedirs(save_dir, exist_ok=True)
-    time_list = np.linspace(0, param.total_time, param.total_time * param.FrameRate)
+    time_list = np.linspace(0, total_time, total_time * FrameRate)
 
     # 時系列角度をplot
     fig, axs = plt.subplots(5, sample_num // 5, figsize=(20, 20))
