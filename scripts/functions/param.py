@@ -1,5 +1,6 @@
-import os
 import configparser
+import os
+
 
 # ディレクトリ
 curr_dir = os.getcwd()
