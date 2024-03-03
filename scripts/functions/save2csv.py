@@ -3,8 +3,11 @@ import csv
 from . import param
 
 
-def save_switching_value(switching_value_list, day):
-    csv_save_dir = f"{param.save_dir_bef}/{day}/switching_value.csv"
+def save_switching_value(switching_value_list, day, flag_averaged=False):
+    if flag_averaged:
+        csv_save_dir = f"{param.save_dir_bef}/{day}/switching_value_averagedAV.csv"
+    else:
+        csv_save_dir = f"{param.save_dir_bef}/{day}/switching_value.csv"
     sample_num, _, _ = param.get_config(day)
 
     with open(csv_save_dir, "w", newline="") as csvfile:

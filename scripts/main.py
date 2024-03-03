@@ -22,6 +22,7 @@ def analyze_rotation(day):
 
     # option: 角速度のスイッチングを評価
     make_evaluate_switching.evaluate_switching(angular_velocity_list, day)
+    make_evaluate_switching.evaluate_switching_with_averaging(angular_velocity_list, day)
 
 
 # 回転揺らぎの解析
