@@ -59,15 +59,11 @@ def save_centorid_cordinate(save_dir, save_name, data_num, x_list, y_list):
 
 
 def extract_centroid(day):
-    # sample_num = param.sample_num
     input_dir = f"{param.input_dir_bef}/{day}"
     save_dir = f"{param.save_dir_bef}/{day}"
     csv_save_name = "saved_centroid_coordinate.csv"
     # input dataのファイル名を取得
     file_name_list_bef = glob.glob(f"{input_dir}/*.avi")
-    # file_name_list_aft = sorted(
-    #     file_name_list_bef, key=lambda x: int(re.search(r"(\d+)\.avi$", x).group(1))
-    # )
     file_name_list_aft = []
     for x in file_name_list_bef:
         match = re.search(r"(\d+)\.avi$", x)

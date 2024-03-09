@@ -30,9 +30,8 @@ def get_center_coordinate(X, Y):
     return center_x, center_y
 
 
-def get_angular_velocity(x_list, y_list):
-    sample_num = param.sample_num
-    FrameRate = param.FrameRate
+def get_angular_velocity(x_list, y_list, day):
+    sample_num, FrameRate, _ = param.get_config(day)
     angle_list, angular_velocity_list = [], []
 
     for i in range(sample_num):
@@ -52,7 +51,8 @@ def get_angular_velocity(x_list, y_list):
                 angle_diff -= 2 * np.pi
             elif angle_diff < -np.pi:
                 angle_diff += 2 * np.pi
-            add_angular_velocity.append(angle_diff * FrameRate)
+            # CCWを正にするために-1をかける
+            add_angular_velocity.append(-1 * angle_diff * FrameRate)
         angular_velocity_list.append(add_angular_velocity)
 
     return angle_list, angular_velocity_list
