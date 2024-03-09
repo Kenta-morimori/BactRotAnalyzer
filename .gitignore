@@ -1,6 +1,7 @@
 .vscode/
 data/*
 !data/README.md
+!data/test_data
 models/*
 !models/README.md
 outputs/*
