@@ -19,7 +19,7 @@ def evaluate_switching(angular_velocity_list, day):
     save2csv.save_switching_value(switching_value_list, day)
 
 
-def evaluate_switching_with_averaging(angular_velocity_list_bef, day):
+def evaluate_switching_averaged(angular_velocity_list_bef, day):
     sample_num, _, total_time = param.get_config(day)
 
     # angular_velocity_list を窓関数を用いて平均化
