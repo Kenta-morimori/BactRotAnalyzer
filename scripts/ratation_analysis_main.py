@@ -9,7 +9,7 @@ from functions import (
 
 
 # 回転解析
-def analyze_rotation(day):
+def main(day):
     # 重心座標の取得
     x_list, y_list = input_data.input_centroid_coordinate(day)
     # 重心座標, x座標, y座標のplot
@@ -22,15 +22,9 @@ def analyze_rotation(day):
 
     # option: 角速度のスイッチングを評価
     make_evaluate_switching.evaluate_switching(angular_velocity_list, day)
-    make_evaluate_switching.evaluate_switching_with_averaging(angular_velocity_list, day)
-
-
-# 回転揺らぎの解析
-def analyze_fluctuation(day):
-    print("hogehoge")
+    make_evaluate_switching.evaluate_switching_averaged(angular_velocity_list, day)
 
 
 if __name__ == "__main__":
-    day = sys.argv[2]
-    if sys.argv[1] == "rotation_analysis":
-        analyze_rotation(day)
+    day = sys.argv[1]
+    main(day)
