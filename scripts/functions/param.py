@@ -21,5 +21,5 @@ def get_config(day):
     return sample_num, FrameRate, total_time
 
 
-# window_width_list [s]
-window_width_list = ["0.5", "0.1"]
+# fluctuation analysis
+SD_window_width_list = ["0.5", "1.0"]
