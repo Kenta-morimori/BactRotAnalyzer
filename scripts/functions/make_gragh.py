@@ -22,7 +22,6 @@ def plot_centroid_coordinate(x_list, y_list, day):
         axs[row, col].set_title(f"Trajectory No.{i+1}")
         axs[row, col].set_xlabel("x [pixel]")
         axs[row, col].set_ylabel("y [pixel]")
-        axs[row, col].set_aspect("equal")
     plt.tight_layout()
     plt.savefig(f"{save_dir}/trajectory.png")
 
@@ -96,3 +95,112 @@ def plot_averaged_angular_velocity(angular_velocity_list, day):
         axs[row, col].set_ylabel("angle velocity [rad/s]")
     plt.tight_layout()
     plt.savefig(f"{save_dir}/angular-velocity_time-series_averaged.png")
+
+
+def plot_fft(freq_list, Amp_list, save_dir, save_name, day):
+    sample_num, _, _ = param.get_config(day)
+    os.makedirs(save_dir, exist_ok=True)
+
+    # 時系列角速度をplot
+    fig, axs = plt.subplots(5, sample_num // 5, figsize=(20, 20))
+    for i in range(sample_num):
+        row = i // 2
+        col = i % 2
+        axs[row, col].plot(freq_list[i], Amp_list[i])
+        axs[row, col].grid(True)
+        axs[row, col].set_xlabel("freqency [Hz]")
+        axs[row, col].set_ylabel("Amp")
+        axs[row, col].set_xscale("log")
+        axs[row, col].set_yscale("log")
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/{save_name}")
+
+
+def plot_SD_list(SD_list, day):
+    sample_num, FrameRate, _ = param.get_config(day)
+    width_time_list = param.SD_window_width_list
+    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis"
+
+    # sepalate save
+    for i, width_time in enumerate(width_time_list):
+        data_len = len(SD_list[0][i])
+        time_list = np.linspace(0, data_len / FrameRate, data_len)
+
+        fig, axs = plt.subplots(5, sample_num // 5, figsize=(20, 20))
+        for j in range(sample_num):
+            row = j // 2
+            col = j % 2
+            axs[row, col].plot(time_list, SD_list[j][i])
+            axs[row, col].grid(True)
+            axs[row, col].set_title(f"SD time-series No.{j+1}")
+            axs[row, col].set_xlabel("time [s]")
+            axs[row, col].set_ylabel("SD")
+        plt.tight_layout()
+        plt.savefig(f"{save_dir}/SD-time-series_{width_time}s.png")
+    
+    # Stacking save
+    color_list = ["m", "g", "b", "y", "c", "r"]
+    plot_label_list = []
+    for width_time in width_time_list:
+        plot_label_list.append(f"SD {width_time}s")
+    
+    fig, axs = plt.subplots(5, sample_num // 5, figsize=(20, 20))
+    for i, width_time in enumerate(width_time_list):
+        data_len = len(SD_list[0][i])
+        time_list = np.linspace(0, data_len / FrameRate, data_len)
+
+        for j in range(sample_num):
+            row = j // 2
+            col = j % 2
+            axs[row, col].plot(time_list, SD_list[j][i], label=f"SD {width_time}s", c=color_list[i])
+            axs[row, col].grid(True)
+            axs[row, col].set_title(f"SD time-series No.{j+1}")
+            axs[row, col].set_xlabel("time [s]")
+            axs[row, col].set_ylabel("SD")
+    axs[-1][-1].legend(plot_label_list, loc='upper left', bbox_to_anchor=(1, 1))
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/SD-time-series_all.png")
+    
+
+def plot_SD_list_fft(freq_list, Amp_list, day):
+    sample_num, _, _ = param.get_config(day)
+    width_time_list = param.SD_window_width_list
+    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis"
+
+    # sepalate save
+    for i, width_time in enumerate(width_time_list):
+        fig, axs = plt.subplots(5, sample_num // 5, figsize=(20, 20))
+        for j in range(sample_num):
+            row = j // 2
+            col = j % 2
+            axs[row, col].plot(freq_list[j][i], Amp_list[j][i])
+            axs[row, col].grid(True)
+            axs[row, col].set_title(f"SD time-series No.{j+1}")
+            axs[row, col].set_xlabel("Amp")
+            axs[row, col].set_ylabel("freqency [Hz]")
+            axs[row, col].set_xscale("log")
+            axs[row, col].set_yscale("log")
+        plt.tight_layout()
+        plt.savefig(f"{save_dir}/SD-time-series_FFT_{width_time}s.png")
+
+    # Stacking save
+    color_list = ["m", "g", "b", "y", "c", "r"]
+    plot_label_list = []
+    for width_time in width_time_list:
+        plot_label_list.append(f"SD {width_time}s")
+    
+    fig, axs = plt.subplots(5, sample_num // 5, figsize=(20, 20))
+    for i, width_time in enumerate(width_time_list):
+        for j in range(sample_num):
+            row = j // 2
+            col = j % 2
+            axs[row, col].plot(freq_list[j][i], Amp_list[j][i], label=f"SD {width_time}s", c=color_list[i])
+            axs[row, col].grid(True)
+            axs[row, col].set_title(f"SD time-series No.{j+1}")
+            axs[row, col].set_xlabel("Amp")
+            axs[row, col].set_ylabel("freqency [Hz]")
+            axs[row, col].set_xscale("log")
+            axs[row, col].set_yscale("log")
+        axs[-1][-1].legend(plot_label_list, loc='upper left', bbox_to_anchor=(1, 1))
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/SD-time-series_FFT_all.png")
