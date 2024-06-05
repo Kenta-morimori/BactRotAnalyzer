@@ -3,6 +3,7 @@ import glob
 import os
 import re
 import sys
+from typing import List
 
 import cv2
 import numpy as np
@@ -62,13 +63,15 @@ def extract_centroid(day):
     input_dir = f"{param.input_dir_bef}/{day}"
     save_dir = f"{param.save_dir_bef}/{day}"
     csv_save_name = "saved_centroid_coordinate.csv"
-    # input dataのファイル名を取得
+
     file_name_list_bef = glob.glob(f"{input_dir}/*.avi")
-    file_name_list_aft = []
+    sort_num: List[tuple[str, int]] = []
     for x in file_name_list_bef:
-        match = re.search(r"(\d+)\.avi$", x)
-        if match:  # ここで match が None でないことを確認
-            file_name_list_aft.append(x)
+        match = re.search(r"_([0-9]+)\.avi$", x)
+        if match:
+            sort_num.append((x, int(match.group(1))))
+    sort_num.sort(key=lambda x: x[1])
+    file_name_list_aft: List[str] = [x[0] for x in sort_num]
 
     x_list, y_list = [], []
     for file_name in file_name_list_aft:
