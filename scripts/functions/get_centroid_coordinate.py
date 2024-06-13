@@ -62,7 +62,7 @@ def save_centorid_cordinate(save_dir, save_name, data_num, x_list, y_list):
 def extract_centroid(day):
     input_dir = f"{param.input_dir_bef}/{day}"
     save_dir = f"{param.save_dir_bef}/{day}"
-    csv_save_name = "saved_centroid_coordinate.csv"
+    csv_save_name = "centroid_coordinate.csv"
 
     file_name_list_bef = glob.glob(f"{input_dir}/*.avi")
     sort_num: List[tuple[str, int]] = []
@@ -88,7 +88,7 @@ def extract_centroid(day):
         x_list.append(add_x_list)
         y_list.append(add_y_list)
 
-    # csv形式に保存
+    # save
     save_centorid_cordinate(save_dir, csv_save_name, len(x_list), x_list, y_list)
 
 

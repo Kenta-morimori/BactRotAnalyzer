@@ -26,7 +26,7 @@ def fft_angle(angle_list, day):
     # plot
     save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis"
     save_name = "angle_FFT"
-    make_graph.plot_fft(freq_list, Amp_list, save_dir, save_name, day)
+    make_graph.plot_fft(freq_list, Amp_list, save_dir, save_name, day, flag_add_peak=True)
 
 
 def fft_angular_velocity(angular_velocity_list, day):
@@ -43,7 +43,7 @@ def fft_angular_velocity(angular_velocity_list, day):
     make_graph.plot_fft(freq_list, Amp_list, save_dir, save_name, day)
 
 
-def fft_sd_list(sd_list, day):
+def fft_sd_list(sd_list, day, flag_std):
     sample_num, FrameRate, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
     freq_list, Amp_list = [], []
@@ -57,4 +57,4 @@ def fft_sd_list(sd_list, day):
         freq_list.append(add_freq_list)
         Amp_list.append(add_Amp_list)
     # plot
-    make_graph.plot_SD_list_fft(freq_list, Amp_list, day)
+    make_graph.plot_SD_list_fft(freq_list, Amp_list, day, flag_std)

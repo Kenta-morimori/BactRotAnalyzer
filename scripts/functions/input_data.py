@@ -8,7 +8,7 @@ from . import param
 
 def input_centroid_coordinate(day):
     save_dir = f"{param.save_dir_bef}/{day}"
-    csv_dir = f"{save_dir}/saved_centroid_coordinate.csv"
+    csv_dir = f"{save_dir}/centroid_coordinate.csv"
 
     # 中心座標の保存
     if not os.path.isfile(csv_dir):

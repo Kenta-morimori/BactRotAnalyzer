@@ -1,6 +1,6 @@
 import numpy as np
 
-from . import param
+from . import param, save2csv
 
 
 # 二次形式を用いて中心座標を算出
@@ -30,13 +30,34 @@ def get_center_coordinate(X, Y):
     return center_x, center_y
 
 
+def correct_angular_velocity(data):
+    num_std_dev = 3
+    data_aft = []
+
+    mean = np.mean(data)
+    std_dev = np.std(data)
+    lower_th = mean - num_std_dev * std_dev
+    upper_th = mean + num_std_dev * std_dev
+
+    for x in data:
+        if x < lower_th or upper_th < x:
+            data_aft.append(mean)
+        else:
+            data_aft.append(x)
+    
+    return data_aft
+
+
 def get_angular_velocity(x_list, y_list, day):
     sample_num, FrameRate, _ = param.get_config(day)
     angle_list, angular_velocity_list = [], []
+    center_x_list, center_y_list = [], []
 
     for i in range(sample_num):
         x_arr, y_arr = np.array(x_list[i]), np.array(y_list[i])
         center_x, center_y = get_center_coordinate(x_arr, y_arr)
+        center_x_list.append(center_x)
+        center_y_list.append(center_y)
 
         # 角度の取得
         angle = np.arctan2(y_arr - center_y, x_arr - center_x)
@@ -53,6 +74,15 @@ def get_angular_velocity(x_list, y_list, day):
                 angle_diff += 2 * np.pi
             # CCWを正にするために-1をかける
             add_angular_velocity.append(-1 * angle_diff * FrameRate)
-        angular_velocity_list.append(add_angular_velocity)
+
+        # crrect angular velocity
+        if param.flag_angular_velocity_correction:
+            add_angular_velocity_aft = correct_angular_velocity(add_angular_velocity)
+            angular_velocity_list.append(add_angular_velocity_aft)
+        else:
+            angular_velocity_list.append(add_angular_velocity)
+
+    # save center of rotation
+    save2csv.save_center_of_rotation(center_x_list, center_y_list, day)
 
     return angle_list, angular_velocity_list

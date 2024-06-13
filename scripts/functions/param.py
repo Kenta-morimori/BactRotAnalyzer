@@ -1,7 +1,7 @@
 import configparser
 import os
 
-# ディレクトリ
+# directory information
 curr_dir = os.getcwd()
 input_dir_bef = f"{curr_dir}/../data"
 save_dir_bef = f"{curr_dir}/../outputs"
@@ -20,6 +20,9 @@ def get_config(day):
 
     return sample_num, FrameRate, total_time
 
+# rotational analysis
+flag_angular_velocity_correction = True
+flag_evaluating_switching = True  # evaluate switching of rotation
 
 # fluctuation analysis
-SD_window_width_list = ["0.5", "1.0"]
+SD_window_width_list = [0.1, 0.5, 1.0, 2.0]
