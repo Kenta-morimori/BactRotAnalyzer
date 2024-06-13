@@ -2,12 +2,12 @@ import statistics
 
 import numpy as np
 
-from . import frequency_analysis, make_gragh, param
+from . import frequency_analysis, make_graph, param
 
 
 def get_sd_time_series(angular_velocity, day):
     _, FrameRate, total_time = param.get_config(day)
-    width_time_list = [float(width_time) for width_time in param.SD_window_width_list]
+    width_time_list = [width_time for width_time in param.SD_window_width_list]
 
     sd_list = []
     for width_time in width_time_list:
@@ -33,7 +33,7 @@ def main(angular_velocity_list, day):
         sd_list.append(add_sd_list)
 
     # plot
-    make_gragh.plot_SD_list(sd_list, day)
+    make_graph.plot_SD_list(sd_list, day)
     
     # FFT
     frequency_analysis.fft_sd_list(sd_list, day)
