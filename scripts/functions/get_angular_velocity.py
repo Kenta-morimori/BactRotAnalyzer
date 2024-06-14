@@ -1,6 +1,6 @@
 import numpy as np
 
-from . import param, save2csv, read_csv
+from . import param, read_csv
 
 
 # 二次形式を用いて中心座標を算出
@@ -51,22 +51,19 @@ def correct_angular_velocity(data):
 def get_angular_velocity(x_list, y_list, day):
     sample_num, FrameRate, _ = param.get_config(day)
     angle_list, angular_velocity_list = [], []
-    center_x_list, center_y_list = [], []
 
     if param.flag_get_angle_with_cell_direcetion:
         angle_list = read_csv.read_angle(day)
 
     for i in range(sample_num):
         x_arr, y_arr = np.array(x_list[i]), np.array(y_list[i])
-        center_x, center_y = get_center_coordinate(x_arr, y_arr)
-        center_x_list.append(center_x)
-        center_y_list.append(center_y)
 
         # obtain angle
         if param.flag_get_angle_with_cell_direcetion:
             angle = np.array(angle_list[i])
         else:
-            angle = np.arctan2(y_arr - center_y, x_arr - center_x)
+            # center is zero
+            angle = np.arctan2(y_arr, x_arr)
             angle_list.append(angle)
 
         # obtain angular velocitiy
@@ -93,8 +90,5 @@ def get_angular_velocity(x_list, y_list, day):
                 angular_velocity_list.append(np.abs(add_angular_velocity))
             else:
                 angular_velocity_list.append(add_angular_velocity)
-
-    # save center of rotation
-    save2csv.save_center_of_rotation(center_x_list, center_y_list, day)
 
     return angle_list, angular_velocity_list

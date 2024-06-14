@@ -2,6 +2,7 @@ import os
 
 import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib.gridspec as gridspec
 
 from . import param, read_csv
 
@@ -16,26 +17,32 @@ def plot_centroid_coordinate(x_list, y_list, day):
     save_dir = f"{param.save_dir_bef}/{day}/centroid_coordinate"
     os.makedirs(save_dir, exist_ok=True)
 
-    # get center coordinate
-    center_x_list, center_y_list = read_csv.read_center_coordinates(day)
-
     # Pixel to µm conversion.
-    x_list, y_list = (np.array(x_list) * px2um_x).tolist(), (np.array(y_list) * px2um_x).tolist()
-    center_x_list, center_y_list = (np.array(center_x_list) * px2um_x).tolist(), (np.array(center_y_list) * px2um_x).tolist()
+    x_list, y_list = (np.array(x_list) * px2um_x).tolist(), (np.array(y_list) * px2um_y).tolist()
 
     # plot centroid coordinate
-    fig, axs = plt.subplots(2, sample_num // 2, figsize=(20, 8))
+    fig = plt.figure(figsize=(20, 8))
+    gs = gridspec.GridSpec(2, sample_num // 2, figure=fig, wspace=0.38, hspace=0.2)
     for i in range(sample_num):
-        row = i // 5
-        col = i % 5
-        axs[row, col].plot(x_list[i], y_list[i])
-        axs[row, col].scatter(center_x_list[i], center_y_list[i], c="red")
-        axs[row, col].grid(True)
-        axs[row, col].set_title(f"Trajectory No.{i+1}", fontsize=font_size)
-        axs[row, col].set_xlabel(r"x [$\mu$m]", fontsize=font_size)
-        axs[row, col].set_ylabel(r"y [$\mu$m]", fontsize=font_size)
-        axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
-    plt.tight_layout()
+        # detect x_lim, y_lim
+        x_range = max(x_list[i]) - min(x_list[i])
+        y_range = max(y_list[i]) - min(y_list[i])
+        max_range = 1.1 * max(x_range, y_range) / 2
+
+        row = i // (sample_num // 2)
+        col = i % (sample_num // 2)
+
+        ax = fig.add_subplot(gs[row, col])
+        ax.plot(x_list[i], y_list[i])
+        ax.set_xlim(-max_range, max_range)
+        ax.set_ylim(-max_range, max_range)
+        ax.scatter(0, 0, c="red")  # center is zero
+        ax.set_aspect('equal', 'box')
+        ax.grid(True)
+        ax.set_title(f"Trajectory No.{i+1}", fontsize=font_size)
+        ax.set_xlabel(r"x [$\mu$m]", fontsize=font_size)
+        ax.set_ylabel(r"y [$\mu$m]", fontsize=font_size)
+        ax.tick_params(axis="both", which="major", labelsize=font_size)
     plt.savefig(f"{save_dir}/trajectory.png")
     plt.close(fig)
 

@@ -78,6 +78,57 @@ def save_angle(save_dir, angle_list):
             csvwriter.writerow(row)
 
 
+def get_center(x):
+    A, B, C, D, E = x[0], x[1], x[2], x[3], x[4]
+    mat = np.array([[A, B / 2], [B / 2, C]])
+    eig_val, eig_vec = np.linalg.eig(mat)
+
+    center_x_bef = -1 * (D * eig_vec[0][0] + E * eig_vec[1][0]) / (2 * eig_val[0])
+    center_y_bef = -1 * (D * eig_vec[0][1] + E * eig_vec[1][1]) / (2 * eig_val[1])
+    center_x = eig_vec[0][0] * center_x_bef + eig_vec[0][1] * center_y_bef
+    center_y = eig_vec[1][0] * center_x_bef + eig_vec[1][1] * center_y_bef
+
+    return center_x, center_y
+
+
+def get_center_coordinate(X, Y):
+    size = len(X)
+    X = X.reshape([size, 1])
+    Y = Y.reshape([size, 1])
+
+    A = np.hstack([X**2, X * Y, Y**2, X, Y])
+    b = np.ones_like(X)
+    x = np.linalg.lstsq(A, b, rcond=None)[0].squeeze()
+    center_x, center_y = get_center(x.tolist())
+
+    return center_x, center_y
+
+
+def scale_center_zero(coordinates_bef, center):
+    coordinates_aft = []
+    for i in range(len(coordinates_bef)):
+        coordinates_aft.append(coordinates_bef[i] - center[i])
+
+    return coordinates_aft
+
+
+def save_center_of_rotation(center_x_list, center_y_list, day):
+    csv_save_dir = f"{param.save_dir_bef}/{day}/center_coordinate.csv"
+
+    sample_num, _, _ = param.get_config(day)
+    with open(csv_save_dir, "w", newline="") as csvfile:
+        csvwriter = csv.writer(csvfile)
+        headers = []
+        center_list = []
+        for i in range(sample_num):
+            headers.extend([f"No.{i+1}_x", f"No.{i+1}_y"])
+            center_list.extend([center_x_list[i], center_y_list[i]])
+        # ヘッダーを書き込む
+        csvwriter.writerow(headers)
+        # データを書き込む
+        csvwriter.writerow(center_list)
+
+
 def extract_centroid(day):
     input_dir = f"{param.input_dir_bef}/{day}"
     save_dir = f"{param.save_dir_bef}/{day}"
@@ -110,9 +161,23 @@ def extract_centroid(day):
         y_list.append(add_y_list)
         if param.flag_get_angle_with_cell_direcetion:
             angle_list.append(add_angle_list)
+    
+    # exact center of rotation
+    center_x_list, center_y_list = [], []
+    for i in range(len(x_list)):
+        x_arr, y_arr = np.array(x_list[i]), np.array(y_list[i])
+        center_x, center_y = get_center_coordinate(x_arr, y_arr)
+        center_x_list.append(center_x)
+        center_y_list.append(center_y)
+
+    # Fix x_list, y_list as center is zero
+    x_list_aft = scale_center_zero(x_list, center_x_list)
+    y_list_aft = scale_center_zero(y_list, center_y_list)
 
     # save
-    save_centorid_cordinate(save_dir, x_list, y_list)
+    # save_centorid_cordinate(save_dir, x_list, y_list)
+    save_centorid_cordinate(save_dir,  x_list_aft, y_list_aft)
+    save_center_of_rotation(center_x_list, center_y_list, day)
     if param.flag_get_angle_with_cell_direcetion:
         save_angle(save_dir, angle_list)
 
