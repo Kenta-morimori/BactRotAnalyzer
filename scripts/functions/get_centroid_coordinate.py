@@ -8,11 +8,8 @@ from typing import List
 import cv2
 import numpy as np
 
-# 現在のスクリプトのディレクトリパスを取得
 current_dir = os.path.dirname(os.path.abspath(__file__))
-# current_dir の親ディレクトリパスを取得（functionsディレクトリの親、つまりscriptsディレクトリを指す）
 parent_dir = os.path.dirname(current_dir)
-# 親ディレクトリをシステムパスに追加
 sys.path.append(parent_dir)
 
 from functions import param
@@ -112,20 +109,18 @@ def scale_center_zero(coordinates_bef, center):
     return coordinates_aft
 
 
-def save_center_of_rotation(center_x_list, center_y_list, day):
-    csv_save_dir = f"{param.save_dir_bef}/{day}/center_coordinate.csv"
+def save_center_of_rotation(save_dir, center_x_list, center_y_list):
+    save_name = "center_coordinate.csv"
 
     sample_num, _, _ = param.get_config(day)
-    with open(csv_save_dir, "w", newline="") as csvfile:
+    with open(f"{save_dir}/{save_name}", "w", newline="") as csvfile:
         csvwriter = csv.writer(csvfile)
         headers = []
         center_list = []
         for i in range(sample_num):
             headers.extend([f"No.{i+1}_x", f"No.{i+1}_y"])
             center_list.extend([center_x_list[i], center_y_list[i]])
-        # ヘッダーを書き込む
         csvwriter.writerow(headers)
-        # データを書き込む
         csvwriter.writerow(center_list)
 
 
@@ -175,9 +170,8 @@ def extract_centroid(day):
     y_list_aft = scale_center_zero(y_list, center_y_list)
 
     # save
-    # save_centorid_cordinate(save_dir, x_list, y_list)
-    save_centorid_cordinate(save_dir,  x_list_aft, y_list_aft)
-    save_center_of_rotation(center_x_list, center_y_list, day)
+    save_centorid_cordinate(save_dir, x_list_aft, y_list_aft)
+    save_center_of_rotation(save_dir, center_x_list, center_y_list)
     if param.flag_get_angle_with_cell_direcetion:
         save_angle(save_dir, angle_list)
 

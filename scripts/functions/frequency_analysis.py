@@ -1,6 +1,6 @@
 import numpy as np
 
-from . import make_graph, param
+from . import make_graph, param, save2csv
 
 
 def fft(data_bef, dt):
@@ -27,6 +27,7 @@ def fft_angle(angle_list, day):
     save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis"
     save_name = "angle_FFT"
     make_graph.plot_fft(freq_list, Amp_list, save_dir, save_name, day, flag_add_peak=True)
+    save2csv.save_fft(save_dir, save_name, freq_list, Amp_list)
 
 
 def fft_angular_velocity(angular_velocity_list, day):
@@ -41,6 +42,7 @@ def fft_angular_velocity(angular_velocity_list, day):
     save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis"
     save_name = "angular_velocity_FFT"
     make_graph.plot_fft(freq_list, Amp_list, save_dir, save_name, day)
+    save2csv.save_fft(save_dir, save_name, freq_list, Amp_list)
 
 
 def fft_sd_list(sd_list, day, flag_std):
@@ -58,3 +60,5 @@ def fft_sd_list(sd_list, day, flag_std):
         Amp_list.append(add_Amp_list)
     # plot
     make_graph.plot_SD_list_fft(freq_list, Amp_list, day, flag_std)
+    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series"
+    save2csv.save_sd_fft(save_dir, freq_list, Amp_list)

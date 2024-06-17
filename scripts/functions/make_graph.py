@@ -4,10 +4,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib.gridspec as gridspec
 
-from . import param, read_csv
+from . import param, read_csv, save2csv
 
 
-font_size = 14
+font_size = 20
+fig_size_x = 20
+fig_size_y = 23
 
 
 def plot_centroid_coordinate(x_list, y_list, day):
@@ -39,10 +41,10 @@ def plot_centroid_coordinate(x_list, y_list, day):
         ax.scatter(0, 0, c="red")  # center is zero
         ax.set_aspect('equal', 'box')
         ax.grid(True)
-        ax.set_title(f"Trajectory No.{i+1}", fontsize=font_size)
-        ax.set_xlabel(r"x [$\mu$m]", fontsize=font_size)
-        ax.set_ylabel(r"y [$\mu$m]", fontsize=font_size)
-        ax.tick_params(axis="both", which="major", labelsize=font_size)
+        ax.set_title(f"Trajectory No.{i+1}", fontsize=16)
+        ax.set_xlabel(r"x [$\mu$m]", fontsize=16)
+        ax.set_ylabel(r"y [$\mu$m]", fontsize=16)
+        ax.tick_params(axis="both", which="major", labelsize=16)
     plt.savefig(f"{save_dir}/trajectory.png")
     plt.close(fig)
 
@@ -52,14 +54,14 @@ def plot_centroid_coordinate(x_list, y_list, day):
     xy_save_label = ["x_coordinate.png", "y_coordinate.png"]
 
     for label_i, xy_list in enumerate([x_list, y_list]):
-        fig, axs = plt.subplots(5, sample_num // 5, figsize=(20, 20))
+        fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
         for i in range(sample_num):
             row = i // 2
             col = i % 2
             axs[row, col].plot(time_list, xy_list[i])
             axs[row, col].grid(True)
             axs[row, col].set_title(f"Trajectory No.{i+1}", fontsize=font_size)
-            axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
+            axs[row, col].set_xlabel("Time [s]", fontsize=18)
             axs[row, col].set_ylabel(xy_plot_label[label_i], fontsize=font_size)
             axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
         plt.tight_layout()
@@ -73,8 +75,7 @@ def plot_angular_velocity(angle_list, angular_velocity_list, day):
     os.makedirs(save_dir, exist_ok=True)
     time_list = np.linspace(0, total_time, int(total_time * FrameRate))
 
-    # 時系列角度をplot
-    fig, axs = plt.subplots(5, sample_num // 5, figsize=(20, 20))
+    fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
     for i in range(sample_num):
         row = i // 2
         col = i % 2
@@ -88,8 +89,7 @@ def plot_angular_velocity(angle_list, angular_velocity_list, day):
     plt.savefig(f"{save_dir}/angle_time-series.png")
     plt.close(fig)
 
-    # 時系列角速度をplot
-    fig, axs = plt.subplots(5, sample_num // 5, figsize=(20, 20))
+    fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
     for i in range(sample_num):
         row = i // 2
         col = i % 2
@@ -97,7 +97,7 @@ def plot_angular_velocity(angle_list, angular_velocity_list, day):
         axs[row, col].grid(True)
         axs[row, col].set_title(f"Anglar Velocity Time-series No.{i+1}", fontsize=font_size)
         axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
-        axs[row, col].set_ylabel("Anglular Velocity [rad/s]", fontsize=font_size)
+        axs[row, col].set_ylabel("Angular Velocity [rad/s]", fontsize=font_size)
         axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
     plt.tight_layout()
     plt.savefig(f"{save_dir}/angular-velocity_time-series.png")
@@ -110,8 +110,7 @@ def plot_averaged_angular_velocity(angular_velocity_list, day):
     os.makedirs(save_dir, exist_ok=True)
     time_list = np.linspace(0, total_time, int(total_time * FrameRate))
 
-    # 時系列角速度をplot
-    fig, axs = plt.subplots(5, sample_num // 5, figsize=(20, 20))
+    fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
     for i in range(sample_num):
         row = i // 2
         col = i % 2
@@ -129,9 +128,9 @@ def plot_averaged_angular_velocity(angular_velocity_list, day):
 def plot_fft(freq_list, Amp_list, save_dir, save_name, day, flag_add_peak=False):
     sample_num, _, _ = param.get_config(day)
     os.makedirs(save_dir, exist_ok=True)
+    peak_list = []
 
-    # 時系列角速度をplot
-    fig, axs = plt.subplots(5, sample_num // 5, figsize=(20, 20))
+    fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
     for i in range(sample_num):
         row = i // 2
         col = i % 2
@@ -140,8 +139,9 @@ def plot_fft(freq_list, Amp_list, save_dir, save_name, day, flag_add_peak=False)
             max_amp_index = np.argmax(Amp_list[i])
             freq_at_max_amp = freq_list[i][max_amp_index]
             axs[row, col].axvline(x=freq_at_max_amp, color="r", alpha=0.6)
-            axs[row, col].text(freq_at_max_amp + 15, max(Amp_list[i]) * 0.5, f"Peak: {freq_at_max_amp:.2f} Hz", 
-                           color="r", verticalalignment="bottom", horizontalalignment="right", fontsize=font_size)
+            peak_list.append(freq_at_max_amp)
+            # axs[row, col].text(freq_at_max_amp + 15, max(Amp_list[i]) * 0.5, f"Peak: {freq_at_max_amp:.2f} Hz", 
+            #                color="r", verticalalignment="bottom", horizontalalignment="right", fontsize=font_size)
         axs[row, col].grid(True)
         axs[row, col].set_xlabel("Freqency [Hz]", fontsize=font_size)
         axs[row, col].set_ylabel("Amp", fontsize=font_size)
@@ -151,19 +151,22 @@ def plot_fft(freq_list, Amp_list, save_dir, save_name, day, flag_add_peak=False)
     plt.tight_layout()
     plt.savefig(f"{save_dir}/{save_name}")
     plt.close(fig)
+    if flag_add_peak:
+        save2csv.save_fft_peak(save_dir, save_name, peak_list)
 
 
 def plot_SD_list(SD_list, day, flag_std):
     sample_num, FrameRate, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
-    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis"
+    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series"
+    os.makedirs(save_dir, exist_ok=True)
 
     # sepalate save
     for i, width_time in enumerate(width_time_list):
         data_len = len(SD_list[0][i])
         time_list = np.linspace(0, data_len / FrameRate, data_len)
 
-        fig, axs = plt.subplots(5, sample_num // 5, figsize=(20, 20))
+        fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
         for j in range(sample_num):
             row = j // 2
             col = j % 2
@@ -183,14 +186,14 @@ def plot_SD_list(SD_list, day, flag_std):
         else:
             plt.savefig(f"{save_dir}/SD-time-series_{width_time}s.png")
         plt.close(fig)
-    
+
     # Stacking save
     color_list = ["m", "g", "b", "y", "c", "r"]
     plot_label_list = []
     for width_time in width_time_list:
         plot_label_list.append(f"SD {width_time}s")
     
-    fig, axs = plt.subplots(5, sample_num // 5, figsize=(20, 20))
+    fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
     for i, width_time in enumerate(width_time_list):
         data_len = len(SD_list[0][i])
         time_list = np.linspace(0, data_len / FrameRate, data_len)
@@ -198,7 +201,7 @@ def plot_SD_list(SD_list, day, flag_std):
         for j in range(sample_num):
             row = j // 2
             col = j % 2
-            axs[row, col].plot(time_list, SD_list[j][i], label=f"SD {width_time}s", c=color_list[i])
+            axs[row, col].plot(time_list, SD_list[j][i], label=f"SD {width_time}s", c=color_list[i], alpha=0.7)
             axs[row, col].grid(True)
             if flag_std:
                 axs[row, col].set_title(f"Standardized SD Time-series No.{j+1}", fontsize=font_size)
@@ -206,7 +209,7 @@ def plot_SD_list(SD_list, day, flag_std):
             else:
                 axs[row, col].set_title(f"SD time-series No.{j+1}", fontsize=font_size)
                 axs[row, col].set_ylabel("SD", fontsize=font_size)
-            axs[row, col].set_xlabel("time [s]", fontsize=font_size)
+            axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
             axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
     axs[-1][-1].legend(plot_label_list, loc="upper left", bbox_to_anchor=(1, 1))
     plt.tight_layout()
@@ -220,11 +223,12 @@ def plot_SD_list(SD_list, day, flag_std):
 def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
-    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis"
+    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series"
+    os.makedirs(save_dir, exist_ok=True)
 
     # sepalate save
     for i, width_time in enumerate(width_time_list):
-        fig, axs = plt.subplots(5, sample_num // 5, figsize=(20, 20))
+        fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
         for j in range(sample_num):
             row = j // 2
             col = j % 2
@@ -234,8 +238,8 @@ def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
                 axs[row, col].set_title(f"Standardized SD time-series No.{j+1}", fontsize=font_size)
             else:
                 axs[row, col].set_title(f"SD Time-series No.{j+1}", fontsize=font_size)
-            axs[row, col].set_xlabel("Amp", fontsize=font_size)
-            axs[row, col].set_ylabel("Freqency [Hz]", fontsize=font_size)
+            axs[row, col].set_xlabel("Freqency [Hz]", fontsize=font_size)
+            axs[row, col].set_ylabel("Amp", fontsize=font_size)
             # axs[row, col].set_xscale("log")
             axs[row, col].set_yscale("log")
             axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
@@ -252,19 +256,19 @@ def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
     for width_time in width_time_list:
         plot_label_list.append(f"SD {width_time}s")
     
-    fig, axs = plt.subplots(5, sample_num // 5, figsize=(20, 20))
+    fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
     for i, width_time in enumerate(width_time_list):
         for j in range(sample_num):
             row = j // 2
             col = j % 2
-            axs[row, col].plot(freq_list[j][i], Amp_list[j][i], label=f"SD {width_time}s", c=color_list[i])
+            axs[row, col].plot(freq_list[j][i], Amp_list[j][i], label=f"SD {width_time}s", c=color_list[i], alpha=0.7)
             axs[row, col].grid(True)
             if flag_std:
                 axs[row, col].set_title(f"Standardized SD Time-series No.{j+1}", fontsize=font_size)
             else:
                 axs[row, col].set_title(f"SD Time-series No.{j+1}", fontsize=font_size)
-            axs[row, col].set_xlabel("Amp", fontsize=font_size)
-            axs[row, col].set_ylabel("Freqency [Hz]", fontsize=font_size)
+            axs[row, col].set_xlabel("Freqency [Hz]", fontsize=font_size)
+            axs[row, col].set_ylabel("Amp", fontsize=font_size)
             # axs[row, col].set_xscale("log")
             axs[row, col].set_yscale("log")
             axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
@@ -292,8 +296,7 @@ def plot_validation1(angle_list, angular_velocity_list, day):
     os.makedirs(save_dir, exist_ok=True)
     time_list = np.linspace(0, total_time, int(total_time * FrameRate))
 
-    # 時系列角速度をplot
-    fig, axs = plt.subplots(5, sample_num // 5, figsize=(20, 20))
+    fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
     for i in range(sample_num):
         angle_stand, angular_velocity_stand = standardize(angle_list[i]), standardize(angular_velocity_list[i])
         row = i // 2
@@ -381,7 +384,8 @@ def plot_validation3(angular_velocity_list, day):
 
         axs[row, col].plot(time_list[:len(angular_velocity_list[i])], angular_velocity_list[i])
         axs[row, col].set_title(f"Time Series {i+1}", fontsize=font_size)
-        axs[row, col].set_ylabel("Value", fontsize=font_size)
+        axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
+        axs[row, col].set_ylabel("Angular Velocity [rad/s]", fontsize=font_size)
         axs[row, col].grid(True)
         axs[row, col].hlines(y=[lower_th, upper_th], xmin=time_list[0], xmax=time_list[len(angular_velocity_list[i])], colors="r")
 

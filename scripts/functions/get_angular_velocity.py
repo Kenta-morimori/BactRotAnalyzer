@@ -1,6 +1,6 @@
 import numpy as np
 
-from . import param, read_csv
+from . import param, read_csv, save2csv
 
 
 # 二次形式を用いて中心座標を算出
@@ -90,5 +90,7 @@ def get_angular_velocity(x_list, y_list, day):
                 angular_velocity_list.append(np.abs(add_angular_velocity))
             else:
                 angular_velocity_list.append(add_angular_velocity)
+    # save
+    save2csv.save_angle_angular_velocity(angle_list, angular_velocity_list, day)
 
     return angle_list, angular_velocity_list
