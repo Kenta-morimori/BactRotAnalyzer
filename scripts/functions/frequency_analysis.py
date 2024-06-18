@@ -24,7 +24,7 @@ def fft_angle(angle_list, day):
         freq_list.append(freq)
         Amp_list.append(Amp)
     # plot
-    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis"
+    save_dir = f"{param.save_dir_bef}/{day}/angular_velocity"
     save_name = "angle_FFT"
     make_graph.plot_fft(freq_list, Amp_list, save_dir, save_name, day, flag_add_peak=True)
     save2csv.save_fft(save_dir, save_name, freq_list, Amp_list)
@@ -39,7 +39,7 @@ def fft_angular_velocity(angular_velocity_list, day):
         freq_list.append(freq)
         Amp_list.append(Amp)
     # plot
-    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis"
+    save_dir = f"{param.save_dir_bef}/{day}/angular_velocity"
     save_name = "angular_velocity_FFT"
     make_graph.plot_fft(freq_list, Amp_list, save_dir, save_name, day)
     save2csv.save_fft(save_dir, save_name, freq_list, Amp_list)
