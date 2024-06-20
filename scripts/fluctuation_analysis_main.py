@@ -27,11 +27,6 @@ def main(day):
     # evaluate fluctuation
     fluctuation_analysis.main(angular_velocity_list, day)
 
-    # dev validations
-    make_graph.plot_validation1(angle_list, angular_velocity_list, day)
-    make_graph.plot_validation2(x_list, y_list, angular_velocity_list, day)
-    make_graph.plot_validation3(angular_velocity_list, day)
-
 
 if __name__ == "__main__":
     day = sys.argv[1]
