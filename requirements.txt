@@ -2,9 +2,7 @@ black
 ruff
 isort
 mypy
-psutil
-pydocstyle
-numpy
-opencv-python
-pandas
-matplotlib
+numpy==1.24.4
+opencv-python==4.8.0
+pandas==2.0.3
+matplotlib==3.7.2
