@@ -1,11 +1,10 @@
 import os
 
+import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
-import matplotlib.gridspec as gridspec
 
 from . import param, read_csv, save2csv
-
 
 font_size = 20
 fig_size_x = 20
@@ -39,7 +38,7 @@ def plot_centroid_coordinate(x_list, y_list, day):
         ax.set_xlim(-max_range, max_range)
         ax.set_ylim(-max_range, max_range)
         ax.scatter(0, 0, c="red")  # center is zero
-        ax.set_aspect('equal', 'box')
+        ax.set_aspect("equal", "box")
         ax.grid(True)
         ax.set_title(f"Trajectory No.{i+1}", fontsize=16)
         ax.set_xlabel(r"x [$\mu$m]", fontsize=16)
@@ -140,8 +139,6 @@ def plot_fft(freq_list, Amp_list, save_dir, save_name, day, flag_add_peak=False)
             freq_at_max_amp = freq_list[i][max_amp_index]
             axs[row, col].axvline(x=freq_at_max_amp, color="r", alpha=0.6)
             peak_list.append(freq_at_max_amp)
-            # axs[row, col].text(freq_at_max_amp + 15, max(Amp_list[i]) * 0.5, f"Peak: {freq_at_max_amp:.2f} Hz", 
-            #                color="r", verticalalignment="bottom", horizontalalignment="right", fontsize=font_size)
         axs[row, col].grid(True)
         axs[row, col].set_xlabel("Freqency [Hz]", fontsize=font_size)
         axs[row, col].set_ylabel("Amp", fontsize=font_size)
@@ -192,7 +189,7 @@ def plot_SD_list(SD_list, day, flag_std):
     plot_label_list = []
     for width_time in width_time_list:
         plot_label_list.append(f"SD {width_time}s")
-    
+
     fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
     for i, width_time in enumerate(width_time_list):
         data_len = len(SD_list[0][i])
@@ -255,7 +252,7 @@ def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
     plot_label_list = []
     for width_time in width_time_list:
         plot_label_list.append(f"SD {width_time}s")
-    
+
     fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
     for i, width_time in enumerate(width_time_list):
         for j in range(sample_num):
@@ -334,7 +331,7 @@ def plot_validation2(x_list, y_list, angular_velocity_list, day):
         y_coords = np.array(y_list[i])
         center_x = center_x_list[i]
         center_y = center_y_list[i]
-        dist = np.sqrt((x_coords - center_x)**2 + (y_coords - center_y)**2)
+        dist = np.sqrt((x_coords - center_x) ** 2 + (y_coords - center_y) ** 2)
         dist_mean_list.append(np.mean(dist))
 
         angular_velocity = np.array(angular_velocity_list[i])
@@ -347,7 +344,7 @@ def plot_validation2(x_list, y_list, angular_velocity_list, day):
     plt.figure(figsize=(10, 6))
     plt.scatter(dist_mean_list, av_sd_list, c="blue", label="Data points")
     for i, (dist_mean, av_sd) in enumerate(zip(dist_mean_list, av_sd_list)):
-        plt.text(dist_mean, av_sd, str(i+1), fontsize=12, ha="center", va="bottom")
+        plt.text(dist_mean, av_sd, str(i + 1), fontsize=12, ha="center", va="bottom")
     plt.xlabel("Average Distance from Center", fontsize=font_size)
     plt.ylabel("Standard Deviation of Normalized Angular Velocity", fontsize=font_size)
     plt.title("Average Distance from Center vs. Angular Velocity SD", fontsize=font_size)
@@ -365,7 +362,7 @@ def detect_outlier(data):
     std_dev = np.std(data)
     lower_th = mean - num_std_dev * std_dev
     upper_th = mean + num_std_dev * std_dev
-    
+
     return lower_th, upper_th
 
 
@@ -375,19 +372,23 @@ def plot_validation3(angular_velocity_list, day):
     os.makedirs(save_dir, exist_ok=True)
     time_list = np.linspace(0, total_time, int(total_time * FrameRate))
 
-    fig, axs = plt.subplots(5, 3 * sample_num // 5, figsize=(20, 25), gridspec_kw={"width_ratios": [1, 5, 0.5, 1, 5, 0.5]})
+    fig, axs = plt.subplots(
+        5, 3 * sample_num // 5, figsize=(20, 25), gridspec_kw={"width_ratios": [1, 5, 0.5, 1, 5, 0.5]}
+    )
     for i in range(sample_num):
         row = i // 2
         col = (i % 2) * 3 + 1
 
         lower_th, upper_th = detect_outlier(angular_velocity_list[i])
 
-        axs[row, col].plot(time_list[:len(angular_velocity_list[i])], angular_velocity_list[i])
+        axs[row, col].plot(time_list[: len(angular_velocity_list[i])], angular_velocity_list[i])
         axs[row, col].set_title(f"Time Series {i+1}", fontsize=font_size)
         axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
         axs[row, col].set_ylabel("Angular Velocity [rad/s]", fontsize=font_size)
         axs[row, col].grid(True)
-        axs[row, col].hlines(y=[lower_th, upper_th], xmin=time_list[0], xmax=time_list[len(angular_velocity_list[i])], colors="r")
+        axs[row, col].hlines(
+            y=[lower_th, upper_th], xmin=time_list[0], xmax=time_list[len(angular_velocity_list[i])], colors="r"
+        )
 
         scatter_x = np.random.uniform(-0.1, 0.1, len(angular_velocity_list[i]))
         axs[row, col + 1].scatter(scatter_x, angular_velocity_list[i], s=10)

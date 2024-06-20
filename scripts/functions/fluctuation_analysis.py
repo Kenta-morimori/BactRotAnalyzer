@@ -14,12 +14,12 @@ def get_sd_time_series(angular_velocity, day):
         add_sd = []
         width_frame_num = int(width_time * FrameRate)
 
-        for index_1, time_num in enumerate(np.arange(1/FrameRate, float(total_time + 1/FrameRate), 1/FrameRate)):
+        for index_1, time_num in enumerate(np.arange(1 / FrameRate, float(total_time + 1 / FrameRate), 1 / FrameRate)):
             time_num = round(time_num, 4)
-            if ((index_1 + width_frame_num) < FrameRate * total_time):
-                add_sd.append(statistics.stdev(angular_velocity[index_1:(index_1 + width_frame_num)]))
+            if (index_1 + width_frame_num) < FrameRate * total_time:
+                add_sd.append(statistics.stdev(angular_velocity[index_1 : (index_1 + width_frame_num)]))
         sd_list.append(add_sd)
-    
+
     return sd_list
 
 

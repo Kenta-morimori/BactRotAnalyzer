@@ -1,6 +1,6 @@
+import csv
 import os
 
-import csv
 import pandas as pd
 
 from . import param
@@ -42,28 +42,22 @@ def save_switching_value(switching_value_list, day, flag_averaged=False):
 
 def save_fft(save_dir, save_name, freq_list, Amp_list):
     csv_save_dir = f"{save_dir}/{save_name}.csv"
-    headers, row = [], []
-    for i in range(len(freq_list)):
-        headers.extend([f"No.{i+1}_freq", f"No.{i+1}_Amp"])
+    headers = [f"No.{i+1}_freq" for i in range(len(freq_list))] + [f"No.{i+1}_Amp" for i in range(len(freq_list))]
 
-    index = 0
-    while(1):
-        count_no_data = 0
-        add_row = []
-        for i in range(len(freq_list)):
-            if len(freq_list[i]) >= index + 1:
-                add_row.extend([freq_list[i][index], Amp_list[i][index]])
+    rows = []
+    for index in range(max(map(len, freq_list))):
+        row = []
+        for freq, amp in zip(freq_list, Amp_list):
+            if index < len(freq):
+                row.extend([freq[index], amp[index]])
             else:
-                count_no_data += 1
-        if count_no_data == len(freq_list):
-            break
-        row.append(add_row)
-        index += 1
+                row.extend([None, None])
+        rows.append(row)
 
     with open(csv_save_dir, "w", newline="") as csvfile:
         csvwriter = csv.writer(csvfile)
         csvwriter.writerow(headers)
-        csvwriter.writerows(row)
+        csvwriter.writerows(rows)
 
 
 def save_fft_peak(save_dir, save_name, peak_list):
@@ -81,18 +75,16 @@ def save_sd_fft(save_dir, freq_list, Amp_list):
     csv_save_dir = f"{save_dir}/SD-time-series_fft.csv"
     width_list = param.SD_window_width_list
     data = {}
-    
+
     for i in range(len(freq_list)):
         for j, width in enumerate(width_list):
             freq_key = f"No.{i+1}_{width}s_freq"
             amp_key = f"No.{i+1}_{width}s_Amp"
-            
             freq_values = freq_list[i][j]
             amp_values = Amp_list[i][j]
-
             data[freq_key] = freq_values
             data[amp_key] = amp_values
 
     max_len = max(len(v) for v in data.values())
-    df = pd.DataFrame({k: v + [None]*(max_len - len(v)) for k, v in data.items()})
+    df = pd.DataFrame({k: v + [None] * (max_len - len(v)) for k, v in data.items()})
     df.to_csv(csv_save_dir, index=False)

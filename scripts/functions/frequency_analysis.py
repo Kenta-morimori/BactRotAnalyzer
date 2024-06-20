@@ -12,7 +12,7 @@ def fft(data_bef, dt):
     F = F / (N / 2)
     Amp = np.abs(F)
 
-    return freq[1:N//2].tolist(), Amp[1:N//2].tolist()
+    return freq[1 : N // 2].tolist(), Amp[1 : N // 2].tolist()
 
 
 def fft_angle(angle_list, day):
@@ -20,7 +20,7 @@ def fft_angle(angle_list, day):
     freq_list, Amp_list = [], []
     # FFT
     for i in range(sample_num):
-        freq, Amp = fft(angle_list[i], 1/FrameRate)
+        freq, Amp = fft(angle_list[i], 1 / FrameRate)
         freq_list.append(freq)
         Amp_list.append(Amp)
     # plot
@@ -35,7 +35,7 @@ def fft_angular_velocity(angular_velocity_list, day):
     freq_list, Amp_list = [], []
     # FFT
     for i in range(sample_num):
-        freq, Amp = fft(angular_velocity_list[i], 1/FrameRate)
+        freq, Amp = fft(angular_velocity_list[i], 1 / FrameRate)
         freq_list.append(freq)
         Amp_list.append(Amp)
     # plot
@@ -53,7 +53,7 @@ def fft_sd_list(sd_list, day, flag_std):
     for i in range(sample_num):
         add_freq_list, add_Amp_list = [], []
         for j in range(len(width_time_list)):
-            freq, Amp = fft(sd_list[i][j], 1/FrameRate)
+            freq, Amp = fft(sd_list[i][j], 1 / FrameRate)
             add_freq_list.append(freq)
             add_Amp_list.append(Amp)
         freq_list.append(add_freq_list)

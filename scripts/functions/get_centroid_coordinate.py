@@ -156,7 +156,7 @@ def extract_centroid(day):
         y_list.append(add_y_list)
         if param.flag_get_angle_with_cell_direcetion:
             angle_list.append(add_angle_list)
-    
+
     # exact center of rotation
     center_x_list, center_y_list = [], []
     for i in range(len(x_list)):

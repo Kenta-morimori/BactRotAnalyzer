@@ -39,7 +39,7 @@ def get_px2um_config(day):
     except (ValueError, TypeError):
         px2um_y = config.getint("Settings", "px2um_y")
 
-    return  px2um_x, px2um_y
+    return px2um_x, px2um_y
 
 
 # rotational analysis
@@ -47,7 +47,7 @@ def get_px2um_config(day):
 flag_get_angle_with_cell_direcetion = False
 ## About Angular Velocity
 flag_angular_velocity_correction = True
-flag_evaluate_angular_velocity_abs  = True # Evaluate absolute values of angular velocity.
+flag_evaluate_angular_velocity_abs = True  # Evaluate absolute values of angular velocity.
 
 flag_evaluating_switching = True  # evaluate switching of rotation
 
