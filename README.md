@@ -18,7 +18,7 @@
 ## 2. 実行環境設定
 本プロジェクトでは，以下のライブラリが必須である．'requirements.txt'を用いてインストールください．
 - numpy==1.24.4
-- opencv-python==4.8.0
+- opencv-python==4.8.0.74
 - pandas==2.0.3
 - matplotlib==3.7.2
 
