@@ -1,6 +1,6 @@
 import numpy as np
 
-from . import param
+from . import param, read_csv, save2csv
 
 
 # 二次形式を用いて中心座標を算出
@@ -30,19 +30,43 @@ def get_center_coordinate(X, Y):
     return center_x, center_y
 
 
+def correct_angular_velocity(data):
+    num_std_dev = 3
+    data_aft = []
+
+    mean = np.mean(data)
+    std_dev = np.std(data)
+    lower_th = mean - num_std_dev * std_dev
+    upper_th = mean + num_std_dev * std_dev
+
+    for x in data:
+        if x < lower_th or upper_th < x:
+            data_aft.append(mean)
+        else:
+            data_aft.append(x)
+
+    return data_aft
+
+
 def get_angular_velocity(x_list, y_list, day):
     sample_num, FrameRate, _ = param.get_config(day)
     angle_list, angular_velocity_list = [], []
 
+    if param.flag_get_angle_with_cell_direcetion:
+        angle_list = read_csv.read_angle(day)
+
     for i in range(sample_num):
         x_arr, y_arr = np.array(x_list[i]), np.array(y_list[i])
-        center_x, center_y = get_center_coordinate(x_arr, y_arr)
 
-        # 角度の取得
-        angle = np.arctan2(y_arr - center_y, x_arr - center_x)
-        angle_list.append(angle)
+        # obtain angle
+        if param.flag_get_angle_with_cell_direcetion:
+            angle = np.array(angle_list[i])
+        else:
+            # center is zero
+            angle = np.arctan2(y_arr, x_arr)
+            angle_list.append(angle)
 
-        # 角速度の取得
+        # obtain angular velocitiy
         add_angular_velocity = []
         for j in range(1, len(angle)):
             angle_diff = angle[j] - angle[j - 1]
@@ -53,6 +77,20 @@ def get_angular_velocity(x_list, y_list, day):
                 angle_diff += 2 * np.pi
             # CCWを正にするために-1をかける
             add_angular_velocity.append(-1 * angle_diff * FrameRate)
-        angular_velocity_list.append(add_angular_velocity)
+
+        # correct angular velocity
+        if param.flag_angular_velocity_correction:
+            add_angular_velocity_aft = correct_angular_velocity(add_angular_velocity)
+            if param.flag_evaluate_angular_velocity_abs:
+                angular_velocity_list.append(np.abs(add_angular_velocity_aft))
+            else:
+                angular_velocity_list.append(add_angular_velocity_aft)
+        else:
+            if param.flag_evaluate_angular_velocity_abs:
+                angular_velocity_list.append(np.abs(add_angular_velocity))
+            else:
+                angular_velocity_list.append(add_angular_velocity)
+    # save
+    save2csv.save_angle_angular_velocity(angle_list, angular_velocity_list, day)
 
     return angle_list, angular_velocity_list

@@ -1,6 +1,6 @@
 import numpy as np
 
-from . import make_gragh, param, save2csv
+from . import make_graph, param, save2csv
 
 
 def evaluate_switching(angular_velocity_list, day):
@@ -37,7 +37,7 @@ def evaluate_switching_averaged(angular_velocity_list_bef, day):
         angular_velocity_list_aft.append(add_av_data)
 
     # 平均化角速度をplot
-    make_gragh.plot_averaged_angular_velocity(angular_velocity_list_aft, day)
+    make_graph.plot_averaged_angular_velocity(angular_velocity_list_aft, day)
 
     # スイッチング頻度をCCW/CWと定義
     switching_value_list = []

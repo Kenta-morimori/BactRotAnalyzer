@@ -1,12 +1,11 @@
 import sys
 
 from functions import (
+    fluctuation_analysis,
     frequency_analysis,
     get_angular_velocity,
     input_data,
-    make_evaluate_switching,
     make_graph,
-    param,
 )
 
 
@@ -25,10 +24,8 @@ def main(day):
     frequency_analysis.fft_angle(angle_list, day)
     frequency_analysis.fft_angular_velocity(angular_velocity_list, day)
 
-    # option: evaluate switching
-    if param.flag_evaluating_switching:
-        make_evaluate_switching.evaluate_switching(angular_velocity_list, day)
-        make_evaluate_switching.evaluate_switching_averaged(angular_velocity_list, day)
+    # evaluate fluctuation
+    fluctuation_analysis.main(angular_velocity_list, day)
 
 
 if __name__ == "__main__":
