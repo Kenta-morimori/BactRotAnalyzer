@@ -1,6 +1,50 @@
 # Scripts directory
-スクリプトに関する情報を記載
+Information about the scripts.
 
+## 1. Setting up the environment
+To install the required libraries, run the following:
+```bash
+pip3 install -r requirements.txt
+```
+
+## 2. Execution
+Navigate to the `scripts` directory. Execution is done via `..._main.py`.
+
+### 2.1. Rotation Analysis
+Rotation analysis can be performed by executing the following command:<br>
+Make sure `[directory_name_to_analyze]` matches a directory name in `data`.
+
+```bash
+python3 rotation_analysis_main.py [directory_name_to_analyze]
+```
+
+### 2.2. Fluctuation Analysis
+```bash
+python3 fluctuation_analysis_main.py [directory_name_to_analyze]
+```
+
+## 3. About the files
+Description of the Python files used.
+
+### 3.1. main.py
+The main file for the user to execute. By changing the arguments, the type of analysis can be modified.
+
+### 3.2. functions
+A directory containing Python files used for analysis. The functionality of each file is described below:
+- `fluctuation_analysis.py`: Performs fluctuation analysis.
+- `frequency_analysis.py`: Performs frequency analysis.
+- `get_angular_velocity.py`: Scripts related to time series angle and angular velocity. Includes obtaining, plotting, etc., of time series angle and angular velocity.
+- `get_centroid_coordinate.py`: Scripts related to centroid coordinates. Obtains, plots, and saves centroid coordinates from AVI data.
+- `input_data.py`: Handles data input.
+- `make_evaluate_switching.py`: Evaluates switching of rotation direction.
+- `make_graph.py`: Creates graphs.
+- `param.py`: Stores parameters used by many scripts.
+- `save2csv.py`: Saves data in CSV format.
+
+
+
+# Scripts directory
+スクリプトに関する情報を記載
 
 ## 1. 実行環境設定
 使用するライブラリのインストールのため，以下を実行．
