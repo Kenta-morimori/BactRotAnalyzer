@@ -1,3 +1,4 @@
+## English version
 # Scripts directory
 Information about the scripts.
 
@@ -42,7 +43,9 @@ A directory containing Python files used for analysis. The functionality of each
 - `save2csv.py`: Saves data in CSV format.
 
 
+<br><br>
 
+## 日本語バージョン
 # Scripts directory
 スクリプトに関する情報を記載
 
