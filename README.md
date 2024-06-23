@@ -1,3 +1,56 @@
+## English version
+# BactRotAnalyzer
+Bacterial Rotation Data Analysis Script
+
+## 1. Overview
+This project analyzes the rotation data of bacteria. The input is binarized video data.
+
+### 1.1. Rotation Analysis
+In rotation analysis, trajectories and time-series angular velocities are calculated, plotted, and saved as numerical values.
+
+![image](outputs/test_data/centroid_coordinate/trajectory.png)
+![image](outputs/test_data/angular_velocity/angular-velocity_time-series.png)
+
+### 1.2. Fluctuation Analysis
+In fluctuation analysis, fluctuations are evaluated using a unique analysis method.
+![image](outputs/test_data/fluctuation_analysis/SD-time-series/SD-time-series_all_standardized.png)
+
+## 2. Setup
+The following libraries are required for this project. Please install them using 'requirements.txt'.
+- numpy==1.24.4
+- opencv-python==4.8.0
+- pandas==2.0.3
+- matplotlib==3.7.2
+
+```bash
+pip3 install -r requirements.txt
+```
+
+## 3. Execution
+### 3.1. Preparing Data for Analysis
+Place the video data you want to analyze in the `/data` directory.
+- The data should be binarized AVI files.
+- Configure `config.ini`.
+For more details on naming conventions, see the README in `/data`.
+
+### 3.2. Running the Analysis Script
+Navigate to the `/scripts` directory and execute the `..._main.py` script.<br>
+For rotation analysis, run `rotation_analysis_main.py`, and for fluctuation analysis, run `fluctuation_analysis_main.py`. Use the file name in `/data` as an argument.
+For more details, see the README in `/scripts`.
+
+### 3.3. Reviewing Analysis Results
+The analysis results are saved in the `outputs/` directory. Centroid coordinates are in `centroid_coordinate`, time-series angles and angular velocities are in `angular_velocity`, and fluctuation analysis results are in `fluctuation_analysis`.<br>
+For more details on the output results, see the README in `/outputs`.
+
+## License
+This project is licensed under the Creative Commons CC BY-NC-SA 4.0 License.
+
+[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/)
+
+
+<br><br>
+
+## 日本語バージョン
 # BactRotAnalyzer
 バクテリアの回転データ解析スクリプト
 
