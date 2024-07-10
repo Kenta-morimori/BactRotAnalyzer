@@ -1,5 +1,6 @@
 import csv
 import glob
+import math
 import os
 import re
 import sys
@@ -18,30 +19,17 @@ from functions import param
 def contours(img):
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     _, img_binary = cv2.threshold(img_gray, 120, 255, cv2.THRESH_BINARY)
-    contours, _ = cv2.findContours(img_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, hierarchy = cv2.findContours(img_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    max_contour = max(contours, key=cv2.contourArea)
 
-    # 時系列輪郭plotはテストしておいた方が良い
-
-    max_area = 0.0
-    max_contour = None
-    for contour in contours:
-        area = cv2.contourArea(contour)
-        if area > max_area:
-            max_area = area
-            max_contour = contour
-
+    # Centroid coordinates were taken as the mean of the contours.
     if max_contour is not None:
         mean_x = np.mean(max_contour[:, 0, 0].astype(float))
         mean_y = np.mean(max_contour[:, 0, 1].astype(float))
-        if param.flag_get_angle_with_cell_direcetion:
-            ellipse = cv2.fitEllipse(max_contour)
-            angle = ellipse[2]
-            return mean_x, mean_y, angle
-        else:
-            return mean_x, mean_y
+        ellipse = cv2.fitEllipse(max_contour)
+        return mean_x, mean_y, ellipse
     else:
-        # If no contour is found, return None.
-        return None, None
+        return None, None, None
 
 
 # Save centroid coordinates (cannot be written in save2csv.py due to subprocess)
@@ -58,6 +46,22 @@ def save_centorid_cordinate(save_dir, x_list, y_list):
         for i in range(data_len):
             row = [item for pair in zip(x_list, y_list) for item in [pair[0][i], pair[1][i]]]
             csvwriter.writerow(row)
+
+
+def adjust_angle(angle_list_bef):
+    angle_list_aft = [angle_list_bef[0] + 90]
+    for j in range(len(angle_list_bef) - 1):
+        d_deg = angle_list_bef[j + 1] - angle_list_bef[j]
+        if d_deg < -100:
+            angle_list_aft.append(angle_list_aft[j] + 180 - angle_list_bef[j] + angle_list_bef[j + 1])
+        elif d_deg > 100:
+            angle_list_aft.append(angle_list_aft[j] - (180 - angle_list_bef[j + 1] + angle_list_bef[j]))
+        else:
+            angle_list_aft.append(angle_list_aft[j] + d_deg)
+    # degree --> radian
+    angle_list_aft_rad = [math.radians(angle) for angle in angle_list_aft]
+
+    return angle_list_aft_rad
 
 
 def save_angle(save_dir, angle_list):
@@ -140,22 +144,25 @@ def extract_centroid(day):
     x_list, y_list, angle_list = [], [], []
     for file_name in file_name_list_aft:
         movie = cv2.VideoCapture(file_name)
-        add_x_list, add_y_list, add_angle_list = [], [], []
+        add_x_list, add_y_list, add_angle_list_bef = [], [], []
         while True:
             ret, frame = movie.read()
             if not ret:
                 break
             if param.flag_get_angle_with_cell_direcetion:
-                x, y, angle = contours(frame)
-                add_angle_list.append(angle)
+                x, y, ellipse = contours(frame)
+                add_angle_list_bef.append(ellipse[2])
             else:
-                x, y = contours(frame)
+                x, y, _ = contours(frame)
             add_x_list.append(x)
             add_y_list.append(y)
+        # adjust angle (-π/2 ~ π/2)
+        add_angle_list_aft = adjust_angle(add_angle_list_bef)
+
         x_list.append(add_x_list)
         y_list.append(add_y_list)
         if param.flag_get_angle_with_cell_direcetion:
-            angle_list.append(add_angle_list)
+            angle_list.append(add_angle_list_aft)
 
     # exact center of rotation
     center_x_list, center_y_list = [], []
