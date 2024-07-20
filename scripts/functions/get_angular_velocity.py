@@ -49,6 +49,13 @@ def correct_angular_velocity(data):
     return data_aft
 
 
+# normalized angle to -π~π for FFT
+def normalized_angle(angle_bef):
+    angle_aft = [angle % (2 * np.pi) - np.pi for angle in angle_bef]
+
+    return angle_aft
+
+
 def get_angular_velocity(x_list, y_list, day):
     sample_num, FrameRate, _ = param.get_config(day)
     angle_list, angular_velocity_list = [], []
