@@ -46,8 +46,8 @@ def get_px2um_config(day):
 ## Determine the angle by the direction of the cell.
 flag_get_angle_with_cell_direcetion = True
 ## About Angular Velocity
-flag_angular_velocity_correction = True
-flag_evaluate_angular_velocity_abs = True  # Evaluate absolute values of angular velocity.
+flag_angular_velocity_correction = False  # Trimming with thresholds
+flag_evaluate_angular_velocity_abs = False  # Evaluate absolute values of angular velocity.
 
 flag_evaluating_switching = True  # evaluate switching of rotation
 
