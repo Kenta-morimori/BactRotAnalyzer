@@ -10,11 +10,9 @@ def input_centroid_coordinate(day):
     save_dir = f"{param.save_dir_bef}/{day}"
     csv_dir = f"{save_dir}/centroid_coordinate.csv"
 
-    # 中心座標の保存
     if not os.path.isfile(csv_dir):
         subprocess.run(["Python3", "functions/get_centroid_coordinate.py", day])
 
-    # 中心座標の取得
     x_list, y_list = [], []
     df = pd.read_csv(csv_dir)
     column_list = df.columns.tolist()

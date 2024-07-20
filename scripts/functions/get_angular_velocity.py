@@ -3,7 +3,7 @@ import numpy as np
 from . import param, read_csv, save2csv
 
 
-# 二次形式を用いて中心座標を算出
+# Calculate centre coordinates using quadratic form.
 def get_center(x):
     A, B, C, D, E = x[0], x[1], x[2], x[3], x[4]
     mat = np.array([[A, B / 2], [B / 2, C]])
@@ -30,6 +30,7 @@ def get_center_coordinate(X, Y):
     return center_x, center_y
 
 
+# Trimming with thresholds
 def correct_angular_velocity(data):
     num_std_dev = 3
     data_aft = []
