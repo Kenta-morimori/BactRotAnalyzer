@@ -1,6 +1,6 @@
 import numpy as np
 
-from . import make_graph, param, save2csv
+from . import get_angular_velocity, make_graph, param, save2csv
 
 
 def fft(data_bef, dt):
@@ -20,7 +20,12 @@ def fft_angle(angle_list, day):
     freq_list, Amp_list = [], []
     # FFT
     for i in range(sample_num):
-        freq, Amp = fft(angle_list[i], 1 / FrameRate)
+        if param.flag_get_angle_with_cell_direcetion:
+            # normalize angle to -π~π
+            angle = get_angular_velocity.normalized_angle(angle_list[i])
+        else:
+            angle = angle_list[i]
+        freq, Amp = fft(angle, 1 / FrameRate)
         freq_list.append(freq)
         Amp_list.append(Amp)
     # plot
