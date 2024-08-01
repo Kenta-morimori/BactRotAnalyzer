@@ -64,13 +64,12 @@ def get_angular_velocity(x_list, y_list, day):
         angle_list = read_csv.read_angle(day)
 
     for i in range(sample_num):
-        x_arr, y_arr = np.array(x_list[i]), np.array(y_list[i])
-
         # obtain angle
         if param.flag_get_angle_with_cell_direcetion:
             angle = np.array(angle_list[i])
         else:
             # center is zero
+            x_arr, y_arr = np.array(x_list[i]), np.array(y_list[i])
             angle = np.arctan2(y_arr, x_arr)
             angle_list.append(angle)
 

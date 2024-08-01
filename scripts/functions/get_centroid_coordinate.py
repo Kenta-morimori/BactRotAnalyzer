@@ -156,12 +156,12 @@ def extract_centroid(day):
                 x, y, _ = contours(frame)
             add_x_list.append(x)
             add_y_list.append(y)
-        # adjust angle (-π/2 ~ π/2)
-        add_angle_list_aft = adjust_angle(add_angle_list_bef)
 
         x_list.append(add_x_list)
         y_list.append(add_y_list)
         if param.flag_get_angle_with_cell_direcetion:
+            # adjust angle (-π/2 ~ π/2)
+            add_angle_list_aft = adjust_angle(add_angle_list_bef)
             angle_list.append(add_angle_list_aft)
 
     # exact center of rotation
