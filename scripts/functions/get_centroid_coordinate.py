@@ -128,6 +128,25 @@ def save_center_of_rotation(save_dir, center_x_list, center_y_list):
         csvwriter.writerow(center_list)
 
 
+# Trimming with thresholds
+def correct_angular_velocity(data):
+    num_std_dev = 3
+    data_aft = []
+
+    mean = np.mean(data)
+    std_dev = np.std(data)
+    lower_th = mean - num_std_dev * std_dev
+    upper_th = mean + num_std_dev * std_dev
+
+    for x in data:
+        if x < lower_th or upper_th < x:
+            data_aft.append(mean)
+        else:
+            data_aft.append(x)
+
+    return data_aft
+
+
 def extract_centroid(day):
     input_dir = f"{param.input_dir_bef}/{day}"
     save_dir = f"{param.save_dir_bef}/{day}"
