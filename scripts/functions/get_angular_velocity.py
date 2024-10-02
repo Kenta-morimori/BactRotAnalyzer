@@ -57,7 +57,7 @@ def normalized_angle(angle_bef):
 
 
 def get_angular_velocity(x_list, y_list, day):
-    sample_num, FrameRate, _ = param.get_config(day)
+    sample_num, FrameRate_list, _ = param.get_config(day)
     angle_list, angular_velocity_list = [], []
 
     if param.flag_get_angle_with_cell_direcetion:
@@ -83,7 +83,7 @@ def get_angular_velocity(x_list, y_list, day):
             elif angle_diff < -np.pi:
                 angle_diff += 2 * np.pi
             # CCWを正にするために-1をかける
-            add_angular_velocity.append(-1 * angle_diff * FrameRate)
+            add_angular_velocity.append(-1 * angle_diff * FrameRate_list[i])
 
         # correct angular velocity
         if param.flag_angular_velocity_correction:

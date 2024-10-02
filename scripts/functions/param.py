@@ -1,5 +1,6 @@
 import configparser
 import os
+import pandas as pd
 
 # directory information
 curr_dir = os.getcwd()
@@ -12,17 +13,31 @@ def get_config(day):
     config = configparser.ConfigParser()
     config.read(config_dir)
 
+    flag_use_tiff_log = config.getboolean("Settings", "flag_use_tiff_log")
     sample_num = config.getint("Settings", "sample_num")
-    try:
-        FrameRate = config.getfloat("Settings", "FrameRate")
-    except (ValueError, TypeError):
-        FrameRate = config.getint("Settings", "FrameRate")
-    try:
-        total_time = config.getfloat("Settings", "total_time")
-    except (ValueError, TypeError):
-        total_time = config.getint("Settings", "total_time")
+    # Frame Rate, Total Time
+    FrameRate_list = []
+    total_time_list = []
+    if flag_use_tiff_log:
+        csv_save_dir = f"{save_dir_bef}/{day}/time_list.csv"
+        df = pd.read_csv(csv_save_dir)
+        time_list = df.values.T.tolist()
+        for i in range(sample_num):
+            FrameRate_list.append(len(time_list[i]) / time_list[i][-1])
+            total_time_list.append(time_list[i][-1])
+    else:
+        try:
+            FrameRate = config.getfloat("Settings", "FrameRate")
+        except (ValueError, TypeError):
+            FrameRate = config.getint("Settings", "FrameRate")
+        try:
+            total_time = config.getfloat("Settings", "total_time")
+        except (ValueError, TypeError):
+            total_time = config.getint("Settings", "total_time")
+        FrameRate_list = [FrameRate for _ in range(sample_num)]
+        total_time_list = [total_time for _ in range(sample_num)]
 
-    return sample_num, FrameRate, total_time
+    return sample_num, FrameRate_list, total_time_list
 
 
 def get_px2um_config(day):
@@ -41,6 +56,14 @@ def get_px2um_config(day):
 
     return px2um_x, px2um_y
 
+def get_tiffinfo_config(day):
+    config_dir = f"{input_dir_bef}/{day}/config.ini"
+    config = configparser.ConfigParser()
+    config.read(config_dir)
+
+    items = config["Tiff_info"]["tiff_data"].split(", ")
+
+    return items
 
 # rotational analysis
 ## Determine the angle by the direction of the cell.
