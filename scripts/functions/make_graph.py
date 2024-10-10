@@ -92,7 +92,7 @@ def plot_angular_velocity(angle_list, angular_velocity_list, day):
     for i in range(sample_num):
         row = i // 2
         col = i % 2
-        axs[row, col].plot(time_list[i][:len(angular_velocity_list[i])], angular_velocity_list[i])
+        axs[row, col].plot(time_list[i][: len(angular_velocity_list[i])], angular_velocity_list[i])
         axs[row, col].grid(True)
         axs[row, col].set_title(f"Anglar Velocity Time-series No.{i+1}", fontsize=font_size)
         axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
@@ -110,7 +110,12 @@ def plot_av_colleration(angular_velocity_list, day):
     num_std_dev = param.num_std_dev
     time_list = read_csv.get_timelist(day)
 
-    fig, axs = plt.subplots(5, 2 * sample_num // 5, figsize=(fig_size_x, fig_size_y), gridspec_kw={"width_ratios": [5, 1] * (sample_num // 5)})
+    fig, axs = plt.subplots(
+        5,
+        2 * sample_num // 5,
+        figsize=(fig_size_x, fig_size_y),
+        gridspec_kw={"width_ratios": [5, 1] * (sample_num // 5)},
+    )
     axs = axs.flatten()
     for i in range(sample_num):
         mean = np.mean(angular_velocity_list[i])
@@ -119,13 +124,13 @@ def plot_av_colleration(angular_velocity_list, day):
         upper_th = mean + num_std_dev * std_dev
         # Time series plot (left plot)
         ax_ts = axs[2 * i]
-        ax_ts.plot(time_list[i][:len(angular_velocity_list[i])], angular_velocity_list[i])
+        ax_ts.plot(time_list[i][: len(angular_velocity_list[i])], angular_velocity_list[i])
         ax_ts.axhline(lower_th, color="red", linestyle="--")
         ax_ts.axhline(upper_th, color="red", linestyle="--")
         ax_ts.set_title(f"Angular Velocity No.{i + 1}")
         # Distribution plot (right plot)
         ax_dist = axs[2 * i + 1]
-        ax_dist.hist(angular_velocity_list[i], bins=30, orientation='horizontal', alpha=0.7)
+        ax_dist.hist(angular_velocity_list[i], bins=30, orientation="horizontal", alpha=0.7)
         ax_dist.axhline(lower_th, color="red", linestyle="--")
         ax_dist.axhline(upper_th, color="red", linestyle="--")
         ax_dist.set_title(f"Distribution No.{i + 1}")
@@ -144,7 +149,7 @@ def plot_averaged_angular_velocity(angular_velocity_list, day):
     for i in range(sample_num):
         row = i // 2
         col = i % 2
-        axs[row, col].plot(time_list[i][:len(angular_velocity_list[i])], angular_velocity_list[i])
+        axs[row, col].plot(time_list[i][: len(angular_velocity_list[i])], angular_velocity_list[i])
         axs[row, col].grid(True)
         axs[row, col].set_title(f"Anglar Velocity Time-series No.{i+1}", fontsize=font_size)
         axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
@@ -198,7 +203,7 @@ def plot_SD_list(SD_list, day, flag_std):
         for j in range(sample_num):
             row = j // 2
             col = j % 2
-            axs[row, col].plot(time_list[j][:len(SD_list[j][i])], SD_list[j][i])
+            axs[row, col].plot(time_list[j][: len(SD_list[j][i])], SD_list[j][i])
             axs[row, col].grid(True)
             if flag_std:
                 axs[row, col].set_title(f"Standardized SD Time-series No.{j+1}", fontsize=font_size)
@@ -229,7 +234,9 @@ def plot_SD_list(SD_list, day, flag_std):
         for j in range(sample_num):
             row = j // 2
             col = j % 2
-            axs[row, col].plot(time_list[j][:len(SD_list[j][i])], SD_list[j][i], label=f"SD {width_time}s", c=color_list[i], alpha=0.7)
+            axs[row, col].plot(
+                time_list[j][: len(SD_list[j][i])], SD_list[j][i], label=f"SD {width_time}s", c=color_list[i], alpha=0.7
+            )
             axs[row, col].grid(True)
             if flag_std:
                 axs[row, col].set_title(f"Standardized SD Time-series No.{j+1}", fontsize=font_size)

@@ -45,7 +45,6 @@ def get_px2um_config(day):
     config_dir = f"{input_dir_bef}/{day}/config.ini"
     config = configparser.ConfigParser()
     config.read(config_dir)
-
     try:
         px2um_x = config.getfloat("Settings", "px2um_x")
     except (ValueError, TypeError):
@@ -54,8 +53,8 @@ def get_px2um_config(day):
         px2um_y = config.getfloat("Settings", "px2um_y")
     except (ValueError, TypeError):
         px2um_y = config.getint("Settings", "px2um_y")
-
     return px2um_x, px2um_y
+
 
 def get_tiffinfo_config(day):
     config_dir = f"{input_dir_bef}/{day}/config.ini"
@@ -65,6 +64,7 @@ def get_tiffinfo_config(day):
     items = config["Tiff_info"]["tiff_data"].split(", ")
 
     return items
+
 
 # rotational analysis
 ## Determine the angle by the direction of the cell.

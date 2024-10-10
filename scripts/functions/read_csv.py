@@ -42,7 +42,8 @@ def get_timelist(day):
     else:
         sample_num, FrameRate_list, total_time_list = param.get_config(day)
         time_list = [
-            np.linspace(0, total_time_list[i], int(total_time_list[i] * FrameRate_list[i])).tolist() for i in range(sample_num)
+            np.linspace(0, total_time_list[i], int(total_time_list[i] * FrameRate_list[i])).tolist()
+            for i in range(sample_num)
         ]
 
     return time_list
