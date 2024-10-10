@@ -2,7 +2,7 @@ import statistics
 
 import numpy as np
 
-from . import frequency_analysis, make_graph, param, read_csv
+from . import frequency_analysis, make_graph, param, read_csv, save2csv
 
 
 def get_sd_time_series(i, angular_velocity, day):
@@ -66,6 +66,29 @@ def standardize_sd_time_series(sd_list, day):
     return std_sd_list
 
 
+def evaluate_decrease(sd_freq_list, sd_Amp_list, day):
+    sample_num, _, _ = param.get_config(day)
+    width_time_list = param.SD_window_width_list
+
+    decrease_list, ref_point_list = [], []
+    for i in range(sample_num):
+        reff_bef = []
+        for j in range(len(width_time_list)):
+            reff_bef.append(sd_Amp_list[i][j][0])
+        ref_point = np.mean(reff_bef)
+        ref_point_list.append(ref_point)
+
+        add_decrease = []
+        for j in range(len(width_time_list)):
+            indices = [k for k, x in enumerate(sd_freq_list[i][j]) if x >= 60]
+            add_decrease.append(ref_point - np.mean([sd_Amp_list[i][j][k] for k in indices]))
+        decrease_list.append(add_decrease)
+    # plot
+    make_graph.plot_SD_FFT_decline(decrease_list, day)
+    # save CSV
+    save2csv.save_SD_FFT_decline(decrease_list, day)
+
+
 def main(angular_velocity_list, day):
     sample_num, _, _ = param.get_config(day)
     sd_list = []
@@ -89,4 +112,7 @@ def main(angular_velocity_list, day):
     flag_std = True
     std_sd_list = standardize_sd_time_series(sd_list, day)
     make_graph.plot_SD_list(std_sd_list, day, flag_std)
-    frequency_analysis.fft_sd_list(std_sd_list, day, flag_std)
+    sd_freq_list, sd_Amp_list = frequency_analysis.fft_sd_list(std_sd_list, day, flag_std)
+
+    if param.flag_evaluate_SD_FFT_decline:
+        evaluate_decrease(sd_freq_list, sd_Amp_list, day)

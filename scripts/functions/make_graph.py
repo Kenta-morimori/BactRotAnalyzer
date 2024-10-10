@@ -382,3 +382,23 @@ def dev_plot_sd_data_num(data_num_list, day):
     plt.tight_layout()
     plt.savefig(f"{save_dir}/SD_data_num.png")
     plt.close(fig)
+
+
+def plot_SD_FFT_decline(decrease_list, day):
+    sample_num, _, _ = param.get_config(day)
+    width_time_list = param.SD_window_width_list
+    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series"
+    os.makedirs(save_dir, exist_ok=True)
+
+    fig, axes = plt.subplots(1, sample_num, figsize=(50, 5))
+    for i in range(sample_num):
+        axes[i].plot(width_time_list, decrease_list[i], "-o")
+        axes[i].set_title(f"No.{i+1}", fontsize=font_size)
+        axes[i].set_xlabel("Window Width [s]", fontsize=font_size)
+        axes[i].set_ylabel("Amp Decrease Ratio", fontsize=font_size)
+        axes[i].tick_params(axis="both", which="major", labelsize=font_size)
+    plt.tight_layout()
+    fig.suptitle("Amp decrease", size=12)
+    plt.subplots_adjust(wspace=0.5, hspace=0.2)
+    plt.savefig(f"{save_dir}/SD_FFT_Amp_decrease.png")
+    plt.close(fig)

@@ -81,3 +81,5 @@ flag_evaluating_switching = True  # evaluate switching of rotation
 # fluctuation analysis
 SD_window_width_list = [0.1, 0.5, 1.0]
 # SD_window_width_list = [0.1, 0.2, 0.5, 1.0, 1.5, 2.0]
+
+flag_evaluate_SD_FFT_decline = True
