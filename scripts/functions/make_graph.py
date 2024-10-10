@@ -345,3 +345,40 @@ def dev_plot_time_list(day):
     plt.tight_layout()
     plt.savefig(f"{save_dir}/time_list.png")
     plt.close(fig)
+
+
+def dev_plot_sd_data_num(data_num_list, day):
+    sample_num, _, _ = param.get_config(day)
+    width_time_list = param.SD_window_width_list
+    save_dir = f"{param.save_dir_bef}/{day}/dev"
+    os.makedirs(save_dir, exist_ok=True)
+
+    # Stacking save
+    color_list = ["m", "g", "b", "y", "c", "r"]
+    plot_label_list = []
+    for width_time in width_time_list:
+        plot_label_list.append(f"SD {width_time}s")
+
+    fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
+    for i, width_time in enumerate(width_time_list):
+        time_list = read_csv.get_timelist(day)
+
+        for j in range(sample_num):
+            row = j // 2
+            col = j % 2
+            axs[row, col].plot(
+                time_list[j][: len(data_num_list[j][i])],
+                data_num_list[j][i],
+                label=f"SD {width_time}s",
+                c=color_list[i],
+                alpha=0.7,
+            )
+            axs[row, col].grid(True)
+            axs[row, col].set_title(f"No.{j+1}", fontsize=font_size)
+            axs[row, col].set_ylabel("data num", fontsize=font_size)
+            axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
+            axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
+    axs[-1][-1].legend(plot_label_list, loc="upper left", bbox_to_anchor=(1, 1))
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/SD_data_num.png")
+    plt.close(fig)
