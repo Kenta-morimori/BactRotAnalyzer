@@ -1,6 +1,8 @@
+import copy
+
 import numpy as np
 
-from . import param, read_csv, save2csv
+from . import make_graph, param, read_csv, save2csv
 
 
 # Calculate centre coordinates using quadratic form.
@@ -32,7 +34,7 @@ def get_center_coordinate(X, Y):
 
 # Trimming with thresholds
 def correct_angular_velocity(data):
-    num_std_dev = 3
+    num_std_dev = param.num_std_dev
     data_aft = []
 
     mean = np.mean(data)
@@ -42,7 +44,8 @@ def correct_angular_velocity(data):
 
     for x in data:
         if x < lower_th or upper_th < x:
-            data_aft.append(mean)
+            # data_aft.append(mean)  # Average
+            data_aft.append(np.nan)
         else:
             data_aft.append(x)
 
@@ -59,6 +62,7 @@ def normalized_angle(angle_bef):
 def get_angular_velocity(x_list, y_list, day):
     sample_num, FrameRate_list, _ = param.get_config(day)
     angle_list, angular_velocity_list = [], []
+    angular_velocity_list_bef_corr = []
 
     if param.flag_get_angle_with_cell_direcetion:
         angle_list = read_csv.read_angle(day)
@@ -87,16 +91,18 @@ def get_angular_velocity(x_list, y_list, day):
 
         # correct angular velocity
         if param.flag_angular_velocity_correction:
-            add_angular_velocity_aft = correct_angular_velocity(add_angular_velocity)
-            if param.flag_evaluate_angular_velocity_abs:
-                angular_velocity_list.append(np.abs(add_angular_velocity_aft))
-            else:
-                angular_velocity_list.append(add_angular_velocity_aft)
+            add_angular_velocity_bef_corr = copy.deepcopy(add_angular_velocity)
+            add_angular_velocity = correct_angular_velocity(add_angular_velocity)
+        if param.flag_evaluate_angular_velocity_abs:
+            angular_velocity_list.append(np.abs(add_angular_velocity))
+            angular_velocity_list_bef_corr.append(np.abs(add_angular_velocity_bef_corr))
         else:
-            if param.flag_evaluate_angular_velocity_abs:
-                angular_velocity_list.append(np.abs(add_angular_velocity))
-            else:
-                angular_velocity_list.append(add_angular_velocity)
+            angular_velocity_list.append(add_angular_velocity)
+            angular_velocity_list_bef_corr.append(add_angular_velocity_bef_corr)
+
+    if param.flag_angular_velocity_correction:
+        # check colleration
+        make_graph.plot_av_colleration(angular_velocity_list_bef_corr, day)
     # save
     save2csv.save_angle_angular_velocity(angle_list, angular_velocity_list, day)
 

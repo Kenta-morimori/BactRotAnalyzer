@@ -1,5 +1,6 @@
 import configparser
 import os
+
 import pandas as pd
 
 # directory information
@@ -68,8 +69,11 @@ def get_tiffinfo_config(day):
 # rotational analysis
 ## Determine the angle by the direction of the cell.
 flag_get_angle_with_cell_direcetion = True
+
 ## About Angular Velocity
-flag_angular_velocity_correction = False  # Trimming with thresholds
+flag_angular_velocity_correction = True  # Trimming with thresholds
+num_std_dev = 5
+
 flag_evaluate_angular_velocity_abs = False  # Evaluate absolute values of angular velocity.
 
 flag_evaluating_switching = True  # evaluate switching of rotation

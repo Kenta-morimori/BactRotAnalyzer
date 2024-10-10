@@ -2,7 +2,7 @@ import statistics
 
 import numpy as np
 
-from . import frequency_analysis, make_graph, param, read_csv
+from . import dev_make_graph, frequency_analysis, make_graph, param, read_csv
 
 
 def get_sd_time_series(i, angular_velocity, day):
@@ -77,7 +77,7 @@ def main(angular_velocity_list, day):
         sd_list.append(add_sd_list)
         data_num_list.append(add_data_num_list)
 
-    make_graph.dev_plot_sd_data_num(data_num_list, day)  # develop
+    dev_make_graph.dev_plot_sd_data_num(data_num_list, day)  # develop
 
     # plotv
     flag_std = False
