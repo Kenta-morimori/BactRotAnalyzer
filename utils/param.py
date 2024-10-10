@@ -5,8 +5,8 @@ import pandas as pd
 
 # directory information
 curr_dir = os.getcwd()
-input_dir_bef = f"{curr_dir}/../data"
-save_dir_bef = f"{curr_dir}/../outputs"
+input_dir_bef = f"{curr_dir}/data"
+save_dir_bef = f"{curr_dir}/outputs"
 
 
 def get_config(day):

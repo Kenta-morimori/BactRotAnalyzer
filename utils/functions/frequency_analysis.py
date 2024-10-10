@@ -1,6 +1,7 @@
 import numpy as np
 
-from . import get_angular_velocity, make_graph, param, save2csv
+from utils import param
+from utils.functions import get_angular_velocity, make_graph, save2csv
 
 
 def fft(data_bef, dt):

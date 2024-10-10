@@ -9,11 +9,9 @@ from typing import List
 import cv2
 import numpy as np
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-sys.path.append(parent_dir)
+sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
-from functions import param
+from utils import param
 
 
 def contours(img):
@@ -150,6 +148,7 @@ def correct_angular_velocity(data):
 def extract_centroid(day):
     input_dir = f"{param.input_dir_bef}/{day}"
     save_dir = f"{param.save_dir_bef}/{day}"
+
 
     file_name_list_bef = glob.glob(f"{input_dir}/*.avi")
     sort_num: List[tuple[str, int]] = []

@@ -4,7 +4,8 @@ import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 
-from . import param, read_csv, save2csv
+from utils import param
+from utils.functions import read_csv, save2csv
 
 font_size = 20
 fig_size_x = 20

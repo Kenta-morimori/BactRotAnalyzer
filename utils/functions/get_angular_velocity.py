@@ -2,7 +2,8 @@ import copy
 
 import numpy as np
 
-from . import make_graph, param, read_csv, save2csv
+from utils import param
+from utils.functions import make_graph, read_csv, save2csv
 
 
 # Calculate centre coordinates using quadratic form.

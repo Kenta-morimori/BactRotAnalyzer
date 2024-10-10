@@ -2,7 +2,8 @@ import statistics
 
 import numpy as np
 
-from . import frequency_analysis, make_graph, param, read_csv, save2csv
+from utils import param
+from utils.functions import frequency_analysis, make_graph, read_csv, save2csv
 
 
 def get_sd_time_series(i, angular_velocity, day):

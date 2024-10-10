@@ -3,7 +3,7 @@ import os
 import numpy as np
 import pandas as pd
 
-from . import param
+from utils import param
 
 
 def read_center_coordinates(day):
