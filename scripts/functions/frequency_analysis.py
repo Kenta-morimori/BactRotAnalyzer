@@ -37,9 +37,13 @@ def fft_angle(angle_list, day):
 
 def fft_angular_velocity(angular_velocity_list, day):
     sample_num, FrameRate_list, _ = param.get_config(day)
-    freq_list, Amp_list = [], []
+    freq_list, Amp_list = [], []    
     # FFT
     for i in range(sample_num):
+        # Nan --> Mean value
+        if np.any(np.isnan(angular_velocity_list[i])):
+            mean = np.nanmean(angular_velocity_list[i])
+            angular_velocity_list[i] = np.where(np.isnan(angular_velocity_list[i]), mean, angular_velocity_list[i])
         freq, Amp = fft(angular_velocity_list[i], 1 / FrameRate_list[i])
         freq_list.append(freq)
         Amp_list.append(Amp)
