@@ -110,7 +110,7 @@ def save_SD_FFT_decline(decrease_list, day):
     data = {
         "No": [i + 1 for i in range(sample_num) for _ in width_time_list],
         "width": width_time_list * sample_num,
-        "decrease": [decrease_list[i][j] for i in range(sample_num) for j in range(len(width_time_list))]
+        "decrease": [decrease_list[i][j] for i in range(sample_num) for j in range(len(width_time_list))],
     }
     df = pd.DataFrame(data)
     df.to_csv(csv_save_dir, index=False)

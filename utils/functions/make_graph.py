@@ -429,7 +429,7 @@ def plot_compare_SD_FFT_decline(decrease_list1, decrease_list2, day1, day2):
         std_arr = np.std(decrease_list, axis=0)
         # axes[1].errorbar(width_time_list, mean_arr, std_arr)
         axes[1].errorbar(width_time_list, mean_arr, std_arr, fmt="o", label=label_list[i], alpha=0.7)
-    
+
     for i in range(10):
         axes[i].set_xlabel("Window Width [s]", fontsize=font_size)
         axes[i].set_ylabel("Amp Decrease Ratio", fontsize=font_size)
