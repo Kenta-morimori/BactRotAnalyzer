@@ -196,7 +196,6 @@ def plot_SD_list(SD_list, day, flag_std):
 
     # sepalate save
     for i, width_time in enumerate(width_time_list):
-        data_len = len(SD_list[0][i])
         time_list = read_csv.get_timelist(day)
 
         fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
@@ -228,7 +227,6 @@ def plot_SD_list(SD_list, day, flag_std):
 
     fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
     for i, width_time in enumerate(width_time_list):
-        data_len = len(SD_list[0][i])
         time_list = read_csv.get_timelist(day)
 
         for j in range(sample_num):
