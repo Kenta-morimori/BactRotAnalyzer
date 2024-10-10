@@ -1,7 +1,6 @@
 import sys
 
 from functions import (
-    dev_make_graph,
     fluctuation_analysis,
     frequency_analysis,
     get_angular_velocity,
@@ -20,7 +19,7 @@ def main(day):
     angle_list, angular_velocity_list = get_angular_velocity.get_angular_velocity(x_list, y_list, day)
 
     # dev
-    dev_make_graph.dev_plot_time_list(day)
+    make_graph.dev_plot_time_list(day)
 
     # plot centroid coordinates
     make_graph.plot_centroid_coordinate(x_list, y_list, day)

@@ -78,7 +78,7 @@ def get_angular_velocity(x_list, y_list, day):
             angle_list.append(angle)
 
         # obtain angular velocitiy
-        add_angular_velocity = []
+        add_angular_velocity = np.array([])
         for j in range(1, len(angle)):
             angle_diff = angle[j] - angle[j - 1]
             # 角度変化から回転方向を設定
@@ -87,12 +87,12 @@ def get_angular_velocity(x_list, y_list, day):
             elif angle_diff < -np.pi:
                 angle_diff += 2 * np.pi
             # CCWを正にするために-1をかける
-            add_angular_velocity.append(-1 * angle_diff * FrameRate_list[i])
+            add_angular_velocity = np.append(add_angular_velocity, -1 * angle_diff * FrameRate_list[i])
 
         # correct angular velocity
         if param.flag_angular_velocity_correction:
-            add_angular_velocity_bef_corr = copy.deepcopy(add_angular_velocity)
-            add_angular_velocity = correct_angular_velocity(add_angular_velocity)
+            add_angular_velocity_bef_corr = np.array(copy.deepcopy(add_angular_velocity))
+            add_angular_velocity = np.array(correct_angular_velocity(add_angular_velocity))
         if param.flag_evaluate_angular_velocity_abs:
             angular_velocity_list.append(np.abs(add_angular_velocity))
             angular_velocity_list_bef_corr.append(np.abs(add_angular_velocity_bef_corr))
