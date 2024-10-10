@@ -4,7 +4,7 @@ import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 
-from . import param, save2csv
+from . import param, read_csv, save2csv
 
 font_size = 20
 fig_size_x = 20
@@ -12,7 +12,7 @@ fig_size_y = 23
 
 
 def plot_centroid_coordinate(x_list, y_list, day):
-    sample_num, FrameRate, total_time = param.get_config(day)
+    sample_num, _, _ = param.get_config(day)
     px2um_x, px2um_y = param.get_px2um_config(day)
 
     save_dir = f"{param.save_dir_bef}/{day}/centroid_coordinate"
@@ -48,7 +48,7 @@ def plot_centroid_coordinate(x_list, y_list, day):
     plt.close(fig)
 
     # plot x, y
-    time_list = np.linspace(0, total_time, int(total_time * FrameRate))
+    time_list = read_csv.get_timelist(day)
     xy_plot_label = [r"x [$\mu$m]", r"y [$\mu$m]"]
     xy_save_label = ["x_coordinate.png", "y_coordinate.png"]
 
@@ -57,7 +57,7 @@ def plot_centroid_coordinate(x_list, y_list, day):
         for i in range(sample_num):
             row = i // 2
             col = i % 2
-            axs[row, col].plot(time_list, xy_list[i])
+            axs[row, col].plot(time_list[i], xy_list[i])
             axs[row, col].grid(True)
             axs[row, col].set_title(f"Trajectory No.{i+1}", fontsize=font_size)
             axs[row, col].set_xlabel("Time [s]", fontsize=18)
@@ -69,16 +69,16 @@ def plot_centroid_coordinate(x_list, y_list, day):
 
 
 def plot_angular_velocity(angle_list, angular_velocity_list, day):
-    sample_num, FrameRate, total_time = param.get_config(day)
+    sample_num, _, _ = param.get_config(day)
     save_dir = f"{param.save_dir_bef}/{day}/angular_velocity"
     os.makedirs(save_dir, exist_ok=True)
-    time_list = np.linspace(0, total_time, int(total_time * FrameRate))
+    time_list = read_csv.get_timelist(day)
 
     fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
     for i in range(sample_num):
         row = i // 2
         col = i % 2
-        axs[row, col].plot(time_list, angle_list[i])
+        axs[row, col].plot(time_list[i], angle_list[i])
         axs[row, col].grid(True)
         axs[row, col].set_title(f"Angle Time-series No.{i+1}", fontsize=font_size)
         axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
@@ -92,7 +92,7 @@ def plot_angular_velocity(angle_list, angular_velocity_list, day):
     for i in range(sample_num):
         row = i // 2
         col = i % 2
-        axs[row, col].plot(time_list[:-1], angular_velocity_list[i])
+        axs[row, col].plot(time_list[i][: len(angular_velocity_list[i])], angular_velocity_list[i])
         axs[row, col].grid(True)
         axs[row, col].set_title(f"Anglar Velocity Time-series No.{i+1}", fontsize=font_size)
         axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
@@ -103,17 +103,53 @@ def plot_angular_velocity(angle_list, angular_velocity_list, day):
     plt.close(fig)
 
 
-def plot_averaged_angular_velocity(angular_velocity_list, day):
-    sample_num, FrameRate, total_time = param.get_config(day)
+def plot_av_colleration(angular_velocity_list, day):
+    sample_num, _, _ = param.get_config(day)
     save_dir = f"{param.save_dir_bef}/{day}/angular_velocity"
     os.makedirs(save_dir, exist_ok=True)
-    time_list = np.linspace(0, total_time, int(total_time * FrameRate))
+    num_std_dev = param.num_std_dev
+    time_list = read_csv.get_timelist(day)
+
+    fig, axs = plt.subplots(
+        5,
+        2 * sample_num // 5,
+        figsize=(fig_size_x, fig_size_y),
+        gridspec_kw={"width_ratios": [5, 1] * (sample_num // 5)},
+    )
+    axs = axs.flatten()
+    for i in range(sample_num):
+        mean = np.mean(angular_velocity_list[i])
+        std_dev = np.std(angular_velocity_list[i])
+        lower_th = mean - num_std_dev * std_dev
+        upper_th = mean + num_std_dev * std_dev
+        # Time series plot (left plot)
+        ax_ts = axs[2 * i]
+        ax_ts.plot(time_list[i][: len(angular_velocity_list[i])], angular_velocity_list[i])
+        ax_ts.axhline(lower_th, color="red", linestyle="--")
+        ax_ts.axhline(upper_th, color="red", linestyle="--")
+        ax_ts.set_title(f"Angular Velocity No.{i + 1}")
+        # Distribution plot (right plot)
+        ax_dist = axs[2 * i + 1]
+        ax_dist.hist(angular_velocity_list[i], bins=30, orientation="horizontal", alpha=0.7)
+        ax_dist.axhline(lower_th, color="red", linestyle="--")
+        ax_dist.axhline(upper_th, color="red", linestyle="--")
+        ax_dist.set_title(f"Distribution No.{i + 1}")
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/av_colleration.png")
+    plt.close(fig)
+
+
+def plot_averaged_angular_velocity(angular_velocity_list, day):
+    sample_num, _, _ = param.get_config(day)
+    save_dir = f"{param.save_dir_bef}/{day}/angular_velocity"
+    os.makedirs(save_dir, exist_ok=True)
+    time_list = read_csv.get_timelist(day)
 
     fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
     for i in range(sample_num):
         row = i // 2
         col = i % 2
-        axs[row, col].plot(time_list[: len(angular_velocity_list[i])], angular_velocity_list[i])
+        axs[row, col].plot(time_list[i][: len(angular_velocity_list[i])], angular_velocity_list[i])
         axs[row, col].grid(True)
         axs[row, col].set_title(f"Anglar Velocity Time-series No.{i+1}", fontsize=font_size)
         axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
@@ -153,21 +189,20 @@ def plot_fft(freq_list, Amp_list, save_dir, save_name, day, flag_add_peak=False)
 
 
 def plot_SD_list(SD_list, day, flag_std):
-    sample_num, FrameRate, _ = param.get_config(day)
+    sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
     save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series"
     os.makedirs(save_dir, exist_ok=True)
 
     # sepalate save
     for i, width_time in enumerate(width_time_list):
-        data_len = len(SD_list[0][i])
-        time_list = np.linspace(0, data_len / FrameRate, data_len)
+        time_list = read_csv.get_timelist(day)
 
         fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
         for j in range(sample_num):
             row = j // 2
             col = j % 2
-            axs[row, col].plot(time_list, SD_list[j][i])
+            axs[row, col].plot(time_list[j][: len(SD_list[j][i])], SD_list[j][i])
             axs[row, col].grid(True)
             if flag_std:
                 axs[row, col].set_title(f"Standardized SD Time-series No.{j+1}", fontsize=font_size)
@@ -192,13 +227,14 @@ def plot_SD_list(SD_list, day, flag_std):
 
     fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
     for i, width_time in enumerate(width_time_list):
-        data_len = len(SD_list[0][i])
-        time_list = np.linspace(0, data_len / FrameRate, data_len)
+        time_list = read_csv.get_timelist(day)
 
         for j in range(sample_num):
             row = j // 2
             col = j % 2
-            axs[row, col].plot(time_list, SD_list[j][i], label=f"SD {width_time}s", c=color_list[i], alpha=0.7)
+            axs[row, col].plot(
+                time_list[j][: len(SD_list[j][i])], SD_list[j][i], label=f"SD {width_time}s", c=color_list[i], alpha=0.7
+            )
             axs[row, col].grid(True)
             if flag_std:
                 axs[row, col].set_title(f"Standardized SD Time-series No.{j+1}", fontsize=font_size)
@@ -275,4 +311,74 @@ def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
         plt.savefig(f"{save_dir}/SD-time-series_FFT_all_standardized.png")
     else:
         plt.savefig(f"{save_dir}/SD-time-series_FFT_all.png")
+    plt.close(fig)
+
+
+def dev_plot_time_list(day):
+    sample_num, _, _ = param.get_config(day)
+    save_dir = f"{param.save_dir_bef}/{day}/dev"
+    os.makedirs(save_dir, exist_ok=True)
+
+    time_list = read_csv.get_timelist(day)
+    time_diff_list = [
+        [time_list[i][j] - time_list[i][j - 1] for j in range(1, len(time_list[i]))] for i in range(len(time_list))
+    ]
+
+    fig, axs = plt.subplots(5, 2 * sample_num // 5, figsize=(2 * fig_size_x, fig_size_y))
+    for i in range(sample_num):
+        row = i // 2
+        col = i % 2
+        # time list
+        axs[row, 2 * col].plot(time_list[i])
+        axs[row, 2 * col].grid(True)
+        axs[row, 2 * col].set_title(f"time list No.{i+1}", fontsize=font_size)
+        axs[row, 2 * col].set_xlabel("Data Num", fontsize=font_size)
+        axs[row, 2 * col].set_ylabel("Time [s]", fontsize=font_size)
+        axs[row, 2 * col].tick_params(axis="both", which="major", labelsize=font_size)
+        # time diff
+        axs[row, 2 * col + 1].plot(time_list[i][1:], time_diff_list[i])
+        axs[row, 2 * col + 1].grid(True)
+        axs[row, 2 * col + 1].set_title(f"time diff list No.{i+1}", fontsize=font_size)
+        axs[row, 2 * col + 1].set_xlabel("Time [s]", fontsize=font_size)
+        axs[row, 2 * col + 1].set_ylabel("Time diff [s]", fontsize=font_size)
+        axs[row, 2 * col + 1].tick_params(axis="both", which="major", labelsize=font_size)
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/time_list.png")
+    plt.close(fig)
+
+
+def dev_plot_sd_data_num(data_num_list, day):
+    sample_num, _, _ = param.get_config(day)
+    width_time_list = param.SD_window_width_list
+    save_dir = f"{param.save_dir_bef}/{day}/dev"
+    os.makedirs(save_dir, exist_ok=True)
+
+    # Stacking save
+    color_list = ["m", "g", "b", "y", "c", "r"]
+    plot_label_list = []
+    for width_time in width_time_list:
+        plot_label_list.append(f"SD {width_time}s")
+
+    fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
+    for i, width_time in enumerate(width_time_list):
+        time_list = read_csv.get_timelist(day)
+
+        for j in range(sample_num):
+            row = j // 2
+            col = j % 2
+            axs[row, col].plot(
+                time_list[j][: len(data_num_list[j][i])],
+                data_num_list[j][i],
+                label=f"SD {width_time}s",
+                c=color_list[i],
+                alpha=0.7,
+            )
+            axs[row, col].grid(True)
+            axs[row, col].set_title(f"No.{j+1}", fontsize=font_size)
+            axs[row, col].set_ylabel("data num", fontsize=font_size)
+            axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
+            axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
+    axs[-1][-1].legend(plot_label_list, loc="upper left", bbox_to_anchor=(1, 1))
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/SD_data_num.png")
     plt.close(fig)

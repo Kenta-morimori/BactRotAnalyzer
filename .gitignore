@@ -7,8 +7,7 @@ models/*
 outputs/*
 !outputs/README.md
 !outputs/test_data
-scripts/dev_plot2poster_main.py
-dev_run_fluctuation_analysis.sh
+scripts/dev_*
 
 # mypy
 .mypy_cache/

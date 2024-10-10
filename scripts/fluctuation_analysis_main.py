@@ -4,16 +4,22 @@ from functions import (
     fluctuation_analysis,
     frequency_analysis,
     get_angular_velocity,
+    get_tiff_info,
     input_data,
     make_graph,
 )
 
 
 def main(day):
+    # make time list
+    get_tiff_info.get_timelist(day)
     # obtain centroid coordinates
     x_list, y_list = input_data.input_centroid_coordinate(day)
     # obtain angle, angular velocity
     angle_list, angular_velocity_list = get_angular_velocity.get_angular_velocity(x_list, y_list, day)
+
+    # dev
+    make_graph.dev_plot_time_list(day)
 
     # plot centroid coordinates
     make_graph.plot_centroid_coordinate(x_list, y_list, day)

@@ -1,6 +1,8 @@
+import copy
+
 import numpy as np
 
-from . import param, read_csv, save2csv
+from . import make_graph, param, read_csv, save2csv
 
 
 # Calculate centre coordinates using quadratic form.
@@ -32,7 +34,7 @@ def get_center_coordinate(X, Y):
 
 # Trimming with thresholds
 def correct_angular_velocity(data):
-    num_std_dev = 3
+    num_std_dev = param.num_std_dev
     data_aft = []
 
     mean = np.mean(data)
@@ -42,33 +44,41 @@ def correct_angular_velocity(data):
 
     for x in data:
         if x < lower_th or upper_th < x:
-            data_aft.append(mean)
+            # data_aft.append(mean)  # Average
+            data_aft.append(np.nan)
         else:
             data_aft.append(x)
 
     return data_aft
 
 
+# normalized angle to -π~π for FFT
+def normalized_angle(angle_bef):
+    angle_aft = [angle % (2 * np.pi) - np.pi for angle in angle_bef]
+
+    return angle_aft
+
+
 def get_angular_velocity(x_list, y_list, day):
-    sample_num, FrameRate, _ = param.get_config(day)
+    sample_num, FrameRate_list, _ = param.get_config(day)
     angle_list, angular_velocity_list = [], []
+    angular_velocity_list_bef_corr = []
 
     if param.flag_get_angle_with_cell_direcetion:
         angle_list = read_csv.read_angle(day)
 
     for i in range(sample_num):
-        x_arr, y_arr = np.array(x_list[i]), np.array(y_list[i])
-
         # obtain angle
         if param.flag_get_angle_with_cell_direcetion:
             angle = np.array(angle_list[i])
         else:
             # center is zero
+            x_arr, y_arr = np.array(x_list[i]), np.array(y_list[i])
             angle = np.arctan2(y_arr, x_arr)
             angle_list.append(angle)
 
         # obtain angular velocitiy
-        add_angular_velocity = []
+        add_angular_velocity = np.array([])
         for j in range(1, len(angle)):
             angle_diff = angle[j] - angle[j - 1]
             # 角度変化から回転方向を設定
@@ -77,20 +87,22 @@ def get_angular_velocity(x_list, y_list, day):
             elif angle_diff < -np.pi:
                 angle_diff += 2 * np.pi
             # CCWを正にするために-1をかける
-            add_angular_velocity.append(-1 * angle_diff * FrameRate)
+            add_angular_velocity = np.append(add_angular_velocity, -1 * angle_diff * FrameRate_list[i])
 
         # correct angular velocity
         if param.flag_angular_velocity_correction:
-            add_angular_velocity_aft = correct_angular_velocity(add_angular_velocity)
-            if param.flag_evaluate_angular_velocity_abs:
-                angular_velocity_list.append(np.abs(add_angular_velocity_aft))
-            else:
-                angular_velocity_list.append(add_angular_velocity_aft)
+            add_angular_velocity_bef_corr = np.array(copy.deepcopy(add_angular_velocity))
+            add_angular_velocity = np.array(correct_angular_velocity(add_angular_velocity))
+        if param.flag_evaluate_angular_velocity_abs:
+            angular_velocity_list.append(np.abs(add_angular_velocity))
+            angular_velocity_list_bef_corr.append(np.abs(add_angular_velocity_bef_corr))
         else:
-            if param.flag_evaluate_angular_velocity_abs:
-                angular_velocity_list.append(np.abs(add_angular_velocity))
-            else:
-                angular_velocity_list.append(add_angular_velocity)
+            angular_velocity_list.append(add_angular_velocity)
+            angular_velocity_list_bef_corr.append(add_angular_velocity_bef_corr)
+
+    if param.flag_angular_velocity_correction:
+        # check colleration
+        make_graph.plot_av_colleration(angular_velocity_list_bef_corr, day)
     # save
     save2csv.save_angle_angular_velocity(angle_list, angular_velocity_list, day)
 
