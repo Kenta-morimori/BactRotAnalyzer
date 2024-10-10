@@ -17,7 +17,7 @@ from utils import param
 def contours(img):
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     _, img_binary = cv2.threshold(img_gray, 120, 255, cv2.THRESH_BINARY)
-    contours, hierarchy = cv2.findContours(img_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(img_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     max_contour = max(contours, key=cv2.contourArea)
 
     # Centroid coordinates were taken as the mean of the contours.
@@ -148,7 +148,6 @@ def correct_angular_velocity(data):
 def extract_centroid(day):
     input_dir = f"{param.input_dir_bef}/{day}"
     save_dir = f"{param.save_dir_bef}/{day}"
-
 
     file_name_list_bef = glob.glob(f"{input_dir}/*.avi")
     sort_num: List[tuple[str, int]] = []

@@ -105,7 +105,7 @@ def save_sd_fft(save_dir, freq_list, Amp_list):
 def save_SD_FFT_decline(decrease_list, day):
     sample_num, _, _ = param.get_config(day)
     csv_save_dir = f"{param.save_dir_bef}/{day}/SD_FFT_Amp_decrease.csv"
-    
+
     with open(csv_save_dir, "w", newline="") as csvfile:
         csvwriter = csv.writer(csvfile)
         headers = [f"No.{i+1}" for i in range(sample_num)]
