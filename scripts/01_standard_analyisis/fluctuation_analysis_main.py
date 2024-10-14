@@ -9,10 +9,13 @@ from utils.functions import (  # noqa
     get_tiff_info,
     input_data,
     make_graph,
+    rot_df_manage,
 )
 
 
 def main(day):
+    rot_df_manage.create_rot_df(day)
+
     # make time list
     get_tiff_info.get_timelist(day)
     # obtain centroid coordinates
