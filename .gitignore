@@ -8,6 +8,7 @@ outputs/*
 !outputs/README.md
 !outputs/test_data
 scripts/dev_*
+utils/functions/dev_*
 
 # mypy
 .mypy_cache/

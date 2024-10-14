@@ -1,6 +1,7 @@
 import numpy as np
 
-from . import make_graph, param, save2csv
+from utils import param
+from utils.functions import make_graph, save2csv
 
 
 def evaluate_switching(angular_velocity_list, day):

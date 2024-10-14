@@ -9,17 +9,15 @@ from typing import List
 import cv2
 import numpy as np
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-sys.path.append(parent_dir)
+sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
-from functions import param
+from utils import param
 
 
 def contours(img):
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     _, img_binary = cv2.threshold(img_gray, 120, 255, cv2.THRESH_BINARY)
-    contours, hierarchy = cv2.findContours(img_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(img_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     max_contour = max(contours, key=cv2.contourArea)
 
     # Centroid coordinates were taken as the mean of the contours.

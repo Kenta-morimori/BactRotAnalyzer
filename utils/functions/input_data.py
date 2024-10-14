@@ -3,7 +3,7 @@ import subprocess
 
 import pandas as pd
 
-from . import param
+from utils import param
 
 
 def input_centroid_coordinate(day):
@@ -11,7 +11,7 @@ def input_centroid_coordinate(day):
     csv_dir = f"{save_dir}/centroid_coordinate.csv"
 
     if not os.path.isfile(csv_dir):
-        subprocess.run(["Python3", "functions/get_centroid_coordinate.py", day])
+        subprocess.run(["Python3", "utils/functions/get_centroid_coordinate.py", day])
 
     x_list, y_list = [], []
     df = pd.read_csv(csv_dir)

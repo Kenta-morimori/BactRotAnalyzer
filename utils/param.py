@@ -5,8 +5,8 @@ import pandas as pd
 
 # directory information
 curr_dir = os.getcwd()
-input_dir_bef = f"{curr_dir}/../data"
-save_dir_bef = f"{curr_dir}/../outputs"
+input_dir_bef = f"{curr_dir}/data"
+save_dir_bef = f"{curr_dir}/outputs"
 
 
 def get_config(day):
@@ -81,3 +81,6 @@ flag_evaluating_switching = True  # evaluate switching of rotation
 # fluctuation analysis
 SD_window_width_list = [0.1, 0.5, 1.0]
 # SD_window_width_list = [0.1, 0.2, 0.5, 1.0, 1.5, 2.0]
+
+# evaluate SD FFT low Amp and decline
+flag_evaluate_SD_FFT = True

@@ -2,8 +2,10 @@ import os
 import re
 from datetime import datetime
 
-from functions import param, save2csv
 from PIL import Image
+
+from utils import param
+from utils.functions import save2csv
 
 
 def extract_number(filename):

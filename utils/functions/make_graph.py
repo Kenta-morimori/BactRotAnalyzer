@@ -4,7 +4,8 @@ import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 
-from . import param, read_csv, save2csv
+from utils import param
+from utils.functions import read_csv, save2csv
 
 font_size = 20
 fig_size_x = 20
@@ -176,6 +177,7 @@ def plot_fft(freq_list, Amp_list, save_dir, save_name, day, flag_add_peak=False)
             axs[row, col].axvline(x=freq_at_max_amp, color="r", alpha=0.6)
             peak_list.append(freq_at_max_amp)
         axs[row, col].grid(True)
+        axs[row, col].set_title(f"No.{i+1}", fontsize=font_size)
         axs[row, col].set_xlabel("Freqency [Hz]", fontsize=font_size)
         axs[row, col].set_ylabel("Amp", fontsize=font_size)
         # axs[row, col].set_xscale("log")
@@ -381,4 +383,68 @@ def dev_plot_sd_data_num(data_num_list, day):
     axs[-1][-1].legend(plot_label_list, loc="upper left", bbox_to_anchor=(1, 1))
     plt.tight_layout()
     plt.savefig(f"{save_dir}/SD_data_num.png")
+    plt.close(fig)
+
+
+def plot_SD_FFT_decline(decrease_list, ref_point_list, day):
+    sample_num, _, _ = param.get_config(day)
+    width_time_list = param.SD_window_width_list
+    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series"
+    os.makedirs(save_dir, exist_ok=True)
+
+    fig, axes = plt.subplots(1, sample_num + 1, figsize=(50, 5))
+    for i in range(sample_num):
+        # Amp Decreace
+        axes[i].plot(width_time_list, decrease_list[i], "-o")
+        axes[i].set_title(f"No.{i+1}", fontsize=font_size)
+        axes[i].set_xlabel("Window Width [s]", fontsize=font_size)
+        axes[i].set_ylabel("Amp Decrease Ratio", fontsize=font_size)
+        axes[i].tick_params(axis="both", which="major", labelsize=font_size)
+        # Low Amp Reference Points
+    axes[-1].plot(range(len(ref_point_list)), ref_point_list, "o")
+    axes[-1].set_title("Low Amp Reference Points", fontsize=font_size)
+    axes[-1].set_xlabel("Data Number", fontsize=font_size)
+    axes[-1].set_ylabel("Low Amp Reference Points", fontsize=font_size)
+    axes[-1].tick_params(axis="both", which="major", labelsize=font_size)
+    plt.tight_layout()
+    fig.suptitle("SD FFT features", size=12)
+    plt.subplots_adjust(wspace=0.5, hspace=0.2)
+    plt.savefig(f"{save_dir}/SD_FFT_Amp_decrease.png")
+    plt.close(fig)
+
+
+def plot_compare_SD_FFT_decline(decrease_list1, decrease_list2, day1, day2):
+    width_time_list = param.SD_window_width_list
+    save_dir = f"{param.save_dir_bef}/compare_SD_FFT_decline/{day1}-{day2}/"
+    os.makedirs(save_dir, exist_ok=True)
+    label_list = [day1, day2]
+
+    fig, axes = plt.subplots(1, 10, figsize=(50, 5))
+    for i in range(2):
+        if i == 0:
+            decrease_list = decrease_list1
+            c = "#1f77b4"
+        else:
+            decrease_list = decrease_list2
+            c = "#ff7f0e"
+        # 色分けしてplot
+        for j in range(len(decrease_list)):
+            axes[0].plot(width_time_list, decrease_list[j], "-o", color=c, alpha=0.7)
+
+        # 平均値・標準偏差plot
+        mean_arr = np.mean(decrease_list, axis=0)
+        std_arr = np.std(decrease_list, axis=0)
+        # axes[1].errorbar(width_time_list, mean_arr, std_arr)
+        axes[1].errorbar(width_time_list, mean_arr, std_arr, fmt="o", label=label_list[i], alpha=0.7)
+
+    for i in range(10):
+        axes[i].set_xlabel("Window Width [s]", fontsize=font_size)
+        axes[i].set_ylabel("Amp Decrease Ratio", fontsize=font_size)
+        axes[i].tick_params(axis="both", which="major", labelsize=font_size)
+    axes[1].legend(label_list, loc="upper left", bbox_to_anchor=(1, 1))
+
+    plt.tight_layout()
+    fig.suptitle("Amp decrease", size=12)
+    plt.subplots_adjust(wspace=0.5, hspace=0.2)
+    plt.savefig(f"{save_dir}/SD_FFT_Amp_decrease.png")
     plt.close(fig)

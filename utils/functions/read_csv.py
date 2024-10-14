@@ -1,9 +1,10 @@
 import os
+from typing import List
 
 import numpy as np
 import pandas as pd
 
-from . import param
+from utils import param
 
 
 def read_center_coordinates(day):
@@ -47,3 +48,17 @@ def get_timelist(day):
         ]
 
     return time_list
+
+
+def get_SD_FFT_decline(day, ignore_data_no):
+    csv_save_dir = f"{param.save_dir_bef}/{day}/SD_FFT_Amp_decrease.csv"
+    width_time_list = param.SD_window_width_list
+
+    df = pd.read_csv(csv_save_dir)
+    selected_No = [x for x in df["No"].unique().tolist() if x not in ignore_data_no]
+    decrease_list: List[List[float]] = [[] for _ in range(len(selected_No))]
+    for i, no in enumerate(selected_No):
+        for width in width_time_list:
+            decrease_list[i].append(float(df[(df["No"] == no) & (df["width"] == width)]["decrease"].values[0]))
+
+    return decrease_list
