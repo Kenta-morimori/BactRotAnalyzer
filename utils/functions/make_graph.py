@@ -5,7 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from utils import param
-from utils.functions import read_csv, save2csv
+from utils.features import ROTATION_FEATURES
+from utils.functions import read_csv, rot_df_manage, save2csv
 
 font_size = 20
 fig_size_x = 20
@@ -187,6 +188,7 @@ def plot_fft(freq_list, Amp_list, save_dir, save_name, day, flag_add_peak=False)
     plt.close(fig)
     if flag_add_peak:
         save2csv.save_fft_peak(save_dir, save_name, peak_list)
+        rot_df_manage.update_rot_df(ROTATION_FEATURES.angle_FFT_peak, peak_list, day)
 
 
 def plot_SD_list(SD_list, day, flag_std):
