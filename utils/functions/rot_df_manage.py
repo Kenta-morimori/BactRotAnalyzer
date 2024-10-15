@@ -32,3 +32,10 @@ def update_rot_df(col, data, day):
     rot_df = pd.read_csv(csv_save_dir, index_col=None)
     rot_df[col] = data
     rot_df.to_csv(csv_save_dir, index=False)
+
+
+def get_rot_df(day):
+    csv_save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/rot_df.csv"
+    rot_df = pd.read_csv(csv_save_dir, index_col=None)
+
+    return rot_df 

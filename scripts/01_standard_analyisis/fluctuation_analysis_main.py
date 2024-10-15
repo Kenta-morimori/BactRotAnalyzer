@@ -14,6 +14,9 @@ from utils.functions import (  # noqa
 
 
 def main(day):
+    make_graph.plot_Amp_dec_rot_param(day)  # delete
+    sys.exit(0)
+
     rot_df_manage.create_rot_df(day)
 
     # make time list
@@ -37,6 +40,9 @@ def main(day):
 
     # evaluate fluctuation
     fluctuation_analysis.main(angular_velocity_list, day)
+
+    # Comparison of SD_FFT_Amp_refpoints with other rot_df parameters
+    make_graph.plot_Amp_dec_rot_param(day)
 
 
 if __name__ == "__main__":
