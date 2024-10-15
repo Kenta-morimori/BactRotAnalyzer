@@ -14,13 +14,12 @@ fig_size_y = 23
 
 def plot_centroid_coordinate(x_list, y_list, day):
     sample_num, _, _ = param.get_config(day)
-    px2um_x, px2um_y = param.get_px2um_config(day)
 
     save_dir = f"{param.save_dir_bef}/{day}/centroid_coordinate"
     os.makedirs(save_dir, exist_ok=True)
 
     # Pixel to µm conversion.
-    x_list, y_list = (np.array(x_list) * px2um_x).tolist(), (np.array(y_list) * px2um_y).tolist()
+    # x_list, y_list = (np.array(x_list) * px2um_x).tolist(), (np.array(y_list) * px2um_y).tolist()
 
     # plot centroid coordinate
     fig = plt.figure(figsize=(20, 8))
