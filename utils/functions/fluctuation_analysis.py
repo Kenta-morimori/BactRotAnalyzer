@@ -3,7 +3,14 @@ import statistics
 import numpy as np
 
 from utils import param
-from utils.functions import frequency_analysis, make_graph, read_csv, save2csv
+from utils.features import ROTATION_FEATURES
+from utils.functions import (
+    frequency_analysis,
+    make_graph,
+    read_csv,
+    rot_df_manage,
+    save2csv,
+)
 
 
 def get_sd_time_series(i, angular_velocity, day):
@@ -89,10 +96,18 @@ def evaluate_FFT(sd_freq_list, sd_Amp_list, day):
     # save CSV
     save2csv.save_SD_FFT_decline(decrease_list, day)
     save2csv.save_SD_FFT_refpoints(ref_point_list, day)
+    # save rot_df
+    for j, width in enumerate(width_time_list):
+        decrease_list_rot_df = []
+        for i in range(sample_num):
+            decrease_list_rot_df.append(decrease_list[i][j])
+        rot_df_manage.update_rot_df(f"{ROTATION_FEATURES.SD_FFT_Amp_decrease}_{width}s", decrease_list_rot_df, day)
+    rot_df_manage.update_rot_df(ROTATION_FEATURES.SD_FFT_Amp_refpoints, ref_point_list, day)
 
 
 def main(angular_velocity_list, day):
     sample_num, _, _ = param.get_config(day)
+    width_time_list = param.SD_window_width_list
     sd_list = []
     data_num_list = []  # develop
 
@@ -103,6 +118,12 @@ def main(angular_velocity_list, day):
         data_num_list.append(add_data_num_list)
 
     make_graph.dev_plot_sd_data_num(data_num_list, day)  # develop
+    # save to rot_df
+    for j, width in enumerate(width_time_list):
+        data_num_mean_list = []
+        for i in range(sample_num):
+            data_num_mean_list.append(np.mean(data_num_list[i][j]))
+        rot_df_manage.update_rot_df(f"{ROTATION_FEATURES.SD_window_data_num_mean}_{width}s", data_num_mean_list, day)
 
     # plotv
     flag_std = False
