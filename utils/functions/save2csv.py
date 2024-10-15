@@ -18,6 +18,23 @@ def save_time_list(time_list, day):
             csvwriter.writerow(row)
 
 
+def save_rot_axes(long_axis_list, short_axis_list, day):
+    save_dir = f"{param.save_dir_bef}/{day}/centroid_coordinate/"
+    csv_save_dir = f"{save_dir}/rotation_axes.csv"
+    os.makedirs(save_dir, exist_ok=True)
+
+    headers, row = [], []
+    for i in range(len(long_axis_list)):
+        headers.append(f"No.{i+1}_long_axis")
+        row.append(long_axis_list[i])
+        headers.append(f"No.{i+1}_short_axis")
+        row.append(short_axis_list[i])
+    with open(csv_save_dir, "w", newline="") as csvfile:
+        csvwriter = csv.writer(csvfile)
+        csvwriter.writerow(headers)
+        csvwriter.writerow(row)
+
+
 def save_angle_angular_velocity(angle_list, angular_velocity_list, day):
     save_dir = f"{param.save_dir_bef}/{day}/angular_velocity/"
     os.makedirs(save_dir, exist_ok=True)

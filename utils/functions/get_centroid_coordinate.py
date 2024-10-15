@@ -13,7 +13,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
 from utils import param
 from utils.features import ROTATION_FEATURES
-from utils.functions import rot_df_manage
+from utils.functions import rot_df_manage, save2csv
 
 
 def contours(img):
@@ -212,6 +212,7 @@ def extract_centroid(day):
     save_centorid_cordinate(save_dir, x_list_aft, y_list_aft)
     save_center_of_rotation(save_dir, center_x_list, center_y_list)
     # save long_axis_list, short_axis_list
+    save2csv.save_rot_axes(long_axis_list, short_axis_list, day)
     rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_long_axis, long_axis_list, day)
     rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_short_axis, short_axis_list, day)
 
