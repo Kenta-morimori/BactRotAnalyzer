@@ -459,13 +459,9 @@ def plot_Amp_dec_rot_param(day):
     col_list_org = ROTATION_FEATURES.__annotations__.keys()
     save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis"
     os.makedirs(save_dir, exist_ok=True)
-    
+
     fig_mag = len(col_list_org) / 2.5
-    fig, axs = plt.subplots(
-        len(col_list_org),
-        len(col_list_org),
-        figsize=(fig_size_x * fig_mag, fig_size_x * fig_mag)
-    )
+    fig, axs = plt.subplots(len(col_list_org), len(col_list_org), figsize=(fig_size_x * fig_mag, fig_size_x * fig_mag))
     label_list = [f"SD {width}s" for width in width_time_list]
     for i, i_col in enumerate(col_list_org):
         for j, j_col in enumerate(col_list_org):
