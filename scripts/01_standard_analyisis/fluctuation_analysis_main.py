@@ -14,9 +14,6 @@ from utils.functions import (  # noqa
 
 
 def main(day):
-    make_graph.plot_Amp_dec_rot_param(day)  # delete
-    sys.exit(0)
-
     rot_df_manage.create_rot_df(day)
 
     # make time list
