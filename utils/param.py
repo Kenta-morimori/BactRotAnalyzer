@@ -87,7 +87,7 @@ flag_evaluate_angular_velocity_abs = False  # Evaluate absolute values of angula
 flag_correct_av_outlier = True  # Trimming with thresholds
 num_std_dev = 8
 
-flag_av_completion = True # Complement data
+flag_av_completion = True  # Complement data
 mode_av_completion = 0
 """
 0: Nan
