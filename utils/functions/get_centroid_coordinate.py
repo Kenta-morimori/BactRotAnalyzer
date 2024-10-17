@@ -12,6 +12,8 @@ import numpy as np
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
 from utils import param
+from utils.features import ROTATION_FEATURES
+from utils.functions import rot_df_manage, save2csv
 
 
 def contours(img):
@@ -77,30 +79,39 @@ def save_angle(save_dir, angle_list):
             csvwriter.writerow(row)
 
 
-def get_center(x):
-    A, B, C, D, E = x[0], x[1], x[2], x[3], x[4]
-    mat = np.array([[A, B / 2], [B / 2, C]])
-    eig_val, eig_vec = np.linalg.eig(mat)
-
-    center_x_bef = -1 * (D * eig_vec[0][0] + E * eig_vec[1][0]) / (2 * eig_val[0])
-    center_y_bef = -1 * (D * eig_vec[0][1] + E * eig_vec[1][1]) / (2 * eig_val[1])
-    center_x = eig_vec[0][0] * center_x_bef + eig_vec[0][1] * center_y_bef
-    center_y = eig_vec[1][0] * center_x_bef + eig_vec[1][1] * center_y_bef
-
-    return center_x, center_y
-
-
-def get_center_coordinate(X, Y):
+def get_ellipse_info(X, Y):
     size = len(X)
     X = X.reshape([size, 1])
     Y = Y.reshape([size, 1])
 
     A = np.hstack([X**2, X * Y, Y**2, X, Y])
     b = np.ones_like(X)
-    x = np.linalg.lstsq(A, b, rcond=None)[0].squeeze()
-    center_x, center_y = get_center(x.tolist())
+    x_arr = np.linalg.lstsq(A, b, rcond=None)[0].squeeze()
+    x = x_arr.tolist()
 
-    return center_x, center_y
+    # Get information on ellipses using quadratic form
+    A, B, C, D, E = x[0], x[1], x[2], x[3], x[4]
+    mat = np.array([[A, B / 2], [B / 2, C]])
+    eig_val_bef, eig_vec_bef = np.linalg.eig(mat)
+    # Sort eigenvalues in descending order
+    indices = np.argsort(eig_val_bef)[::-1]
+    eig_val = eig_val_bef[indices]
+    eig_vec = eig_vec_bef[:, indices]
+
+    center_x_bef = -1 * (D * eig_vec[0][0] + E * eig_vec[1][0]) / (2 * eig_val[0])
+    center_y_bef = -1 * (D * eig_vec[0][1] + E * eig_vec[1][1]) / (2 * eig_val[1])
+    center_x = eig_vec[0][0] * center_x_bef + eig_vec[0][1] * center_y_bef
+    center_y = eig_vec[1][0] * center_x_bef + eig_vec[1][1] * center_y_bef
+
+    alfa = (
+        1
+        + ((D * eig_vec[0][0] + E * eig_vec[1][0]) ** 2) / (4 * eig_val[0])
+        + ((D * eig_vec[0][1] + E * eig_vec[1][1]) ** 2) / (4 * eig_val[1])
+    )
+    long_axis = math.sqrt(alfa / eig_val[0])
+    short_axis = math.sqrt(alfa / eig_val[1])
+
+    return center_x, center_y, long_axis, short_axis
 
 
 def scale_center_zero(coordinates_bef, center):
@@ -148,6 +159,7 @@ def correct_angular_velocity(data):
 def extract_centroid(day):
     input_dir = f"{param.input_dir_bef}/{day}"
     save_dir = f"{param.save_dir_bef}/{day}"
+    px2um_x, px2um_y = param.get_px2um_config(day)
 
     file_name_list_bef = glob.glob(f"{input_dir}/*.avi")
     sort_num: List[tuple[str, int]] = []
@@ -171,8 +183,8 @@ def extract_centroid(day):
                 add_angle_list_bef.append(ellipse[2])
             else:
                 x, y, _ = contours(frame)
-            add_x_list.append(x)
-            add_y_list.append(y)
+            add_x_list.append(x * px2um_x)
+            add_y_list.append(y * px2um_y)
 
         x_list.append(add_x_list)
         y_list.append(add_y_list)
@@ -183,11 +195,14 @@ def extract_centroid(day):
 
     # exact center of rotation
     center_x_list, center_y_list = [], []
+    long_axis_list, short_axis_list = [], []
     for i in range(len(x_list)):
         x_arr, y_arr = np.array(x_list[i]), np.array(y_list[i])
-        center_x, center_y = get_center_coordinate(x_arr, y_arr)
+        center_x, center_y, long_axis, short_axis = get_ellipse_info(x_arr, y_arr)
         center_x_list.append(center_x)
         center_y_list.append(center_y)
+        long_axis_list.append(long_axis)
+        short_axis_list.append(short_axis)
 
     # Fix x_list, y_list as center is zero
     x_list_aft = scale_center_zero(x_list, center_x_list)
@@ -196,6 +211,11 @@ def extract_centroid(day):
     # save
     save_centorid_cordinate(save_dir, x_list_aft, y_list_aft)
     save_center_of_rotation(save_dir, center_x_list, center_y_list)
+    # save long_axis_list, short_axis_list
+    save2csv.save_rot_axes(long_axis_list, short_axis_list, day)
+    rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_long_axis, long_axis_list, day)
+    rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_short_axis, short_axis_list, day)
+
     if param.flag_get_angle_with_cell_direcetion:
         save_angle(save_dir, angle_list)
 

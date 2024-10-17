@@ -50,6 +50,21 @@ def get_timelist(day):
     return time_list
 
 
+def get_rot_axes(day):
+    csv_save_dir = f"{param.save_dir_bef}/{day}/centroid_coordinate/rotation_axes.csv"
+    df = pd.read_csv(csv_save_dir)
+
+    long_axis_list = []
+    short_axis_list = []
+    for col in df.columns:
+        if "long_axis" in col:
+            long_axis_list.append(df[col].values[0])
+        elif "short_axis" in col:
+            short_axis_list.append(df[col].values[0])
+
+    return long_axis_list, short_axis_list
+
+
 def get_SD_FFT_decline(day, ignore_data_no):
     csv_save_dir = f"{param.save_dir_bef}/{day}/SD_FFT_Amp_decrease.csv"
     width_time_list = param.SD_window_width_list

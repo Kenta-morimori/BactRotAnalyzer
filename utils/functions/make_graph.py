@@ -5,7 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from utils import param
-from utils.functions import read_csv, save2csv
+from utils.features import ROTATION_FEATURES, SD_WIDTH_DEPEND_COLS
+from utils.functions import read_csv, rot_df_manage, save2csv
 
 font_size = 20
 fig_size_x = 20
@@ -14,13 +15,12 @@ fig_size_y = 23
 
 def plot_centroid_coordinate(x_list, y_list, day):
     sample_num, _, _ = param.get_config(day)
-    px2um_x, px2um_y = param.get_px2um_config(day)
 
     save_dir = f"{param.save_dir_bef}/{day}/centroid_coordinate"
     os.makedirs(save_dir, exist_ok=True)
 
     # Pixel to µm conversion.
-    x_list, y_list = (np.array(x_list) * px2um_x).tolist(), (np.array(y_list) * px2um_y).tolist()
+    # x_list, y_list = (np.array(x_list) * px2um_x).tolist(), (np.array(y_list) * px2um_y).tolist()
 
     # plot centroid coordinate
     fig = plt.figure(figsize=(20, 8))
@@ -188,6 +188,7 @@ def plot_fft(freq_list, Amp_list, save_dir, save_name, day, flag_add_peak=False)
     plt.close(fig)
     if flag_add_peak:
         save2csv.save_fft_peak(save_dir, save_name, peak_list)
+        rot_df_manage.update_rot_df(ROTATION_FEATURES.angle_FFT_peak, peak_list, day)
 
 
 def plot_SD_list(SD_list, day, flag_std):
@@ -447,4 +448,67 @@ def plot_compare_SD_FFT_decline(decrease_list1, decrease_list2, day1, day2):
     fig.suptitle("Amp decrease", size=12)
     plt.subplots_adjust(wspace=0.5, hspace=0.2)
     plt.savefig(f"{save_dir}/SD_FFT_Amp_decrease.png")
+    plt.close(fig)
+
+
+def plot_Amp_dec_rot_param(day):
+    sample_num, _, _ = param.get_config(day)
+    width_time_list = param.SD_window_width_list
+    rot_df = rot_df_manage.get_rot_df(day)
+    # col_list = rot_df_manage.get_cols()
+    col_list_org = ROTATION_FEATURES.__annotations__.keys()
+    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis"
+    os.makedirs(save_dir, exist_ok=True)
+
+    fig_mag = len(col_list_org) / 2.5
+    fig, axs = plt.subplots(len(col_list_org), len(col_list_org), figsize=(fig_size_x * fig_mag, fig_size_x * fig_mag))
+    label_list = [f"SD {width}s" for width in width_time_list]
+    for i, i_col in enumerate(col_list_org):
+        for j, j_col in enumerate(col_list_org):
+            if i == j:
+                axs[i][j].set_title(f"{j_col} column", fontsize=font_size)
+                axs[i][j].set_aspect("equal", "box")
+                continue
+            # obtain rotation param
+            data_i_bef, data_j_bef = [], []
+            flag_i_width_depend, flag_j_width_depend = False, False
+            if i_col in SD_WIDTH_DEPEND_COLS:
+                flag_i_width_depend = True
+                for width in width_time_list:
+                    data_i_bef.append(rot_df[f"{i_col}_{width}s"].tolist())
+            else:
+                data_i_bef.append(rot_df[i_col].tolist())
+            if j_col in SD_WIDTH_DEPEND_COLS:
+                flag_j_width_depend = True
+                for width in width_time_list:
+                    data_j_bef.append(rot_df[f"{j_col}_{width}s"].tolist())
+            else:
+                data_j_bef.append(rot_df[j_col].tolist())
+
+            # prepair plot
+            if flag_i_width_depend:
+                data_i_aft = data_i_bef.copy()
+            else:
+                data_i_aft = [data_i_bef[0] for _ in range(sample_num)]
+            if flag_j_width_depend:
+                data_j_aft = data_j_bef.copy()
+            else:
+                data_j_aft = [data_j_bef[0] for _ in range(sample_num)]
+
+            # plot
+            if flag_i_width_depend or flag_j_width_depend:
+                for k, width in enumerate(width_time_list):
+                    axs[i][j].plot(data_i_aft[k], data_j_aft[k], "o", label=label_list[k], ms=5 * fig_mag)
+                axs[i][j].legend(label_list, loc="upper left", bbox_to_anchor=(1, 1))
+            else:
+                axs[i][j].plot(data_i_aft[0], data_j_aft[0], "o", ms=5 * fig_mag)
+            # axs[i][j].set_aspect("equal")
+            axs[i][j].grid(True)
+            axs[i][j].set_title(f"{i_col}\nvs\n{j_col}", fontsize=font_size)
+            axs[i][j].set_xlabel(i_col, fontsize=font_size)
+            axs[i][j].set_ylabel(j_col, fontsize=font_size)
+            axs[i][j].tick_params(axis="both", which="major", labelsize=font_size)
+    # plt.subplots_adjust()
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/rot_param_relation.png")
     plt.close(fig)

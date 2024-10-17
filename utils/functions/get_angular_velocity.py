@@ -3,7 +3,8 @@ import copy
 import numpy as np
 
 from utils import param
-from utils.functions import make_graph, read_csv, save2csv
+from utils.features import ROTATION_FEATURES
+from utils.functions import make_graph, read_csv, rot_df_manage, save2csv
 
 
 # Calculate centre coordinates using quadratic form.
@@ -91,7 +92,7 @@ def get_angular_velocity(x_list, y_list, day):
             add_angular_velocity = np.append(add_angular_velocity, -1 * angle_diff * FrameRate_list[i])
 
         # correct angular velocity
-        if param.flag_angular_velocity_correction:
+        if param.flag_correct_av_outlier:
             add_angular_velocity_bef_corr = np.array(copy.deepcopy(add_angular_velocity))
             add_angular_velocity = np.array(correct_angular_velocity(add_angular_velocity))
         if param.flag_evaluate_angular_velocity_abs:
@@ -100,11 +101,14 @@ def get_angular_velocity(x_list, y_list, day):
         else:
             angular_velocity_list.append(add_angular_velocity)
             angular_velocity_list_bef_corr.append(add_angular_velocity_bef_corr)
+    # obtain Angular Velocity mean
+    angular_velocity_mean_list = np.nanmean(angular_velocity_list, axis=1)
 
-    if param.flag_angular_velocity_correction:
+    if param.flag_correct_av_outlier:
         # check colleration
         make_graph.plot_av_colleration(angular_velocity_list_bef_corr, day)
     # save
     save2csv.save_angle_angular_velocity(angle_list, angular_velocity_list, day)
+    rot_df_manage.update_rot_df(ROTATION_FEATURES.angular_velosity_mean, angular_velocity_mean_list, day)
 
     return angle_list, angular_velocity_list
