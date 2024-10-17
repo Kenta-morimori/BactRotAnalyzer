@@ -2,6 +2,7 @@ import os
 import re
 from datetime import datetime
 
+import numpy as np
 from PIL import Image
 
 from utils import param
@@ -10,7 +11,7 @@ from utils.functions import save2csv
 
 def extract_number(filename):
     match = re.search(r"_(\d+)\.tif$", filename)
-    return int(match.group(1)) if match else float("inf")  # 数字がなければ大きな数を返す
+    return int(match.group(1)) if match else float("inf")
 
 
 def get_timelist(day):
@@ -32,14 +33,29 @@ def get_timelist(day):
                     # メタデータの取得
                     metadata = img.tag_v2
                     # 特定の時間関連情報を表示
-                    datetime_tag = 306  # 306はDateTimeのタグID
+                    datetime_tag = 306  # DateTime tag ID
                     time = datetime.strptime(metadata[datetime_tag], "%m/%d/%Y %H:%M:%S.%f")
                     if base_time is None:
-                        # 最初のファイルの時間を基準時間として保存
                         base_time = time
                     else:
-                        # 基準時間との差分を計算
                         time_diff = time - base_time
                         time_list.append(time_diff.total_seconds())
         time_list_all.append(time_list)
     save2csv.save_time_list(time_list_all, day)
+
+
+def detect_time_jumps_with_sd(time_list, day):
+    sample_num, _, _ = param.get_config(day)
+
+    jump_time_index_list: list[list[float]] = [[] for _ in range(sample_num)]
+
+    for i in range(sample_num):
+        time_diff = [time_list[i][j + 1] - time_list[i][j] for j in range(len(time_list[i]) - 1)]
+        mean_diff = np.mean(time_diff)
+        sd_diff = np.std(time_diff)
+        threshold = mean_diff + 2 * sd_diff
+
+        jump_time_index = [j for j, diff in enumerate(time_diff) if diff > threshold]
+        jump_time_index_list[i].extend(jump_time_index)
+
+    return jump_time_index_list

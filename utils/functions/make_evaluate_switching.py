@@ -1,12 +1,13 @@
 import numpy as np
+from sklearn.cluster import KMeans
 
 from utils import param
-from utils.functions import make_graph, save2csv
+from utils.features import ROTATION_FEATURES
+from utils.functions import make_graph, rot_df_manage, save2csv
 
 
 def evaluate_switching(angular_velocity_list, day):
     sample_num, _, _ = param.get_config(day)
-    # スイッチング頻度をCCW/CWと定義
     switching_value_list = []
     for i in range(sample_num):
         cw_count, ccw_count = 0, 0
@@ -23,24 +24,22 @@ def evaluate_switching(angular_velocity_list, day):
 def evaluate_switching_averaged(angular_velocity_list_bef, day):
     sample_num, _, total_time = param.get_config(day)
 
-    # angular_velocity_list を窓関数を用いて平均化
-    # 窓関数の幅
-    window_width_sec = 0.1  # [s]
+    # get ngular_velocity_list average using window function
+    window_width_sec = 0.1  # [s]: window width
     angular_velocity_list_aft = []
     for i in range(sample_num):
         add_av_data = []
         total_frame = len(angular_velocity_list_bef[i])
-        # 0.1 sの窓関数を使用
         window_frame = int(window_width_sec * total_frame / total_time)
 
         for frame_i in range(int(total_frame - window_frame)):
             add_av_data.append(np.mean(angular_velocity_list_bef[i][frame_i : frame_i + window_frame]).astype(float))
         angular_velocity_list_aft.append(add_av_data)
 
-    # 平均化角速度をplot
+    # plot Averaged Angular Velocity
     make_graph.plot_averaged_angular_velocity(angular_velocity_list_aft, day)
 
-    # スイッチング頻度をCCW/CWと定義
+    # CCW/CW
     switching_value_list = []
     for i in range(sample_num):
         cw_count, ccw_count = 0, 0
@@ -52,3 +51,34 @@ def evaluate_switching_averaged(angular_velocity_list_bef, day):
         switching_value_list.append(round(ccw_count / cw_count, 3))
     # 保存
     save2csv.save_switching_value(switching_value_list, day, flag_averaged=True)
+
+
+def get_angular_velocity_rot_part(angular_velocity_list, day):
+    sample_num, _, _ = param.get_config(day)
+
+    th_list, mean_list = [], []
+    for i in range(sample_num):
+        data = angular_velocity_list[i]
+        data = data[~np.isnan(data)]
+        threshold_distance = 5
+
+        kmeans = KMeans(n_clusters=2)
+        kmeans.fit(data.reshape(-1, 1))
+        centers = np.sort(kmeans.cluster_centers_.flatten())
+        center_distance = np.abs(centers[1] - centers[0])
+
+        if center_distance < threshold_distance:
+            threshold = None
+        threshold = (centers[0] + centers[1]) / 2
+        th_list.append(threshold)
+
+        if threshold is not None:
+            mean_value = np.mean(data[data > threshold])
+            mean_list.append(mean_value)
+        else:
+            mean_list.append(None)
+    # plot
+    make_graph.plot_angular_velocity_rot_part(angular_velocity_list, th_list, day)
+    # save
+    rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_angular_velosity_th, th_list, day)
+    rot_df_manage.update_rot_df(ROTATION_FEATURES.angular_velosity_mean_rot_part, mean_list, day)
