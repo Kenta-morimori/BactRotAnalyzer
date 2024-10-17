@@ -140,6 +140,28 @@ def plot_av_colleration(angular_velocity_list, day):
     plt.close(fig)
 
 
+def plot_angular_velocity_rot_part(angular_velocity_list, th_list, day):
+    sample_num, _, _ = param.get_config(day)
+    save_dir = f"{param.save_dir_bef}/{day}/angular_velocity"
+    os.makedirs(save_dir, exist_ok=True)
+    time_list = read_csv.get_timelist(day)
+
+    fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
+    for i in range(sample_num):
+        row = i // 2
+        col = i % 2
+        axs[row, col].plot(time_list[i][: len(angular_velocity_list[i])], angular_velocity_list[i])
+        axs[row, col].axhline(th_list[i], color="red", linestyle="--")
+        axs[row, col].grid(True)
+        axs[row, col].set_title(f"Anglar Velocity Time-series No.{i+1}", fontsize=font_size)
+        axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
+        axs[row, col].set_ylabel("Angular Velocity [rad/s]", fontsize=font_size)
+        axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/angular-velocity_part.png")
+    plt.close(fig)
+
+
 def plot_averaged_angular_velocity(angular_velocity_list, day):
     sample_num, _, _ = param.get_config(day)
     save_dir = f"{param.save_dir_bef}/{day}/angular_velocity"

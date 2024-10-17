@@ -4,7 +4,7 @@ from utils import param
 
 
 # Trimming with thresholds
-def correct_angular_velocity(data):
+def correct_angular_velocity_outlier(data):
     num_std_dev = param.num_std_dev
     data_aft = []
 
@@ -21,3 +21,10 @@ def correct_angular_velocity(data):
             data_aft.append(x)
 
     return data_aft
+
+
+def angular_velocity_completion(data):
+    sample_num = len(data)
+
+    for i in range(sample_num):
+        print("hogehoge")

@@ -4,7 +4,14 @@ import numpy as np
 
 from utils import param
 from utils.features import ROTATION_FEATURES
-from utils.functions import clean_data, make_graph, read_csv, rot_df_manage, save2csv
+from utils.functions import (
+    clean_data,
+    make_evaluate_switching,
+    make_graph,
+    read_csv,
+    rot_df_manage,
+    save2csv,
+)
 
 
 # Calculate centre coordinates using quadratic form.
@@ -74,7 +81,7 @@ def get_angular_velocity(x_list, y_list, day):
         # correct angular velocity
         add_angular_velocity_bef_corr = np.array(copy.deepcopy(add_angular_velocity))
         if param.flag_correct_av_outlier:
-            add_angular_velocity = np.array(clean_data.correct_angular_velocity(add_angular_velocity))
+            add_angular_velocity = np.array(clean_data.correct_angular_velocity_outlier(add_angular_velocity))
         if param.flag_evaluate_angular_velocity_abs:
             angular_velocity_list.append(np.abs(add_angular_velocity))
             angular_velocity_list_bef_corr.append(np.abs(add_angular_velocity_bef_corr))
@@ -83,6 +90,7 @@ def get_angular_velocity(x_list, y_list, day):
             angular_velocity_list_bef_corr.append(add_angular_velocity_bef_corr)
     # obtain Angular Velocity mean
     angular_velocity_mean_list = np.nanmean(angular_velocity_list, axis=1)
+    make_evaluate_switching.get_angular_velocity_rot_part(angular_velocity_list, day)
 
     if param.flag_correct_av_outlier:
         # check colleration
