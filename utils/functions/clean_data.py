@@ -21,5 +21,3 @@ def correct_angular_velocity(data):
             data_aft.append(x)
 
     return data_aft
-
-
