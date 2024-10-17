@@ -9,12 +9,22 @@ input_dir_bef = f"{curr_dir}/data"
 save_dir_bef = f"{curr_dir}/outputs"
 
 
-def get_config(day):
+def get_flag_use_tiff_log(day):
     config_dir = f"{input_dir_bef}/{day}/config.ini"
     config = configparser.ConfigParser()
     config.read(config_dir)
 
     flag_use_tiff_log = config.getboolean("Settings", "flag_use_tiff_log")
+
+    return flag_use_tiff_log
+
+
+def get_config(day):
+    config_dir = f"{input_dir_bef}/{day}/config.ini"
+    config = configparser.ConfigParser()
+    config.read(config_dir)
+
+    flag_use_tiff_log = get_flag_use_tiff_log(day)
     sample_num = config.getint("Settings", "sample_num")
     # Frame Rate, Total Time
     FrameRate_list = []

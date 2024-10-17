@@ -4,7 +4,7 @@ import numpy as np
 
 from utils import param
 from utils.features import ROTATION_FEATURES
-from utils.functions import make_graph, read_csv, rot_df_manage, save2csv
+from utils.functions import clean_data, make_graph, read_csv, rot_df_manage, save2csv
 
 
 # Calculate centre coordinates using quadratic form.
@@ -32,26 +32,6 @@ def get_center_coordinate(X, Y):
     center_x, center_y = get_center(x.tolist())
 
     return center_x, center_y
-
-
-# Trimming with thresholds
-def correct_angular_velocity(data):
-    num_std_dev = param.num_std_dev
-    data_aft = []
-
-    mean = np.mean(data)
-    std_dev = np.std(data)
-    lower_th = mean - num_std_dev * std_dev
-    upper_th = mean + num_std_dev * std_dev
-
-    for x in data:
-        if x < lower_th or upper_th < x:
-            # data_aft.append(mean)  # Average
-            data_aft.append(np.nan)
-        else:
-            data_aft.append(x)
-
-    return data_aft
 
 
 # normalized angle to -π~π for FFT
@@ -92,9 +72,9 @@ def get_angular_velocity(x_list, y_list, day):
             add_angular_velocity = np.append(add_angular_velocity, -1 * angle_diff * FrameRate_list[i])
 
         # correct angular velocity
+        add_angular_velocity_bef_corr = np.array(copy.deepcopy(add_angular_velocity))
         if param.flag_correct_av_outlier:
-            add_angular_velocity_bef_corr = np.array(copy.deepcopy(add_angular_velocity))
-            add_angular_velocity = np.array(correct_angular_velocity(add_angular_velocity))
+            add_angular_velocity = np.array(clean_data.correct_angular_velocity(add_angular_velocity))
         if param.flag_evaluate_angular_velocity_abs:
             angular_velocity_list.append(np.abs(add_angular_velocity))
             angular_velocity_list_bef_corr.append(np.abs(add_angular_velocity_bef_corr))
