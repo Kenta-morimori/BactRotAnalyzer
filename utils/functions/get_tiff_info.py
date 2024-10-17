@@ -48,7 +48,7 @@ def detect_time_jumps_with_sd(time_list, day):
     sample_num, _, _ = param.get_config(day)
 
     jump_time_index_list: list[list[float]] = [[] for _ in range(sample_num)]
-    
+
     for i in range(sample_num):
         time_diff = [time_list[i][j + 1] - time_list[i][j] for j in range(len(time_list[i]) - 1)]
         mean_diff = np.mean(time_diff)

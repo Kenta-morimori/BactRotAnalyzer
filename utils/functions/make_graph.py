@@ -6,7 +6,7 @@ import numpy as np
 
 from utils import param
 from utils.features import ROTATION_FEATURES, SD_WIDTH_DEPEND_COLS
-from utils.functions import read_csv, rot_df_manage, save2csv, get_tiff_info
+from utils.functions import get_tiff_info, read_csv, rot_df_manage, save2csv
 
 font_size = 20
 fig_size_x = 20
@@ -123,7 +123,7 @@ def plot_av_colleration(angular_velocity_list, day):
         # Time series plot (left plot)
         ax_ts = axs[2 * i]
         ax_ts.plot(time_list[i][: len(angular_velocity_list[i])], angular_velocity_list[i])
-        
+
         if mode_correct_av_outlier == 0:  # use SD threshold
             num_std_dev = param.num_std_dev
             mean = np.mean(angular_velocity_list[i])
