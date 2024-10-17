@@ -2,6 +2,7 @@ import os
 import re
 from datetime import datetime
 
+import numpy as np
 from PIL import Image
 
 from utils import param
@@ -41,3 +42,20 @@ def get_timelist(day):
                         time_list.append(time_diff.total_seconds())
         time_list_all.append(time_list)
     save2csv.save_time_list(time_list_all, day)
+
+
+def detect_time_jumps_with_sd(time_list, day):
+    sample_num, _, _ = param.get_config(day)
+
+    jump_time_index_list: list[list[float]] = [[] for _ in range(sample_num)]
+    
+    for i in range(sample_num):
+        time_diff = [time_list[i][j + 1] - time_list[i][j] for j in range(len(time_list[i]) - 1)]
+        mean_diff = np.mean(time_diff)
+        sd_diff = np.std(time_diff)
+        threshold = mean_diff + 2 * sd_diff
+
+        jump_time_index = [j for j, diff in enumerate(time_diff) if diff > threshold]
+        jump_time_index_list[i].extend(jump_time_index)
+
+    return jump_time_index_list

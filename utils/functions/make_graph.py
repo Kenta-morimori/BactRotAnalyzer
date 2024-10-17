@@ -6,7 +6,7 @@ import numpy as np
 
 from utils import param
 from utils.features import ROTATION_FEATURES, SD_WIDTH_DEPEND_COLS
-from utils.functions import read_csv, rot_df_manage, save2csv
+from utils.functions import read_csv, rot_df_manage, save2csv, get_tiff_info
 
 font_size = 20
 fig_size_x = 20
@@ -106,10 +106,11 @@ def plot_angular_velocity(angle_list, angular_velocity_list, day):
 
 def plot_av_colleration(angular_velocity_list, day):
     sample_num, _, _ = param.get_config(day)
+    mode_correct_av_outlier = param.mode_correct_av_outlier
     save_dir = f"{param.save_dir_bef}/{day}/angular_velocity"
     os.makedirs(save_dir, exist_ok=True)
-    num_std_dev = param.num_std_dev
     time_list = read_csv.get_timelist(day)
+    jump_time_index_list = get_tiff_info.detect_time_jumps_with_sd(time_list, day)
 
     fig, axs = plt.subplots(
         5,
@@ -119,24 +120,36 @@ def plot_av_colleration(angular_velocity_list, day):
     )
     axs = axs.flatten()
     for i in range(sample_num):
-        mean = np.mean(angular_velocity_list[i])
-        std_dev = np.std(angular_velocity_list[i])
-        lower_th = mean - num_std_dev * std_dev
-        upper_th = mean + num_std_dev * std_dev
         # Time series plot (left plot)
         ax_ts = axs[2 * i]
         ax_ts.plot(time_list[i][: len(angular_velocity_list[i])], angular_velocity_list[i])
-        ax_ts.axhline(lower_th, color="red", linestyle="--")
-        ax_ts.axhline(upper_th, color="red", linestyle="--")
+        
+        if mode_correct_av_outlier == 0:  # use SD threshold
+            num_std_dev = param.num_std_dev
+            mean = np.mean(angular_velocity_list[i])
+            std_dev = np.std(angular_velocity_list[i])
+            lower_th = mean - num_std_dev * std_dev
+            upper_th = mean + num_std_dev * std_dev
+            ax_ts.axhline(lower_th, color="red", linestyle="--")
+            ax_ts.axhline(upper_th, color="red", linestyle="--")
+        elif mode_correct_av_outlier == 1:  # use TIFF time info
+            for jump_time_index in jump_time_index_list[i]:
+                ax_ts.axvline(time_list[i][jump_time_index], color="red", linestyle="--")
         ax_ts.set_title(f"Angular Velocity No.{i + 1}")
+
         # Distribution plot (right plot)
         ax_dist = axs[2 * i + 1]
         ax_dist.hist(angular_velocity_list[i], bins=30, orientation="horizontal", alpha=0.7)
-        ax_dist.axhline(lower_th, color="red", linestyle="--")
-        ax_dist.axhline(upper_th, color="red", linestyle="--")
+
+        if mode_correct_av_outlier == 0:  # use SD threshold
+            ax_dist.axhline(lower_th, color="red", linestyle="--")
+            ax_dist.axhline(upper_th, color="red", linestyle="--")
+        elif mode_correct_av_outlier == 1:  # use TIFF time info
+            for jump_time_index in jump_time_index_list[i]:
+                ax_dist.axhline(angular_velocity_list[i][jump_time_index], color="red", linestyle="--")
         ax_dist.set_title(f"Distribution No.{i + 1}")
     plt.tight_layout()
-    plt.savefig(f"{save_dir}/av_colleration.png")
+    plt.savefig(f"{save_dir}/angular-velocity_outlier.png")
     plt.close(fig)
 
 
@@ -158,7 +171,7 @@ def plot_angular_velocity_rot_part(angular_velocity_list, th_list, day):
         axs[row, col].set_ylabel("Angular Velocity [rad/s]", fontsize=font_size)
         axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
     plt.tight_layout()
-    plt.savefig(f"{save_dir}/angular-velocity_part.png")
+    plt.savefig(f"{save_dir}/angular-velocity_rot_part.png")
     plt.close(fig)
 
 

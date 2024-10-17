@@ -81,7 +81,7 @@ def get_angular_velocity(x_list, y_list, day):
         # correct angular velocity
         add_angular_velocity_bef_corr = np.array(copy.deepcopy(add_angular_velocity))
         if param.flag_correct_av_outlier:
-            add_angular_velocity = np.array(clean_data.correct_angular_velocity_outlier(add_angular_velocity))
+            add_angular_velocity = np.array(clean_data.correct_angular_velocity_outlier(add_angular_velocity, i, day))
         if param.flag_evaluate_angular_velocity_abs:
             angular_velocity_list.append(np.abs(add_angular_velocity))
             angular_velocity_list_bef_corr.append(np.abs(add_angular_velocity_bef_corr))

@@ -85,6 +85,11 @@ flag_evaluating_switching = True  # evaluate switching of rotation
 flag_evaluate_angular_velocity_abs = False  # Evaluate absolute values of angular velocity
 
 flag_correct_av_outlier = True  # Trimming with thresholds
+mode_correct_av_outlier = 1
+"""
+0: use SD threshold
+1: use TIFF time info
+"""
 num_std_dev = 8
 
 flag_av_completion = True  # Complement data
