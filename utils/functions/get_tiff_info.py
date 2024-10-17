@@ -10,7 +10,7 @@ from utils.functions import save2csv
 
 def extract_number(filename):
     match = re.search(r"_(\d+)\.tif$", filename)
-    return int(match.group(1)) if match else float("inf")  # 数字がなければ大きな数を返す
+    return int(match.group(1)) if match else float("inf")
 
 
 def get_timelist(day):
@@ -32,13 +32,11 @@ def get_timelist(day):
                     # メタデータの取得
                     metadata = img.tag_v2
                     # 特定の時間関連情報を表示
-                    datetime_tag = 306  # 306はDateTimeのタグID
+                    datetime_tag = 306  # DateTime tag ID
                     time = datetime.strptime(metadata[datetime_tag], "%m/%d/%Y %H:%M:%S.%f")
                     if base_time is None:
-                        # 最初のファイルの時間を基準時間として保存
                         base_time = time
                     else:
-                        # 基準時間との差分を計算
                         time_diff = time - base_time
                         time_list.append(time_diff.total_seconds())
         time_list_all.append(time_list)
