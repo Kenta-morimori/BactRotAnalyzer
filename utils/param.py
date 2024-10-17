@@ -71,7 +71,7 @@ def get_tiffinfo_config(day):
 flag_get_angle_with_cell_direcetion = True
 
 ## About Angular Velocity
-flag_angular_velocity_correction = True  # Trimming with thresholds
+flag_correct_av_outlier = True  # Trimming with thresholds
 num_std_dev = 5
 
 flag_evaluate_angular_velocity_abs = False  # Evaluate absolute values of angular velocity.

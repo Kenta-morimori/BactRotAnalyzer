@@ -92,7 +92,7 @@ def get_angular_velocity(x_list, y_list, day):
             add_angular_velocity = np.append(add_angular_velocity, -1 * angle_diff * FrameRate_list[i])
 
         # correct angular velocity
-        if param.flag_angular_velocity_correction:
+        if param.flag_correct_av_outlier:
             add_angular_velocity_bef_corr = np.array(copy.deepcopy(add_angular_velocity))
             add_angular_velocity = np.array(correct_angular_velocity(add_angular_velocity))
         if param.flag_evaluate_angular_velocity_abs:
@@ -104,7 +104,7 @@ def get_angular_velocity(x_list, y_list, day):
     # obtain Angular Velocity mean
     angular_velocity_mean_list = np.nanmean(angular_velocity_list, axis=1)
 
-    if param.flag_angular_velocity_correction:
+    if param.flag_correct_av_outlier:
         # check colleration
         make_graph.plot_av_colleration(angular_velocity_list_bef_corr, day)
     # save
