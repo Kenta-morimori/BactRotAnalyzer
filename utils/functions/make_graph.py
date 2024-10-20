@@ -164,7 +164,9 @@ def plot_angular_velocity_rot_part(angular_velocity_list, th_list, th_list_means
     for i in range(sample_num):
         row = i // 2
         col = i % 2
-        axs[row, col].plot(time_list[i][: len(angular_velocity_list[i])], angular_velocity_list[i], alpha=0.7, label="original AV")
+        axs[row, col].plot(
+            time_list[i][: len(angular_velocity_list[i])], angular_velocity_list[i], alpha=0.7, label="original AV"
+        )
         # axs[row, col].axhline(th_list[i], color="red", linestyle="--")
         axs[row, col].axhline(th_list[i], linestyle="--", alpha=0.9, c="#ff7f0e", label="original k-means")
         axs[row, col].axhline(th_list_means[i], linestyle="--", alpha=0.9, c="#2ca02c", label="mean k-means")

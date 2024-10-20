@@ -3,7 +3,7 @@ from sklearn.cluster import KMeans
 
 from utils import param
 from utils.features import ROTATION_FEATURES
-from utils.functions import make_graph, rot_df_manage, save2csv, make_scale
+from utils.functions import make_graph, make_scale, rot_df_manage, save2csv
 
 
 def evaluate_switching(angular_velocity_list, day):
