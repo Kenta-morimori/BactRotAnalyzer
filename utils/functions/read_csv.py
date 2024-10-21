@@ -62,7 +62,7 @@ def get_rot_axes(day):
             long_axis_list.append(df[col].values[0])
         elif "short_axis" in col:
             short_axis_list.append(df[col].values[0])
-    
+
     for i in range(len(long_axis_list)):
         aspect_ratio_list.append(short_axis_list[i] / long_axis_list[i])
 

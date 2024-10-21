@@ -1,12 +1,12 @@
 import os
-from tqdm import tqdm
 
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
+from tqdm import tqdm
 
 from utils import param
-from utils.features import ROTATION_FEATURES, SD_WIDTH_DEPEND_COLS, IGNORE_PLOT_COLS
+from utils.features import IGNORE_PLOT_COLS, ROTATION_FEATURES, SD_WIDTH_DEPEND_COLS
 from utils.functions import get_tiff_info, read_csv, rot_df_manage, save2csv
 
 font_size = 20
