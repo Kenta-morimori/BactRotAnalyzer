@@ -196,6 +196,7 @@ def extract_centroid(day):
     # exact center of rotation
     center_x_list, center_y_list = [], []
     long_axis_list, short_axis_list = [], []
+    aspect_ratio_list = []
     for i in range(len(x_list)):
         x_arr, y_arr = np.array(x_list[i]), np.array(y_list[i])
         center_x, center_y, long_axis, short_axis = get_ellipse_info(x_arr, y_arr)
@@ -203,6 +204,7 @@ def extract_centroid(day):
         center_y_list.append(center_y)
         long_axis_list.append(long_axis)
         short_axis_list.append(short_axis)
+        aspect_ratio_list.append(short_axis / long_axis)
 
     # Fix x_list, y_list as center is zero
     x_list_aft = scale_center_zero(x_list, center_x_list)
@@ -215,6 +217,7 @@ def extract_centroid(day):
     save2csv.save_rot_axes(long_axis_list, short_axis_list, day)
     rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_long_axis, long_axis_list, day)
     rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_short_axis, short_axis_list, day)
+    rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_aspect_ratio, aspect_ratio_list, day)
 
     if param.flag_get_angle_with_cell_direcetion:
         save_angle(save_dir, angle_list)

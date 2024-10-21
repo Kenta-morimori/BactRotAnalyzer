@@ -2,6 +2,7 @@ import os
 import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
+from utils import param
 from utils.functions import (  # noqa
     fluctuation_analysis,
     frequency_analysis,
@@ -17,7 +18,10 @@ def main(day):
     rot_df_manage.create_rot_df(day)
 
     # make time list
-    get_tiff_info.get_timelist(day)
+    flag_use_tiff_log = param.get_flag_use_tiff_log(day)
+    if flag_use_tiff_log:
+        get_tiff_info.get_timelist(day)
+
     # obtain centroid coordinates
     x_list, y_list = input_data.input_centroid_coordinate(day)
     # obtain angle, angular velocity
@@ -39,7 +43,7 @@ def main(day):
     fluctuation_analysis.main(angular_velocity_list, day)
 
     # Comparison of SD_FFT_Amp_refpoints with other rot_df parameters
-    make_graph.plot_Amp_dec_rot_param(day)
+    make_graph.plot_rot_param(day)
 
 
 if __name__ == "__main__":
