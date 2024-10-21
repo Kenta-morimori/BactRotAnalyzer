@@ -56,7 +56,7 @@ def evaluate_switching_averaged(angular_velocity_list_bef, day):
 def k_means_av(av_list, day):
     sample_num, _, _ = param.get_config(day)
 
-    th_list, mean_list = [], []
+    th_list, mean_list, sd_list = [], [], []
     for i in range(sample_num):
         data = av_list[i]
         if isinstance(data, list):
@@ -76,26 +76,27 @@ def k_means_av(av_list, day):
         th_list.append(threshold)
 
         if threshold is not None:
-            mean_value = np.mean(data[data > threshold])
-            mean_list.append(mean_value)
+            mean_list.append(np.nanmean(data[data > threshold]))
+            sd_list.append(np.nanstd(data[data > threshold]))
         else:
             mean_list.append(None)
-    return th_list, mean_list
+    return th_list, mean_list, sd_list
 
 
 def get_angular_velocity_rot_part(angular_velocity_list, day):
-    th_list, mean_list = k_means_av(angular_velocity_list, day)
+    th_list, mean_list, sd_list = k_means_av(angular_velocity_list, day)
     # save
     rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_angular_velosity_th, th_list, day)
     rot_df_manage.update_rot_df(ROTATION_FEATURES.angular_velosity_mean_rot_part, mean_list, day)
+    rot_df_manage.update_rot_df(ROTATION_FEATURES.angular_velosity_sd_rot_part, sd_list, day)
 
     # dev
     angular_velocity_means = make_scale.get_data_stat(angular_velocity_list, day, stat_type="mean")
     angular_velocity_medians = make_scale.get_data_stat(angular_velocity_list, day, stat_type="median")
     make_graph.dev_plot_av_with_stats(angular_velocity_list, angular_velocity_means, angular_velocity_medians, day)
     # angular_velocity_means, angular_velocity_medians で再度K-means (関数化して利用)
-    th_list_means, _ = k_means_av(angular_velocity_means, day)
-    th_list_median, _ = k_means_av(angular_velocity_medians, day)
+    th_list_means, _, _ = k_means_av(angular_velocity_means, day)
+    th_list_median, _, _ = k_means_av(angular_velocity_medians, day)
 
     # plot
     make_graph.plot_angular_velocity_rot_part(angular_velocity_list, th_list, th_list_means, th_list_median, day)

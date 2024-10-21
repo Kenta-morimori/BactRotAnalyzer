@@ -43,7 +43,7 @@ def main(day):
     fluctuation_analysis.main(angular_velocity_list, day)
 
     # Comparison of SD_FFT_Amp_refpoints with other rot_df parameters
-    make_graph.plot_Amp_dec_rot_param(day)
+    make_graph.plot_rot_param(day)
 
 
 if __name__ == "__main__":

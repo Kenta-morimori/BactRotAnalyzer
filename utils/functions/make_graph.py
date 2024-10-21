@@ -1,11 +1,12 @@
 import os
+from tqdm import tqdm
 
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 
 from utils import param
-from utils.features import ROTATION_FEATURES, SD_WIDTH_DEPEND_COLS
+from utils.features import ROTATION_FEATURES, SD_WIDTH_DEPEND_COLS, IGNORE_PLOT_COLS
 from utils.functions import get_tiff_info, read_csv, rot_df_manage, save2csv
 
 font_size = 20
@@ -423,19 +424,19 @@ def plot_compare_SD_FFT_decline(decrease_list1, decrease_list2, day1, day2):
     plt.close(fig)
 
 
-def plot_Amp_dec_rot_param(day):
+def plot_rot_param(day):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
     rot_df = rot_df_manage.get_rot_df(day)
     # col_list = rot_df_manage.get_cols()
-    col_list_org = ROTATION_FEATURES.__annotations__.keys()
+    col_list_org = [col for col in ROTATION_FEATURES.__annotations__.keys() if col not in IGNORE_PLOT_COLS]
     save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis"
     os.makedirs(save_dir, exist_ok=True)
 
     fig_mag = len(col_list_org) / 2.5
     fig, axs = plt.subplots(len(col_list_org), len(col_list_org), figsize=(fig_size_x * fig_mag, fig_size_x * fig_mag))
     label_list = [f"SD {width}s" for width in width_time_list]
-    for i, i_col in enumerate(col_list_org):
+    for i, i_col in enumerate(tqdm(col_list_org)):
         for j, j_col in enumerate(col_list_org):
             if i == j:
                 axs[i][j].set_title(f"{j_col} column", fontsize=font_size)

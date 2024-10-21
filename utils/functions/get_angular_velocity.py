@@ -90,6 +90,7 @@ def get_angular_velocity(x_list, y_list, day):
             angular_velocity_list_bef_corr.append(add_angular_velocity_bef_corr)
     # obtain Angular Velocity mean
     angular_velocity_mean_list = np.nanmean(angular_velocity_list, axis=1)
+    angular_velocity_sd_list = np.nanstd(angular_velocity_list, axis=1)
     make_evaluate_switching.get_angular_velocity_rot_part(angular_velocity_list, day)
 
     if param.flag_correct_av_outlier:
@@ -98,5 +99,6 @@ def get_angular_velocity(x_list, y_list, day):
     # save
     save2csv.save_angle_angular_velocity(angle_list, angular_velocity_list, day)
     rot_df_manage.update_rot_df(ROTATION_FEATURES.angular_velosity_mean, angular_velocity_mean_list, day)
+    rot_df_manage.update_rot_df(ROTATION_FEATURES.angular_velosity_sd, angular_velocity_sd_list, day)
 
     return angle_list, angular_velocity_list

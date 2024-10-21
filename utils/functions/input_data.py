@@ -15,9 +15,10 @@ def input_centroid_coordinate(day):
     if not os.path.isfile(csv_dir):
         subprocess.run(["Python3", "utils/functions/get_centroid_coordinate.py", day])
     else:
-        long_axis_list, short_axis_list = read_csv.get_rot_axes(day)
+        long_axis_list, short_axis_list, aspect_ratio_list = read_csv.get_rot_axes(day)
         rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_long_axis, long_axis_list, day)
         rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_short_axis, short_axis_list, day)
+        rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_aspect_ratio, aspect_ratio_list, day)
 
     x_list, y_list = [], []
     df = pd.read_csv(csv_dir)
