@@ -70,6 +70,8 @@ def fft_sd_list(sd_list, day, flag_std):
         Amp_list.append(add_Amp_list)
     # plot
     make_graph.plot_SD_list_fft(freq_list, Amp_list, day, flag_std)
+    make_graph.dev_plot_sd_FFT_with_rotation(freq_list, Amp_list, day)
+
     save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series"
     save2csv.save_sd_fft(save_dir, freq_list, Amp_list)
 
