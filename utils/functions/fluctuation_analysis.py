@@ -30,7 +30,8 @@ def get_sd_time_series(i, angular_velocity, day):
             # start_time ~ start_time + width_time のデータ
             for j in range(len(time_list[i])):
                 if (time_list[i][j] >= start_time) and (time_list[i][j] < start_time + width_time):
-                    data.append(angular_velocity[j])
+                    # 揺らぎの評価の際は絶対値の角速度を使用
+                    data.append(abs(angular_velocity[j]))
             if len(data) > 2:  # SDの算出は最低3データ必要
                 add_sd.append(statistics.stdev(data))
                 add_data_num.append(len(data))
