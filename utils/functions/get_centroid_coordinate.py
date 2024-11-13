@@ -79,7 +79,7 @@ def save_angle(save_dir, angle_list):
             csvwriter.writerow(row)
 
 
-def get_ellipse_info(X, Y):
+def get_ellipse_info(X, Y, index):
     size = len(X)
     X = X.reshape([size, 1])
     Y = Y.reshape([size, 1])
@@ -108,8 +108,16 @@ def get_ellipse_info(X, Y):
         + ((D * eig_vec[0][0] + E * eig_vec[1][0]) ** 2) / (4 * eig_val[0])
         + ((D * eig_vec[0][1] + E * eig_vec[1][1]) ** 2) / (4 * eig_val[1])
     )
-    long_axis = math.sqrt(alfa / eig_val[0])
-    short_axis = math.sqrt(alfa / eig_val[1])
+    if alfa / eig_val[0] < 0:
+        print(f"[Warning] No.{index}   alfa / eig_val[0] is negative value")
+        long_axis = math.sqrt(abs(alfa / eig_val[0]))
+    else:
+        long_axis = math.sqrt(alfa / eig_val[0])
+    if alfa / eig_val[1] < 0:
+        print(f"[Warning] No.{index}   alfa / eig_val[1] is negative value")
+        short_axis = math.sqrt(abs(alfa / eig_val[1]))
+    else:
+        short_axis = math.sqrt(alfa / eig_val[1])
 
     return center_x, center_y, long_axis, short_axis
 
@@ -199,7 +207,7 @@ def extract_centroid(day):
     aspect_ratio_list = []
     for i in range(len(x_list)):
         x_arr, y_arr = np.array(x_list[i]), np.array(y_list[i])
-        center_x, center_y, long_axis, short_axis = get_ellipse_info(x_arr, y_arr)
+        center_x, center_y, long_axis, short_axis = get_ellipse_info(x_arr, y_arr, i)
         center_x_list.append(center_x)
         center_y_list.append(center_y)
         long_axis_list.append(long_axis)
