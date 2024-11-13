@@ -81,3 +81,14 @@ def get_SD_FFT_decline(day, ignore_data_no):
             decrease_list[i].append(float(df[(df["No"] == no) & (df["width"] == width)]["decrease"].values[0]))
 
     return decrease_list
+
+
+def get_angle_FFT(day):
+    csv_save_dir = f"{param.save_dir_bef}/{day}/angular_velocity/angle_FFT.csv"
+    sample_num, _, _ = param.get_config(day)
+
+    df = pd.read_csv(csv_save_dir)
+    freq_list = [df[f"No.{i + 1}_freq"].tolist() for i in range(sample_num)]
+    Amp_list = [df[f"No.{i + 1}_Amp"].tolist() for i in range(sample_num)]
+
+    return freq_list, Amp_list

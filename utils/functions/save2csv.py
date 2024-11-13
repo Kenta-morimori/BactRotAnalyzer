@@ -71,14 +71,18 @@ def save_switching_value(switching_value_list, day, flag_averaged=False):
 
 def save_fft(save_dir, save_name, freq_list, Amp_list):
     csv_save_dir = f"{save_dir}/{save_name}.csv"
-    headers = [f"No.{i+1}_freq" for i in range(len(freq_list))] + [f"No.{i+1}_Amp" for i in range(len(freq_list))]
 
+    headers = []
+    for i in range(len(freq_list)):
+        headers.append(f"No.{i + 1}_freq")
+        headers.append(f"No.{i + 1}_Amp")
     rows = []
     for index in range(max(map(len, freq_list))):
         row = []
         for freq, amp in zip(freq_list, Amp_list):
             if index < len(freq):
-                row.extend([freq[index], amp[index]])
+                row.append(freq[index])
+                row.append(amp[index])
             else:
                 row.extend([None, None])
         rows.append(row)

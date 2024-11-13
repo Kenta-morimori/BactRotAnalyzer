@@ -104,6 +104,20 @@ def plot_angular_velocity(angle_list, angular_velocity_list, day):
     plt.savefig(f"{save_dir}/angular-velocity_time-series.png")
     plt.close(fig)
 
+    fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
+    for i in range(sample_num):
+        row = i // 2
+        col = i % 2
+        axs[row, col].plot(time_list[i][: len(angular_velocity_list[i])], [abs(x) for x in angular_velocity_list[i]])
+        axs[row, col].grid(True)
+        axs[row, col].set_title(f"Anglar Velocity Time-series No.{i+1}", fontsize=font_size)
+        axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
+        axs[row, col].set_ylabel("Angular Velocity (abs) [rad/s]", fontsize=font_size)
+        axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/angular-velocity_time-series_abs.png")
+    plt.close(fig)
+
 
 def plot_av_colleration(angular_velocity_list, day):
     sample_num, _, _ = param.get_config(day)
@@ -579,4 +593,43 @@ def dev_plot_av_with_stats(av_list, av_means, av_medians, day):
     axs[-1][-1].legend(labels, loc="upper left", bbox_to_anchor=(1, 1))
     plt.tight_layout()
     plt.savefig(f"{save_dir}/angular-velocity_with_stats.png")
+    plt.close(fig)
+
+
+def dev_plot_sd_FFT_with_rotation(freq_list, Amp_list, day):
+    sample_num, _, _ = param.get_config(day)
+    width_time_list = param.SD_window_width_list
+    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series"
+    os.makedirs(save_dir, exist_ok=True)
+
+    av_freq_list, av_Amp_list = read_csv.get_angle_FFT(day)
+
+    # Stacking save
+    color_list = ["m", "g", "b", "y", "c", "r"]
+    plot_label_list = ["Rotation Data"]
+    for width_time in width_time_list:
+        plot_label_list.append(f"SD {width_time}s")
+
+    fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
+    # Angular Velocisy
+    for j in range(sample_num):
+        row = j // 2
+        col = j % 2
+        axs[row, col].plot(av_freq_list[j], av_Amp_list[j], label="Rotation Data", c="black", alpha=0.8)
+        axs[row, col].grid(True)
+        axs[row, col].set_title(f"Standardized SD Time-series No.{j+1}", fontsize=font_size)
+        axs[row, col].set_xlabel("Freqency [Hz]", fontsize=font_size)
+        axs[row, col].set_ylabel("Amp", fontsize=font_size)
+        axs[row, col].set_yscale("log")
+        axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
+
+    # SD
+    for i, width_time in enumerate(width_time_list):
+        for j in range(sample_num):
+            row = j // 2
+            col = j % 2
+            axs[row, col].plot(freq_list[j][i], Amp_list[j][i], label=f"SD {width_time}s", c=color_list[i], alpha=0.7)
+        axs[-1][-1].legend(plot_label_list, loc="upper left", bbox_to_anchor=(1, 1))
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/SD-time-series_FFT_all_standardized_with_av.png")
     plt.close(fig)
