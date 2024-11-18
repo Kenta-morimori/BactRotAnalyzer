@@ -69,7 +69,8 @@ def standardize_sd_time_series(sd_list, day):
             sd = np.array(sd_list[i][j])
             mean = np.mean(sd)
             std = np.std(sd, axis=0)
-            add_std_sd_list.append((sd - mean) / std)
+            adt_sd = (sd - mean) / std
+            add_std_sd_list.append(adt_sd.tolist())
         std_sd_list.append(add_std_sd_list)
 
     return std_sd_list
@@ -126,7 +127,10 @@ def main(angular_velocity_list, day):
             data_num_mean_list.append(np.mean(data_num_list[i][j]))
         rot_df_manage.update_rot_df(f"{ROTATION_FEATURES.SD_window_data_num_mean}_{width}s", data_num_mean_list, day)
 
-    # plotv
+    # save
+    save2csv.save_sd_time_series(sd_list, day, flag_std=False)
+
+    # plot
     flag_std = False
     make_graph.plot_SD_list(sd_list, day, flag_std)
     # FFT
@@ -135,6 +139,8 @@ def main(angular_velocity_list, day):
     # get standardized sd time-series
     flag_std = True
     std_sd_list = standardize_sd_time_series(sd_list, day)
+    save2csv.save_sd_time_series(std_sd_list, day, flag_std)
+
     make_graph.plot_SD_list(std_sd_list, day, flag_std)
     sd_freq_list, sd_Amp_list = frequency_analysis.fft_sd_list(std_sd_list, day, flag_std)
 
