@@ -1,5 +1,7 @@
 import statistics
 
+from typing import List
+
 import numpy as np
 
 from utils import param
@@ -80,18 +82,16 @@ def evaluate_FFT(sd_freq_list, sd_Amp_list, day):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
 
-    decrease_list, ref_point_list = [], []
+    decrease_list = []
+    ref_point_list: List[List[float]] = [[] for _ in range(sample_num)]
     for i in range(sample_num):
-        reff_bef = []
-        for j in range(len(width_time_list)):
-            reff_bef.append(sd_Amp_list[i][j][0])
-        ref_point = np.mean(reff_bef)
-        ref_point_list.append(ref_point)
-
         add_decrease = []
         for j in range(len(width_time_list)):
-            indices = [k for k, x in enumerate(sd_freq_list[i][j]) if x >= 60]
-            add_decrease.append(ref_point - np.mean([sd_Amp_list[i][j][k] for k in indices]))
+            add_ref_point = np.mean(sd_Amp_list[i][j][0:3])
+            ref_point_list[i].append(add_ref_point)
+
+            indices = [k for k, x in enumerate(sd_freq_list[i][j]) if x >= 80]
+            add_decrease.append(add_ref_point - np.mean([sd_Amp_list[i][j][k] for k in indices]))
         decrease_list.append(add_decrease)
     # plot
     make_graph.plot_SD_FFT_decline(decrease_list, ref_point_list, day)
@@ -101,10 +101,12 @@ def evaluate_FFT(sd_freq_list, sd_Amp_list, day):
     # save rot_df
     for j, width in enumerate(width_time_list):
         decrease_list_rot_df = []
+        ref_point_list_rot_df = []
         for i in range(sample_num):
             decrease_list_rot_df.append(decrease_list[i][j])
+            ref_point_list_rot_df.append(ref_point_list[i][j])
         rot_df_manage.update_rot_df(f"{ROTATION_FEATURES.SD_FFT_Amp_decrease}_{width}s", decrease_list_rot_df, day)
-    rot_df_manage.update_rot_df(ROTATION_FEATURES.SD_FFT_Amp_refpoints, ref_point_list, day)
+        rot_df_manage.update_rot_df(f"{ROTATION_FEATURES.SD_FFT_Amp_refpoints}_{width}s", ref_point_list_rot_df, day)
 
 
 def main(angular_velocity_list, day):

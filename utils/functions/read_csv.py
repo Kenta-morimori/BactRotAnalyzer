@@ -70,7 +70,7 @@ def get_rot_axes(day):
 
 
 def get_SD_FFT_decline(day, ignore_data_no):
-    csv_save_dir = f"{param.save_dir_bef}/{day}/SD_FFT_Amp_decrease.csv"
+    csv_save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/SD_FFT_Amp_decrease.csv"
     width_time_list = param.SD_window_width_list
 
     df = pd.read_csv(csv_save_dir)
@@ -81,6 +81,20 @@ def get_SD_FFT_decline(day, ignore_data_no):
             decrease_list[i].append(float(df[(df["No"] == no) & (df["width"] == width)]["decrease"].values[0]))
 
     return decrease_list
+
+
+def get_SD_FFT_refpoints(day, ignore_data_no):
+    csv_save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/SD_FFT_Amp_refpoints.csv"
+    width_time_list = param.SD_window_width_list
+
+    df = pd.read_csv(csv_save_dir)
+    selected_No = [x for x in df["No"].unique().tolist() if x not in ignore_data_no]
+    ref_point_list: List[List[float]] = [[] for _ in range(len(selected_No))]
+    for i, no in enumerate(selected_No):
+        for width in width_time_list:
+            ref_point_list[i].append(float(df[(df["No"] == no) & (df["width"] == width)]["decrease"].values[0]))
+
+    return ref_point_list
 
 
 def get_angle_FFT(day):

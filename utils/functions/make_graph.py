@@ -86,6 +86,7 @@ def plot_angular_velocity(angle_list, angular_velocity_list, day):
         axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
         axs[row, col].set_ylabel("Angle [rad]", fontsize=font_size)
         axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
+        axs[row, col].set_xlim(0, time_list[i][-1])
     plt.tight_layout()
     plt.savefig(f"{save_dir}/angle_time-series.png")
     plt.close(fig)
@@ -100,6 +101,7 @@ def plot_angular_velocity(angle_list, angular_velocity_list, day):
         axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
         axs[row, col].set_ylabel("Angular Velocity [rad/s]", fontsize=font_size)
         axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
+        axs[row, col].set_xlim(0, time_list[i][-1])
     plt.tight_layout()
     plt.savefig(f"{save_dir}/angular-velocity_time-series.png")
     plt.close(fig)
@@ -114,6 +116,7 @@ def plot_angular_velocity(angle_list, angular_velocity_list, day):
         axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
         axs[row, col].set_ylabel("Angular Velocity (abs) [rad/s]", fontsize=font_size)
         axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
+        axs[row, col].set_xlim(0, time_list[i][len(angular_velocity_list[i])])
     plt.tight_layout()
     plt.savefig(f"{save_dir}/angular-velocity_time-series_abs.png")
     plt.close(fig)
@@ -213,6 +216,7 @@ def plot_averaged_angular_velocity(angular_velocity_list, day):
         axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
         axs[row, col].set_ylabel("Anglular Velocity [rad/s]", fontsize=font_size)
         axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
+        axs[row, col].set_xlim(0, time_list[i][len(angular_velocity_list[i])])
     plt.tight_layout()
     plt.savefig(f"{save_dir}/angular-velocity_time-series_averaged.png")
     plt.close(fig)
@@ -272,6 +276,7 @@ def plot_SD_list(SD_list, day, flag_std):
                 axs[row, col].set_ylabel("SD", fontsize=font_size)
             axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
             axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
+            axs[row, col].set_xlim(0, time_list[j][len(SD_list[j][i])])
         plt.tight_layout()
         if flag_std:
             plt.savefig(f"{save_dir}/SD-time-series_{width_time}s_standardized.png")
@@ -304,6 +309,7 @@ def plot_SD_list(SD_list, day, flag_std):
                 axs[row, col].set_ylabel("SD", fontsize=font_size)
             axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
             axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
+            axs[row, col].set_xlim(0, time_list[j][len(SD_list[j][i])])
     axs[-1][-1].legend(plot_label_list, loc="upper left", bbox_to_anchor=(1, 1))
     plt.tight_layout()
     if flag_std:
@@ -401,7 +407,7 @@ def plot_SD_FFT_decline(decrease_list, ref_point_list, day):
     plt.close(fig)
 
 
-def plot_compare_SD_FFT_decline(decrease_list1, decrease_list2, day1, day2):
+def plot_compare_SD_FFT_decline(decrease_list1, decrease_list2, ref_point_list1, ref_point_list2, day1, day2):
     width_time_list = param.SD_window_width_list
     save_dir = f"{param.save_dir_bef}/compare_SD_FFT_decline/{day1}-{day2}/"
     os.makedirs(save_dir, exist_ok=True)
@@ -411,24 +417,34 @@ def plot_compare_SD_FFT_decline(decrease_list1, decrease_list2, day1, day2):
     for i in range(2):
         if i == 0:
             decrease_list = decrease_list1
+            ref_point_list = ref_point_list1
             c = "#1f77b4"
         else:
             decrease_list = decrease_list2
+            ref_point_list = ref_point_list2
             c = "#ff7f0e"
         # 色分けしてplot
         for j in range(len(decrease_list)):
             axes[0].plot(width_time_list, decrease_list[j], "-o", color=c, alpha=0.7)
 
         # 平均値・標準偏差plot
+        mean_arr = np.mean(ref_point_list, axis=0)
+        std_arr = np.std(ref_point_list, axis=0)
+        axes[1].errorbar(width_time_list, mean_arr, std_arr, fmt="o", label=label_list[i], alpha=0.7)
+
+        """
+        # decrease_listの平均/標準偏差
         mean_arr = np.mean(decrease_list, axis=0)
         std_arr = np.std(decrease_list, axis=0)
         # axes[1].errorbar(width_time_list, mean_arr, std_arr)
         axes[1].errorbar(width_time_list, mean_arr, std_arr, fmt="o", label=label_list[i], alpha=0.7)
-
-    for i in range(10):
-        axes[i].set_xlabel("Window Width [s]", fontsize=font_size)
-        axes[i].set_ylabel("Amp Decrease Ratio", fontsize=font_size)
-        axes[i].tick_params(axis="both", which="major", labelsize=font_size)
+        """
+    axes[0].set_xlabel("Window Width [s]", fontsize=font_size)
+    axes[0].set_ylabel("Amp Decrease", fontsize=font_size)
+    axes[0].tick_params(axis="both", which="major", labelsize=font_size)
+    axes[1].set_xlabel("Window Width [s]", fontsize=font_size)
+    axes[1].set_ylabel("Amp near 0 Hz", fontsize=font_size)
+    axes[1].tick_params(axis="both", which="major", labelsize=font_size)
     axes[1].legend(label_list, loc="upper left", bbox_to_anchor=(1, 1))
 
     plt.tight_layout()

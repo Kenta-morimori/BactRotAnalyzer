@@ -159,10 +159,13 @@ def save_SD_FFT_decline(decrease_list, day):
 
 def save_SD_FFT_refpoints(ref_point_list, day):
     sample_num, _, _ = param.get_config(day)
+    width_time_list = param.SD_window_width_list
     csv_save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/SD_FFT_Amp_refpoints.csv"
 
-    with open(csv_save_dir, "w", newline="") as csvfile:
-        csvwriter = csv.writer(csvfile)
-        headers = [f"No.{i+1}" for i in range(sample_num)]
-        csvwriter.writerow(headers)
-        csvwriter.writerow(ref_point_list)
+    data = {
+        "No": [i + 1 for i in range(sample_num) for _ in width_time_list],
+        "width": width_time_list * sample_num,
+        "decrease": [ref_point_list[i][j] for i in range(sample_num) for j in range(len(width_time_list))],
+    }
+    df = pd.DataFrame(data)
+    df.to_csv(csv_save_dir, index=False)

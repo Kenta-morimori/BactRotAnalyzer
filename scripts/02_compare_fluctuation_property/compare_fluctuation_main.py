@@ -9,8 +9,10 @@ from utils.functions import make_graph, read_csv  # noqa
 def compare_SD_FFT(day1, day2, ignore_data_day1, ignore_data_day2):
     decrease_list1 = read_csv.get_SD_FFT_decline(day1, ignore_data_day1)
     decrease_list2 = read_csv.get_SD_FFT_decline(day2, ignore_data_day2)
+    ref_point_list1 = read_csv.get_SD_FFT_refpoints(day1, ignore_data_day1)
+    ref_point_list2 = read_csv.get_SD_FFT_refpoints(day2, ignore_data_day2)
     # plot
-    make_graph.plot_compare_SD_FFT_decline(decrease_list1, decrease_list2, day1, day2)
+    make_graph.plot_compare_SD_FFT_decline(decrease_list1, decrease_list2, ref_point_list1, ref_point_list2, day1, day2)
 
 
 if __name__ == "__main__":

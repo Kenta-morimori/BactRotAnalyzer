@@ -21,6 +21,7 @@ class ROTATION_FEATURES:
 SD_WIDTH_DEPEND_COLS: Final[List[str]] = [
     ROTATION_FEATURES.SD_FFT_Amp_decrease,
     ROTATION_FEATURES.SD_window_data_num_mean,
+    ROTATION_FEATURES.SD_FFT_Amp_refpoints,
 ]
 
 
