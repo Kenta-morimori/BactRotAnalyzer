@@ -1,7 +1,5 @@
-import os
 from typing import List
 
-import numpy as np
 import pandas as pd
 
 from utils import param
@@ -27,16 +25,12 @@ def read_angle(day):
     return angle_list
 
 
-def read_time_list(day):
+def get_timelist(day):
     csv_save_dir = f"{param.save_dir_bef}/{day}/time_list.csv"
 
     df = pd.read_csv(csv_save_dir)
     time_list = df.values.T.tolist()
-
-    return time_list
-
-
-def get_timelist(day):
+    """
     csv_save_dir = f"{param.save_dir_bef}/{day}/time_list.csv"
     if os.path.isfile(csv_save_dir):
         time_list = read_time_list(day)
@@ -46,6 +40,8 @@ def get_timelist(day):
             np.linspace(0, total_time_list[i], int(total_time_list[i] * FrameRate_list[i])).tolist()
             for i in range(sample_num)
         ]
+    return time_list
+    """
 
     return time_list
 
