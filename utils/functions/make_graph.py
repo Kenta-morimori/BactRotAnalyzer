@@ -635,7 +635,7 @@ def dev_plot_sd_FFT_with_rotation(freq_list, Amp_list, day):
     plot_label_list = ["Rotation Data"]
     for width_time in width_time_list:
         plot_label_list.append(f"SD {width_time}s")
-    
+
     max_x_lim_list = []
     for i in range(sample_num):
         max_x_lim_list.append(max([freq_list[i][j][-1] for j in range(len(width_time_list))]))
