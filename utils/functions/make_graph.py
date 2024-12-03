@@ -83,10 +83,10 @@ def plot_angular_velocity(angle_list, angular_velocity_list, day):
         axs[row, col].plot(time_list[i], angle_list[i])
         axs[row, col].grid(True)
         axs[row, col].set_title(f"Angle Time-series No.{i+1}", fontsize=font_size)
+        axs[row, col].set_xlim(0, time_list[i][-1])
         axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
         axs[row, col].set_ylabel("Angle [rad]", fontsize=font_size)
         axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
-        axs[row, col].set_xlim(0, time_list[i][-1])
     plt.tight_layout()
     plt.savefig(f"{save_dir}/angle_time-series.png")
     plt.close(fig)
@@ -98,10 +98,10 @@ def plot_angular_velocity(angle_list, angular_velocity_list, day):
         axs[row, col].plot(time_list[i][: len(angular_velocity_list[i])], angular_velocity_list[i])
         axs[row, col].grid(True)
         axs[row, col].set_title(f"Anglar Velocity Time-series No.{i+1}", fontsize=font_size)
+        axs[row, col].set_xlim(0, time_list[i][-1])
         axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
         axs[row, col].set_ylabel("Angular Velocity [rad/s]", fontsize=font_size)
         axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
-        axs[row, col].set_xlim(0, time_list[i][-1])
     plt.tight_layout()
     plt.savefig(f"{save_dir}/angular-velocity_time-series.png")
     plt.close(fig)
@@ -141,6 +141,7 @@ def plot_av_colleration(angular_velocity_list, day):
         # Time series plot (left plot)
         ax_ts = axs[2 * i]
         ax_ts.plot(time_list[i][: len(angular_velocity_list[i])], angular_velocity_list[i])
+        ax_ts.set_xlim(0, time_list[i][len(angular_velocity_list[i])])
 
         if mode_correct_av_outlier == 0:  # use SD threshold
             num_std_dev = param.num_std_dev
@@ -190,6 +191,7 @@ def plot_angular_velocity_rot_part(angular_velocity_list, th_list, th_list_means
         axs[row, col].axhline(th_list_means[i], linestyle="--", alpha=0.9, c="#2ca02c", label="mean k-means")
         axs[row, col].axhline(th_list_median[i], linestyle="--", alpha=0.9, c="#d62728", label="median k-means")
         axs[row, col].grid(True)
+        axs[row, col].set_xlim(0, time_list[i][len(angular_velocity_list[i])])
         axs[row, col].set_title(f"Anglar Velocity Time-series No.{i+1}", fontsize=font_size)
         axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
         axs[row, col].set_ylabel("Angular Velocity [rad/s]", fontsize=font_size)
@@ -212,6 +214,7 @@ def plot_averaged_angular_velocity(angular_velocity_list, day):
         col = i % 2
         axs[row, col].plot(time_list[i][: len(angular_velocity_list[i])], angular_velocity_list[i])
         axs[row, col].grid(True)
+        axs[row, col].set_xlim(0, time_list[i][len(angular_velocity_list[i])])
         axs[row, col].set_title(f"Anglar Velocity Time-series No.{i+1}", fontsize=font_size)
         axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
         axs[row, col].set_ylabel("Anglular Velocity [rad/s]", fontsize=font_size)
@@ -238,6 +241,7 @@ def plot_fft(freq_list, Amp_list, save_dir, save_name, day, flag_add_peak=False)
             axs[row, col].axvline(x=freq_at_max_amp, color="r", alpha=0.6)
             peak_list.append(freq_at_max_amp)
         axs[row, col].grid(True)
+        axs[row, col].set_xlim(0, freq_list[i][-1])
         axs[row, col].set_title(f"No.{i+1}", fontsize=font_size)
         axs[row, col].set_xlabel("Freqency [Hz]", fontsize=font_size)
         axs[row, col].set_ylabel("Amp", fontsize=font_size)
@@ -325,6 +329,10 @@ def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
     save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series"
     os.makedirs(save_dir, exist_ok=True)
 
+    max_x_lim_list = []
+    for i in range(sample_num):
+        max_x_lim_list.append(max([freq_list[i][j][-1] for j in range(len(width_time_list))]))
+
     # sepalate save
     for i, width_time in enumerate(width_time_list):
         fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
@@ -337,6 +345,7 @@ def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
                 axs[row, col].set_title(f"Standardized SD time-series No.{j+1}", fontsize=font_size)
             else:
                 axs[row, col].set_title(f"SD Time-series No.{j+1}", fontsize=font_size)
+            axs[row, col].set_xlim(0, max_x_lim_list[j])
             axs[row, col].set_xlabel("Freqency [Hz]", fontsize=font_size)
             axs[row, col].set_ylabel("Amp", fontsize=font_size)
             # axs[row, col].set_xscale("log")
@@ -366,6 +375,7 @@ def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
                 axs[row, col].set_title(f"Standardized SD Time-series No.{j+1}", fontsize=font_size)
             else:
                 axs[row, col].set_title(f"SD Time-series No.{j+1}", fontsize=font_size)
+            axs[row, col].set_xlim(0, freq_list[j][i][-1])
             axs[row, col].set_xlabel("Freqency [Hz]", fontsize=font_size)
             axs[row, col].set_ylabel("Amp", fontsize=font_size)
             # axs[row, col].set_xscale("log")
@@ -625,6 +635,10 @@ def dev_plot_sd_FFT_with_rotation(freq_list, Amp_list, day):
     plot_label_list = ["Rotation Data"]
     for width_time in width_time_list:
         plot_label_list.append(f"SD {width_time}s")
+    
+    max_x_lim_list = []
+    for i in range(sample_num):
+        max_x_lim_list.append(max([freq_list[i][j][-1] for j in range(len(width_time_list))]))
 
     fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
     # Angular Velocisy
@@ -634,6 +648,7 @@ def dev_plot_sd_FFT_with_rotation(freq_list, Amp_list, day):
         axs[row, col].plot(av_freq_list[j], av_Amp_list[j], label="Rotation Data", c="black", alpha=0.8)
         axs[row, col].grid(True)
         axs[row, col].set_title(f"Standardized SD Time-series No.{j+1}", fontsize=font_size)
+        axs[row, col].set_xlim(0, max_x_lim_list[j])
         axs[row, col].set_xlabel("Freqency [Hz]", fontsize=font_size)
         axs[row, col].set_ylabel("Amp", fontsize=font_size)
         axs[row, col].set_yscale("log")
