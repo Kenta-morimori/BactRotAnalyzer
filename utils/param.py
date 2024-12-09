@@ -78,7 +78,9 @@ def get_tiffinfo_config(day):
 
 # rotational analysis
 ## Determine the angle by the direction of the cell.
-flag_get_angle_with_cell_direcetion = True
+# flag_get_angle_with_cell_direcetion = True
+flag_get_angle_with_cell_direcetion = False  # beads assay
+
 flag_evaluating_switching = True  # evaluate switching of rotation
 
 ## About Angular Velocity
@@ -99,6 +101,8 @@ mode_av_completion = 0
 1: Mean Value
 2: Normal Random Number Completion
 """
+
+flag_kmean = False
 
 
 # fluctuation analysis

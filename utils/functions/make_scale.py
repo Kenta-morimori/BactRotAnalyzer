@@ -45,9 +45,9 @@ def get_data_stat(data_bef_list, day, stat_type="mean"):
                     data.append(data_bef_list[i][j])
             if len(data) > 2:
                 if stat_type == "mean":
-                    add_data.append(np.mean(data))
+                    add_data.append(np.nanmean(data))
                 elif stat_type == "median":
-                    add_data.append(np.median(data))
+                    add_data.append(np.nanmedian(data))
             start_time += 1 / FrameRate_list[i]
             # width_timeの幅でSDが算出できない場合break
             if start_time + width_time >= total_time_list[i]:

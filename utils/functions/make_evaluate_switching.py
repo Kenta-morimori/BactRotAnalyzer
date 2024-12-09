@@ -84,19 +84,23 @@ def k_means_av(av_list, day):
 
 
 def get_angular_velocity_rot_part(angular_velocity_list, day):
-    th_list, mean_list, sd_list = k_means_av(angular_velocity_list, day)
-    # save
-    rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_angular_velosity_th, th_list, day)
-    rot_df_manage.update_rot_df(ROTATION_FEATURES.angular_velosity_mean_rot_part, mean_list, day)
-    rot_df_manage.update_rot_df(ROTATION_FEATURES.angular_velosity_sd_rot_part, sd_list, day)
+    flag_kmean = param.flag_kmean
+
+    if flag_kmean:
+        th_list, mean_list, sd_list = k_means_av(angular_velocity_list, day)
+        # save
+        rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_angular_velosity_th, th_list, day)
+        rot_df_manage.update_rot_df(ROTATION_FEATURES.angular_velosity_mean_rot_part, mean_list, day)
+        rot_df_manage.update_rot_df(ROTATION_FEATURES.angular_velosity_sd_rot_part, sd_list, day)
 
     # dev
     angular_velocity_means = make_scale.get_data_stat(angular_velocity_list, day, stat_type="mean")
     angular_velocity_medians = make_scale.get_data_stat(angular_velocity_list, day, stat_type="median")
     make_graph.dev_plot_av_with_stats(angular_velocity_list, angular_velocity_means, angular_velocity_medians, day)
-    # angular_velocity_means, angular_velocity_medians で再度K-means (関数化して利用)
-    th_list_means, _, _ = k_means_av(angular_velocity_means, day)
-    th_list_median, _, _ = k_means_av(angular_velocity_medians, day)
 
-    # plot
-    make_graph.plot_angular_velocity_rot_part(angular_velocity_list, th_list, th_list_means, th_list_median, day)
+    if flag_kmean:
+        # angular_velocity_means, angular_velocity_medians で再度K-means (関数化して利用)
+        th_list_means, _, _ = k_means_av(angular_velocity_means, day)
+        th_list_median, _, _ = k_means_av(angular_velocity_medians, day)
+        # plot
+        make_graph.plot_angular_velocity_rot_part(angular_velocity_list, th_list, th_list_means, th_list_median, day)
