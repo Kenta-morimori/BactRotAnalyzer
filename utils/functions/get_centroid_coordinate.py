@@ -109,12 +109,12 @@ def get_ellipse_info(X, Y, index):
         + ((D * eig_vec[0][1] + E * eig_vec[1][1]) ** 2) / (4 * eig_val[1])
     )
     if alfa / eig_val[0] < 0:
-        print(f"[Warning] No.{index}   alfa / eig_val[0] is negative value")
+        print(f"[Warning] No.{index + 1}   alfa / eig_val[0] is negative value")
         long_axis = math.sqrt(abs(alfa / eig_val[0]))
     else:
         long_axis = math.sqrt(alfa / eig_val[0])
     if alfa / eig_val[1] < 0:
-        print(f"[Warning] No.{index}   alfa / eig_val[1] is negative value")
+        print(f"[Warning] No.{index + 1}   alfa / eig_val[1] is negative value")
         short_axis = math.sqrt(abs(alfa / eig_val[1]))
     else:
         short_axis = math.sqrt(alfa / eig_val[1])
