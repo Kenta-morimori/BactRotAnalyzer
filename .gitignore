@@ -10,6 +10,10 @@ outputs/*
 scripts/dev_*
 utils/functions/dev_*
 
+venv/
+utils/__pycache__
+utils/functions/__pycache__
+
 # mypy
 .mypy_cache/
 .dmypy.json
