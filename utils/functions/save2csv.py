@@ -55,6 +55,26 @@ def save_angle_angular_velocity(angle_list, angular_velocity_list, day):
             csvwriter.writerow(row)
 
 
+def save_sd_time_series(sd_list, day, flag_std=False):
+    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series"
+    os.makedirs(save_dir, exist_ok=True)
+    if flag_std:
+        csv_save_dir = f"{save_dir}/SD-time-series_std.csv"
+    else:
+        csv_save_dir = f"{save_dir}/SD-time-series.csv"
+
+    width_list = param.SD_window_width_list
+    data = {}
+    for i in range(len(sd_list)):
+        for j, width in enumerate(width_list):
+            key = f"No.{i+1}_{width}s"
+            data[key] = sd_list[i][j]
+
+    max_len = max(len(v) for v in data.values())
+    df = pd.DataFrame({k: v + [None] * (max_len - len(v)) for k, v in data.items()})
+    df.to_csv(csv_save_dir, index=False)
+
+
 def save_switching_value(switching_value_list, day, flag_averaged=False):
     if flag_averaged:
         csv_save_dir = f"{param.save_dir_bef}/{day}/switching_value_averagedAV.csv"
@@ -71,14 +91,18 @@ def save_switching_value(switching_value_list, day, flag_averaged=False):
 
 def save_fft(save_dir, save_name, freq_list, Amp_list):
     csv_save_dir = f"{save_dir}/{save_name}.csv"
-    headers = [f"No.{i+1}_freq" for i in range(len(freq_list))] + [f"No.{i+1}_Amp" for i in range(len(freq_list))]
 
+    headers = []
+    for i in range(len(freq_list)):
+        headers.append(f"No.{i + 1}_freq")
+        headers.append(f"No.{i + 1}_Amp")
     rows = []
     for index in range(max(map(len, freq_list))):
         row = []
         for freq, amp in zip(freq_list, Amp_list):
             if index < len(freq):
-                row.extend([freq[index], amp[index]])
+                row.append(freq[index])
+                row.append(amp[index])
             else:
                 row.extend([None, None])
         rows.append(row)
@@ -135,10 +159,13 @@ def save_SD_FFT_decline(decrease_list, day):
 
 def save_SD_FFT_refpoints(ref_point_list, day):
     sample_num, _, _ = param.get_config(day)
+    width_time_list = param.SD_window_width_list
     csv_save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/SD_FFT_Amp_refpoints.csv"
 
-    with open(csv_save_dir, "w", newline="") as csvfile:
-        csvwriter = csv.writer(csvfile)
-        headers = [f"No.{i+1}" for i in range(sample_num)]
-        csvwriter.writerow(headers)
-        csvwriter.writerow(ref_point_list)
+    data = {
+        "No": [i + 1 for i in range(sample_num) for _ in width_time_list],
+        "width": width_time_list * sample_num,
+        "decrease": [ref_point_list[i][j] for i in range(sample_num) for j in range(len(width_time_list))],
+    }
+    df = pd.DataFrame(data)
+    df.to_csv(csv_save_dir, index=False)

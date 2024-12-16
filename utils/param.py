@@ -9,12 +9,22 @@ input_dir_bef = f"{curr_dir}/data"
 save_dir_bef = f"{curr_dir}/outputs"
 
 
-def get_config(day):
+def get_flag_use_tiff_log(day):
     config_dir = f"{input_dir_bef}/{day}/config.ini"
     config = configparser.ConfigParser()
     config.read(config_dir)
 
     flag_use_tiff_log = config.getboolean("Settings", "flag_use_tiff_log")
+
+    return flag_use_tiff_log
+
+
+def get_config(day):
+    config_dir = f"{input_dir_bef}/{day}/config.ini"
+    config = configparser.ConfigParser()
+    config.read(config_dir)
+
+    flag_use_tiff_log = get_flag_use_tiff_log(day)
     sample_num = config.getint("Settings", "sample_num")
     # Frame Rate, Total Time
     FrameRate_list = []
@@ -68,19 +78,37 @@ def get_tiffinfo_config(day):
 
 # rotational analysis
 ## Determine the angle by the direction of the cell.
-flag_get_angle_with_cell_direcetion = True
-
-## About Angular Velocity
-flag_correct_av_outlier = True  # Trimming with thresholds
-num_std_dev = 5
-
-flag_evaluate_angular_velocity_abs = False  # Evaluate absolute values of angular velocity.
+# flag_get_angle_with_cell_direcetion = True
+flag_get_angle_with_cell_direcetion = False  # beads assay
 
 flag_evaluating_switching = True  # evaluate switching of rotation
+
+## About Angular Velocity
+flag_evaluate_angular_velocity_abs = False  # Evaluate absolute values of angular velocity
+
+flag_correct_av_outlier = True  # Trimming with thresholds
+mode_correct_av_outlier = 1
+"""
+0: use SD threshold
+1: use TIFF time info
+"""
+num_std_dev = 8
+
+flag_av_completion = True  # Complement data
+mode_av_completion = 0
+"""
+0: Nan
+1: Mean Value
+2: Normal Random Number Completion
+"""
+
+flag_kmean = False
+
 
 # fluctuation analysis
 SD_window_width_list = [0.1, 0.5, 1.0]
 # SD_window_width_list = [0.1, 0.2, 0.5, 1.0, 1.5, 2.0]
+
 
 # evaluate SD FFT low Amp and decline
 flag_evaluate_SD_FFT = True

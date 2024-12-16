@@ -18,6 +18,7 @@ def main(day):
 
     # make time list
     get_tiff_info.get_timelist(day)
+
     # obtain centroid coordinates
     x_list, y_list = input_data.input_centroid_coordinate(day)
     # obtain angle, angular velocity
@@ -39,7 +40,7 @@ def main(day):
     fluctuation_analysis.main(angular_velocity_list, day)
 
     # Comparison of SD_FFT_Amp_refpoints with other rot_df parameters
-    make_graph.plot_Amp_dec_rot_param(day)
+    make_graph.plot_rot_param(day)
 
 
 if __name__ == "__main__":

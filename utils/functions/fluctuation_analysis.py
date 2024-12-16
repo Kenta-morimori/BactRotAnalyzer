@@ -1,4 +1,5 @@
 import statistics
+from typing import List
 
 import numpy as np
 
@@ -30,7 +31,8 @@ def get_sd_time_series(i, angular_velocity, day):
             # start_time ~ start_time + width_time のデータ
             for j in range(len(time_list[i])):
                 if (time_list[i][j] >= start_time) and (time_list[i][j] < start_time + width_time):
-                    data.append(angular_velocity[j])
+                    # 揺らぎの評価の際は絶対値の角速度を使用
+                    data.append(abs(angular_velocity[j]))
             if len(data) > 2:  # SDの算出は最低3データ必要
                 add_sd.append(statistics.stdev(data))
                 add_data_num.append(len(data))
@@ -68,7 +70,8 @@ def standardize_sd_time_series(sd_list, day):
             sd = np.array(sd_list[i][j])
             mean = np.mean(sd)
             std = np.std(sd, axis=0)
-            add_std_sd_list.append((sd - mean) / std)
+            adt_sd = (sd - mean) / std
+            add_std_sd_list.append(adt_sd.tolist())
         std_sd_list.append(add_std_sd_list)
 
     return std_sd_list
@@ -78,18 +81,16 @@ def evaluate_FFT(sd_freq_list, sd_Amp_list, day):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
 
-    decrease_list, ref_point_list = [], []
+    decrease_list = []
+    ref_point_list: List[List[float]] = [[] for _ in range(sample_num)]
     for i in range(sample_num):
-        reff_bef = []
-        for j in range(len(width_time_list)):
-            reff_bef.append(sd_Amp_list[i][j][0])
-        ref_point = np.mean(reff_bef)
-        ref_point_list.append(ref_point)
-
         add_decrease = []
         for j in range(len(width_time_list)):
-            indices = [k for k, x in enumerate(sd_freq_list[i][j]) if x >= 60]
-            add_decrease.append(ref_point - np.mean([sd_Amp_list[i][j][k] for k in indices]))
+            add_ref_point = np.mean(sd_Amp_list[i][j][0:3])
+            ref_point_list[i].append(add_ref_point)
+
+            indices = [k for k, x in enumerate(sd_freq_list[i][j]) if x >= 80]
+            add_decrease.append(add_ref_point - np.mean([sd_Amp_list[i][j][k] for k in indices]))
         decrease_list.append(add_decrease)
     # plot
     make_graph.plot_SD_FFT_decline(decrease_list, ref_point_list, day)
@@ -99,10 +100,12 @@ def evaluate_FFT(sd_freq_list, sd_Amp_list, day):
     # save rot_df
     for j, width in enumerate(width_time_list):
         decrease_list_rot_df = []
+        ref_point_list_rot_df = []
         for i in range(sample_num):
             decrease_list_rot_df.append(decrease_list[i][j])
+            ref_point_list_rot_df.append(ref_point_list[i][j])
         rot_df_manage.update_rot_df(f"{ROTATION_FEATURES.SD_FFT_Amp_decrease}_{width}s", decrease_list_rot_df, day)
-    rot_df_manage.update_rot_df(ROTATION_FEATURES.SD_FFT_Amp_refpoints, ref_point_list, day)
+        rot_df_manage.update_rot_df(f"{ROTATION_FEATURES.SD_FFT_Amp_refpoints}_{width}s", ref_point_list_rot_df, day)
 
 
 def main(angular_velocity_list, day):
@@ -125,7 +128,10 @@ def main(angular_velocity_list, day):
             data_num_mean_list.append(np.mean(data_num_list[i][j]))
         rot_df_manage.update_rot_df(f"{ROTATION_FEATURES.SD_window_data_num_mean}_{width}s", data_num_mean_list, day)
 
-    # plotv
+    # save
+    save2csv.save_sd_time_series(sd_list, day, flag_std=False)
+
+    # plot
     flag_std = False
     make_graph.plot_SD_list(sd_list, day, flag_std)
     # FFT
@@ -134,6 +140,8 @@ def main(angular_velocity_list, day):
     # get standardized sd time-series
     flag_std = True
     std_sd_list = standardize_sd_time_series(sd_list, day)
+    save2csv.save_sd_time_series(std_sd_list, day, flag_std)
+
     make_graph.plot_SD_list(std_sd_list, day, flag_std)
     sd_freq_list, sd_Amp_list = frequency_analysis.fft_sd_list(std_sd_list, day, flag_std)
 
