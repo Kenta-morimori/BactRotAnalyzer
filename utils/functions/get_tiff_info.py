@@ -45,7 +45,9 @@ def get_timelist(day):
             time_list_all.append(time_list)
     else:
         sample_num, FrameRate_list, total_time_list = param.get_config(day)
-        time_list_all = [[round(i, 6) for i in np.arange(0, total_time_list[i], 1 / FrameRate_list[i])]for i in range(sample_num)]
+        time_list_all = [
+            [round(i, 6) for i in np.arange(0, total_time_list[i], 1 / FrameRate_list[i])] for i in range(sample_num)
+        ]
     save2csv.save_time_list(time_list_all, day)
 
 
