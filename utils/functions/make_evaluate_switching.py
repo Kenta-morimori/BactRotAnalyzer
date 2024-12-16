@@ -56,7 +56,8 @@ def evaluate_switching_averaged(angular_velocity_list_bef, day):
 def k_means_av(av_list, day):
     sample_num, _, _ = param.get_config(day)
 
-    th_list, mean_list, sd_list = [], [], []
+    th_list = []
+    # mean_list, sd_list = [], []
     for i in range(sample_num):
         data = av_list[i]
         if isinstance(data, list):
@@ -75,23 +76,25 @@ def k_means_av(av_list, day):
         threshold = (centers[0] + centers[1]) / 2
         th_list.append(threshold)
 
+        """
         if threshold is not None:
             mean_list.append(np.nanmean(data[data > threshold]))
             sd_list.append(np.nanstd(data[data > threshold]))
         else:
             mean_list.append(None)
-    return th_list, mean_list, sd_list
+        """
+    return th_list
 
 
 def get_angular_velocity_rot_part(angular_velocity_list, day):
     flag_kmean = param.flag_kmean
 
     if flag_kmean:
-        th_list, mean_list, sd_list = k_means_av(angular_velocity_list, day)
+        th_list = k_means_av(angular_velocity_list, day)
         # save
         rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_angular_velosity_th, th_list, day)
-        rot_df_manage.update_rot_df(ROTATION_FEATURES.angular_velosity_mean_rot_part, mean_list, day)
-        rot_df_manage.update_rot_df(ROTATION_FEATURES.angular_velosity_sd_rot_part, sd_list, day)
+        # rot_df_manage.update_rot_df(ROTATION_FEATURES.angular_velosity_mean_rot_part, mean_list, day)
+        # rot_df_manage.update_rot_df(ROTATION_FEATURES.angular_velosity_sd_rot_part, sd_list, day)
 
     # dev
     angular_velocity_means = make_scale.get_data_stat(angular_velocity_list, day, stat_type="mean")
