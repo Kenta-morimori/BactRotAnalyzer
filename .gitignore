@@ -1,4 +1,5 @@
 .vscode/
+.DS_Store
 data/*
 !data/README.md
 !data/test_data
