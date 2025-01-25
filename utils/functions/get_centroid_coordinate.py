@@ -3,17 +3,20 @@ import glob
 import math
 import os
 import re
+
+# import statistics
 import sys
 from typing import List
 
 import cv2
 import numpy as np
+import pandas as pd
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
 from utils import param
 from utils.features import ROTATION_FEATURES
-from utils.functions import rot_df_manage, save2csv
+from utils.functions import frequency_analysis, make_graph, read_csv, rot_df_manage
 
 
 def contours(img):
@@ -48,6 +51,34 @@ def save_centorid_cordinate(save_dir, x_list, y_list):
             csvwriter.writerow(row)
 
 
+def save_center_of_rotation(save_dir, center_x_list, center_y_list):
+    sample_num, _, _ = param.get_config(day)
+    save_dir = f"{param.save_dir_bef}/{day}/center_coordinate/"
+    csv_save_dir = f"{save_dir}/center_coordinate.csv"
+    os.makedirs(save_dir, exist_ok=True)
+
+    data = {}
+    for i in range(sample_num):
+        data[f"No.{i+1}_x"] = center_x_list[i]
+        data[f"No.{i+1}_y"] = center_y_list[i]
+    df = pd.DataFrame(data)
+    df.to_csv(csv_save_dir, index=False)
+
+
+def save_rot_axes(long_axis_list, short_axis_list, day):
+    sample_num, _, _ = param.get_config(day)
+    save_dir = f"{param.save_dir_bef}/{day}/centroid_coordinate/"
+    csv_save_dir = f"{save_dir}/rotation_axes.csv"
+    os.makedirs(save_dir, exist_ok=True)
+
+    data = {}
+    for i in range(sample_num):
+        data[f"No.{i+1}_long_axis"] = long_axis_list[i]
+        data[f"No.{i+1}_short_axis"] = short_axis_list[i]
+    df = pd.DataFrame(data)
+    df.to_csv(csv_save_dir, index=False)
+
+
 def adjust_angle(angle_list_bef):
     angle_list_aft = [angle_list_bef[0] + 90]
     for j in range(len(angle_list_bef) - 1):
@@ -79,15 +110,12 @@ def save_angle(save_dir, angle_list):
             csvwriter.writerow(row)
 
 
-def get_ellipse_info(X, Y, index):
-    size = len(X)
-    X = X.reshape([size, 1])
-    Y = Y.reshape([size, 1])
-
+def calculate_ellipse_properties(X, Y, index):
     A = np.hstack([X**2, X * Y, Y**2, X, Y])
     b = np.ones_like(X)
     x_arr = np.linalg.lstsq(A, b, rcond=None)[0].squeeze()
     x = x_arr.tolist()
+    flag_Warning = False
 
     # Get information on ellipses using quadratic form
     A, B, C, D, E = x[0], x[1], x[2], x[3], x[4]
@@ -109,62 +137,83 @@ def get_ellipse_info(X, Y, index):
         + ((D * eig_vec[0][1] + E * eig_vec[1][1]) ** 2) / (4 * eig_val[1])
     )
     if alfa / eig_val[0] < 0:
-        print(f"[Warning] No.{index + 1}   alfa / eig_val[0] is negative value")
+        # print(f"[Warning] No.{index + 1}   alfa / eig_val[0] is negative value")
+        flag_Warning = True
         long_axis = math.sqrt(abs(alfa / eig_val[0]))
     else:
         long_axis = math.sqrt(alfa / eig_val[0])
     if alfa / eig_val[1] < 0:
-        print(f"[Warning] No.{index + 1}   alfa / eig_val[1] is negative value")
+        # print(f"[Warning] No.{index + 1}   alfa / eig_val[1] is negative value")
+        flag_Warning = True
         short_axis = math.sqrt(abs(alfa / eig_val[1]))
     else:
         short_axis = math.sqrt(alfa / eig_val[1])
 
-    return center_x, center_y, long_axis, short_axis
+    return center_x, center_y, long_axis, short_axis, flag_Warning
 
 
-def scale_center_zero(coordinates_bef, center):
-    coordinates_aft = []
-    for i in range(len(coordinates_bef)):
-        coordinates_aft.append(coordinates_bef[i] - center[i])
+def get_ellipse_info(X, Y, index, day):
+    _, FrameRate, total_time = param.get_config(day)
+    center_x_list, center_y_list = [], []
+    long_axis_list, short_axis_list = [], []
 
-    return coordinates_aft
+    if param.flag_get_angle_with_cell_direcetion:
+        size = len(X)
+        X = X.reshape([size, 1])
+        Y = Y.reshape([size, 1])
+        center_x, center_y, long_axis, short_axis, _ = calculate_ellipse_properties(X, Y, index)
+        center_x_list = [center_x] * size
+        center_y_list = [center_y] * size
+        long_axis_list = [long_axis] * size
+        short_axis_list = [short_axis] * size
+    else:
+        time_list = read_csv.get_timelist(day)
+        time_arr = np.array(time_list[index])
 
+        # Determine the time window for obtaining the contour based on the FFT of the x_list
+        x_freq_list, x_Amp_list = frequency_analysis.fft(X, 1 / FrameRate[index])
+        y_freq_list, y_Amp_list = frequency_analysis.fft(Y, 1 / FrameRate[index])
+        freq_th = 5  # Hz
+        x_mask, y_mask = x_freq_list > freq_th, y_freq_list > freq_th
+        x_freq_list, x_Amp_list = x_freq_list[x_mask], x_Amp_list[x_mask]
+        y_freq_list, y_Amp_list = y_freq_list[y_mask], y_Amp_list[y_mask]
 
-def save_center_of_rotation(save_dir, center_x_list, center_y_list):
-    save_name = "center_coordinate.csv"
+        width_time = param.n_rotations / max(x_freq_list[np.argmax(x_Amp_list)], y_freq_list[np.argmax(y_Amp_list)])
+        # width_time = 5
+        # width_time = time_arr[-1]
 
-    sample_num, _, _ = param.get_config(day)
-    with open(f"{save_dir}/{save_name}", "w", newline="") as csvfile:
-        csvwriter = csv.writer(csvfile)
-        headers = []
-        center_list = []
-        for i in range(sample_num):
-            headers.extend([f"No.{i+1}_x", f"No.{i+1}_y"])
-            center_list.extend([center_x_list[i], center_y_list[i]])
-        csvwriter.writerow(headers)
-        csvwriter.writerow(center_list)
+        start_time = 0.0
+        flag_warning = False
+        while 1:
+            condition = (time_arr >= start_time) & (time_arr < start_time + width_time)
+            X_aft = X[condition].reshape([np.sum(condition), 1])
+            Y_aft = Y[condition].reshape([np.sum(condition), 1])
+            center_x, center_y, long_axis, short_axis, add_flag_warning = calculate_ellipse_properties(
+                X_aft, Y_aft, index
+            )
+            center_x_list.append(center_x)
+            center_y_list.append(center_y)
+            long_axis_list.append(long_axis)
+            short_axis_list.append(short_axis)
+            if add_flag_warning:
+                flag_warning = True
 
-
-# Trimming with thresholds
-def correct_angular_velocity(data):
-    num_std_dev = 3
-    data_aft = []
-
-    mean = np.mean(data)
-    std_dev = np.std(data)
-    lower_th = mean - num_std_dev * std_dev
-    upper_th = mean + num_std_dev * std_dev
-
-    for x in data:
-        if x < lower_th or upper_th < x:
-            data_aft.append(mean)
-        else:
-            data_aft.append(x)
-
-    return data_aft
+            start_time += 1 / FrameRate[index]
+            # width_timeの幅でSDが算出できない場合break
+            if start_time + width_time >= total_time[index]:
+                rest_data_num = len(time_arr) - len(center_x_list)
+                center_x_list.extend([center_x] * rest_data_num)
+                center_y_list.extend([center_y] * rest_data_num)
+                long_axis_list.extend([long_axis] * rest_data_num)
+                short_axis_list.extend([short_axis] * rest_data_num)
+                break
+        if flag_warning:
+            print(f"[Warning] No.{index + 1}   alfa / eig_val[0] is negative value")
+    return center_x_list, center_y_list, np.array(long_axis_list), np.array(short_axis_list)
 
 
 def extract_centroid(day):
+    sample_num, _, _ = param.get_config(day)
     input_dir = f"{param.input_dir_bef}/{day}"
     save_dir = f"{param.save_dir_bef}/{day}"
     px2um_x, px2um_y = param.get_px2um_config(day)
@@ -178,7 +227,7 @@ def extract_centroid(day):
     sort_num.sort(key=lambda x: x[1])
     file_name_list_aft: List[str] = [x[0] for x in sort_num]
 
-    x_list, y_list, angle_list = [], [], []
+    x_list_bef, y_list_bef, angle_list = [], [], []
     for file_name in file_name_list_aft:
         movie = cv2.VideoCapture(file_name)
         add_x_list, add_y_list, add_angle_list_bef = [], [], []
@@ -194,38 +243,50 @@ def extract_centroid(day):
             add_x_list.append(x * px2um_x)
             add_y_list.append(y * px2um_y)
 
-        x_list.append(add_x_list)
-        y_list.append(add_y_list)
+        x_list_bef.append(add_x_list)
+        y_list_bef.append(add_y_list)
         if param.flag_get_angle_with_cell_direcetion:
             # adjust angle (-π/2 ~ π/2)
             add_angle_list_aft = adjust_angle(add_angle_list_bef)
             angle_list.append(add_angle_list_aft)
+    x_arr_bef = np.array(x_list_bef)
+    y_arr_bef = np.array(y_list_bef)
+    # dev
+    make_graph.dev_plot_fft_coordinates(x_arr_bef, y_arr_bef, day)
 
     # exact center of rotation
     center_x_list, center_y_list = [], []
     long_axis_list, short_axis_list = [], []
     aspect_ratio_list = []
-    for i in range(len(x_list)):
-        x_arr, y_arr = np.array(x_list[i]), np.array(y_list[i])
-        center_x, center_y, long_axis, short_axis = get_ellipse_info(x_arr, y_arr, i)
+    for i in range(sample_num):
+        center_x, center_y, long_axis, short_axis = get_ellipse_info(x_arr_bef[i], y_arr_bef[i], i, day)
         center_x_list.append(center_x)
         center_y_list.append(center_y)
         long_axis_list.append(long_axis)
         short_axis_list.append(short_axis)
         aspect_ratio_list.append(short_axis / long_axis)
+    center_x_arr = np.array(center_x_list)
+    center_y_arr = np.array(center_y_list)
+    long_axis_arr = np.array(long_axis_list)
+    short_axis_arr = np.array(short_axis_list)
+    aspect_ratio_arr = np.array(aspect_ratio_list)
 
     # Fix x_list, y_list as center is zero
-    x_list_aft = scale_center_zero(x_list, center_x_list)
-    y_list_aft = scale_center_zero(y_list, center_y_list)
+    x_list_aft = x_arr_bef - center_x_arr
+    y_list_aft = y_arr_bef - center_y_arr
 
     # save
     save_centorid_cordinate(save_dir, x_list_aft, y_list_aft)
-    save_center_of_rotation(save_dir, center_x_list, center_y_list)
-    # save long_axis_list, short_axis_list
-    save2csv.save_rot_axes(long_axis_list, short_axis_list, day)
-    rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_long_axis, long_axis_list, day)
-    rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_short_axis, short_axis_list, day)
-    rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_aspect_ratio, aspect_ratio_list, day)
+    make_graph.plot_coordinate(x_list_aft, y_list_aft, day, "centroid")
+    save_center_of_rotation(save_dir, center_x_arr, center_y_arr)
+    make_graph.plot_coordinate(center_x_arr, center_y_arr, day, "center")
+    make_graph.plot_coordinate_with_center(x_arr_bef, y_arr_bef, center_x_arr, center_y_arr, day)
+
+    # save long_axis, short_axis
+    save_rot_axes(long_axis_arr, short_axis_arr, day)
+    rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_long_axis, np.mean(long_axis_arr, axis=1), day)
+    rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_short_axis, np.mean(short_axis_arr, axis=1), day)
+    rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_aspect_ratio, np.mean(aspect_ratio_arr, axis=1), day)
 
     if param.flag_get_angle_with_cell_direcetion:
         save_angle(save_dir, angle_list)

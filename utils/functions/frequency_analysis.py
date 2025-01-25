@@ -13,7 +13,7 @@ def fft(data_bef, dt):
     F = F / (N / 2)
     Amp = np.abs(F)
 
-    return freq[1 : N // 2].tolist(), Amp[1 : N // 2].tolist()
+    return freq[1 : N // 2], Amp[1 : N // 2]
 
 
 def fft_angle(angle_list, day):
@@ -64,15 +64,17 @@ def fft_sd_list(sd_list, day, flag_std):
         add_freq_list, add_Amp_list = [], []
         for j in range(len(width_time_list)):
             freq, Amp = fft(sd_list[i][j], 1 / FrameRate_list[i])
-            add_freq_list.append(freq)
-            add_Amp_list.append(Amp)
+            add_freq_list.append(freq.tolist())
+            add_Amp_list.append(Amp.tolist())
         freq_list.append(add_freq_list)
         Amp_list.append(add_Amp_list)
+    freq_arr = np.array(freq_list, dtype=object)
+    Amp_arr = np.array(Amp_list, dtype=object)
     # plot
-    make_graph.plot_SD_list_fft(freq_list, Amp_list, day, flag_std)
-    make_graph.dev_plot_sd_FFT_with_rotation(freq_list, Amp_list, day)
+    make_graph.plot_SD_list_fft(freq_arr, Amp_arr, day, flag_std)
+    make_graph.dev_plot_sd_FFT_with_rotation(freq_arr, Amp_arr, day)
 
     save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series"
-    save2csv.save_sd_fft(save_dir, freq_list, Amp_list)
+    save2csv.save_sd_fft(save_dir, freq_arr, Amp_arr)
 
-    return freq_list, Amp_list
+    return freq_arr, Amp_arr

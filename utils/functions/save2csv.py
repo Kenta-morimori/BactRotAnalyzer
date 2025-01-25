@@ -18,23 +18,6 @@ def save_time_list(time_list, day):
             csvwriter.writerow(row)
 
 
-def save_rot_axes(long_axis_list, short_axis_list, day):
-    save_dir = f"{param.save_dir_bef}/{day}/centroid_coordinate/"
-    csv_save_dir = f"{save_dir}/rotation_axes.csv"
-    os.makedirs(save_dir, exist_ok=True)
-
-    headers, row = [], []
-    for i in range(len(long_axis_list)):
-        headers.append(f"No.{i+1}_long_axis")
-        row.append(long_axis_list[i])
-        headers.append(f"No.{i+1}_short_axis")
-        row.append(short_axis_list[i])
-    with open(csv_save_dir, "w", newline="") as csvfile:
-        csvwriter = csv.writer(csvfile)
-        csvwriter.writerow(headers)
-        csvwriter.writerow(row)
-
-
 def save_angle_angular_velocity(angle_list, angular_velocity_list, day):
     save_dir = f"{param.save_dir_bef}/{day}/angular_velocity/"
     os.makedirs(save_dir, exist_ok=True)
@@ -127,19 +110,14 @@ def save_fft_peak(save_dir, save_name, peak_list):
 def save_sd_fft(save_dir, freq_list, Amp_list):
     csv_save_dir = f"{save_dir}/SD-time-series_fft.csv"
     width_list = param.SD_window_width_list
-    data = {}
+    df = pd.DataFrame()
 
     for i in range(len(freq_list)):
         for j, width in enumerate(width_list):
             freq_key = f"No.{i+1}_{width}s_freq"
             amp_key = f"No.{i+1}_{width}s_Amp"
-            freq_values = freq_list[i][j]
-            amp_values = Amp_list[i][j]
-            data[freq_key] = freq_values
-            data[amp_key] = amp_values
-
-    max_len = max(len(v) for v in data.values())
-    df = pd.DataFrame({k: v + [None] * (max_len - len(v)) for k, v in data.items()})
+            df[freq_key] = pd.Series(freq_list[i][j])
+            df[amp_key] = pd.Series(Amp_list[i][j])
     df.to_csv(csv_save_dir, index=False)
 
 
