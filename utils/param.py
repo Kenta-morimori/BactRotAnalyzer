@@ -80,6 +80,7 @@ def get_tiffinfo_config(day):
 ## Determine the angle by the direction of the cell.
 # flag_get_angle_with_cell_direcetion = True
 flag_get_angle_with_cell_direcetion = False  # beads assay
+n_rotations = 30
 
 flag_evaluating_switching = True  # evaluate switching of rotation
 

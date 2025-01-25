@@ -7,17 +7,17 @@ from tqdm import tqdm
 
 from utils import param
 from utils.features import IGNORE_PLOT_COLS, ROTATION_FEATURES, SD_WIDTH_DEPEND_COLS
-from utils.functions import get_tiff_info, read_csv, rot_df_manage, save2csv
+from utils.functions import get_tiff_info, read_csv, rot_df_manage, save2csv, frequency_analysis
 
 font_size = 20
 fig_size_x = 20
 fig_size_y = 23
 
 
-def plot_centroid_coordinate(x_list, y_list, day):
+def plot_coordinate(x_list, y_list, day, mode):
     sample_num, _, _ = param.get_config(day)
 
-    save_dir = f"{param.save_dir_bef}/{day}/centroid_coordinate"
+    save_dir = f"{param.save_dir_bef}/{day}/{mode}_coordinate"
     os.makedirs(save_dir, exist_ok=True)
 
     # Pixel to µm conversion.
@@ -27,19 +27,19 @@ def plot_centroid_coordinate(x_list, y_list, day):
     fig = plt.figure(figsize=(20, 8))
     gs = gridspec.GridSpec(2, sample_num // 2, figure=fig, wspace=0.38, hspace=0.2)
     for i in range(sample_num):
-        # detect x_lim, y_lim
-        x_range = max(x_list[i]) - min(x_list[i])
-        y_range = max(y_list[i]) - min(y_list[i])
-        max_range = 1.1 * max(x_range, y_range) / 2
-
         row = i // (sample_num // 2)
         col = i % (sample_num // 2)
-
         ax = fig.add_subplot(gs[row, col])
         ax.plot(x_list[i], y_list[i])
-        ax.set_xlim(-max_range, max_range)
-        ax.set_ylim(-max_range, max_range)
-        ax.scatter(0, 0, c="red")  # center is zero
+
+        if mode == "centroid":
+            # detect x_lim, y_lim
+            x_range = max(x_list[i]) - min(x_list[i])
+            y_range = max(y_list[i]) - min(y_list[i])
+            max_range = 1.1 * max(x_range, y_range) / 2
+            ax.set_xlim(-max_range, max_range)
+            ax.set_ylim(-max_range, max_range)
+            ax.scatter(0, 0, c="red")  # center is zero
         ax.set_aspect("equal", "box")
         ax.grid(True)
         ax.set_title(f"Trajectory No.{i+1}", fontsize=16)
@@ -68,6 +68,42 @@ def plot_centroid_coordinate(x_list, y_list, day):
         plt.tight_layout()
         plt.savefig(f"{save_dir}/{xy_save_label[label_i]}")
         plt.close(fig)
+
+
+def plot_coordinate_with_center(x_list, y_list, center_x_list, center_y_list, day):
+    sample_num, _, _ = param.get_config(day)
+    save_dir = f"{param.save_dir_bef}/{day}/centroid_coordinate"
+    os.makedirs(save_dir, exist_ok=True)
+
+    # plot centroid coordinate
+    fig = plt.figure(figsize=(20, 8))
+    gs = gridspec.GridSpec(2, sample_num // 2, figure=fig, wspace=0.38, hspace=0.2)
+    label = ["centroid", "center"]
+    for i in range(sample_num):
+        row = i // (sample_num // 2)
+        col = i % (sample_num // 2)
+        ax = fig.add_subplot(gs[row, col])
+
+        ax.plot(x_list[i], y_list[i], label="centroid")
+        ax.plot(center_x_list[i], center_y_list[i], label="center")
+
+        # detect x_lim, y_lim
+        """
+        x_range = max(x_list[i]) - min(x_list[i])
+        y_range = max(y_list[i]) - min(y_list[i])
+        max_range = 1.1 * max(x_range, y_range) / 2
+        ax.set_xlim(-max_range, max_range)
+        ax.set_ylim(-max_range, max_range)
+        ax.set_aspect("equal", "box")
+        """
+        ax.grid(True)
+        ax.set_title(f"Trajectory No.{i+1}", fontsize=16)
+        ax.set_xlabel(r"x [$\mu$m]", fontsize=16)
+        ax.set_ylabel(r"y [$\mu$m]", fontsize=16)
+        ax.tick_params(axis="both", which="major", labelsize=16)
+    ax.legend(label, loc="upper left", bbox_to_anchor=(1, 1))
+    plt.savefig(f"{save_dir}/trajectory_with_center.png")
+    plt.close(fig)
 
 
 def plot_angular_velocity(angle_list, angular_velocity_list, day):
@@ -663,4 +699,36 @@ def dev_plot_sd_FFT_with_rotation(freq_list, Amp_list, day):
         axs[-1][-1].legend(plot_label_list, loc="upper left", bbox_to_anchor=(1, 1))
     plt.tight_layout()
     plt.savefig(f"{save_dir}/SD-time-series_FFT_all_standardized_with_av.png")
+    plt.close(fig)
+
+
+def dev_plot_fft_coordinates(X, Y, day):
+    sample_num, FrameRate, _ = param.get_config(day)
+    save_dir = f"{param.save_dir_bef}/{day}/center_coordinate"
+    save_name = "centroid_coodinate_fft.png"
+    os.makedirs(save_dir, exist_ok=True)
+
+    fig, axs = plt.subplots(5, 2 * sample_num // 5, figsize=(2 * fig_size_x, fig_size_y))
+    for i in range(sample_num):
+        x_freq_list, x_Amp_list = frequency_analysis.fft(X[i], 1 / FrameRate[i])
+        y_freq_list, y_Amp_list = frequency_analysis.fft(Y[i], 1 / FrameRate[i])
+        peak = max(x_freq_list[np.argmax(x_Amp_list)], y_freq_list[np.argmax(y_Amp_list)])
+
+        row = i // 2
+        col = i % 2
+        axs[row, 2 * col].plot(x_freq_list, x_Amp_list)
+        axs[row, 2 * col + 1].plot(y_freq_list, y_Amp_list)
+        axs[row, 2 * col].set_xlim(0, x_freq_list[-1])
+        axs[row, 2 * col + 1].set_xlim(0, y_freq_list[-1])
+        xy = ["x", "y"]
+        for j in [0, 1]:
+            axs[row, 2 * col + j].grid(True)
+            axs[row, 2 * col + j].axvline(x=peak, color="r", alpha=0.6)
+            axs[row, 2 * col + j].set_title(f"No.{i+1}_{xy[j]}  peak:{round(peak, 3)}  width_time:{round(param.n_rotations / peak, 3)}s", fontsize=font_size)
+            axs[row, 2 * col + j].set_xlabel("Freqency [Hz]", fontsize=font_size)
+            axs[row, 2 * col + j].set_ylabel("Amp", fontsize=font_size)
+            axs[row, 2 * col + j].set_yscale("log")
+            axs[row, 2 * col + j].tick_params(axis="both", which="major", labelsize=font_size)
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/{save_name}")
     plt.close(fig)
