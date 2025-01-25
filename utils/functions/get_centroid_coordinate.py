@@ -3,6 +3,7 @@ import glob
 import math
 import os
 import re
+
 # import statistics
 import sys
 from typing import List
@@ -177,9 +178,7 @@ def get_ellipse_info(X, Y, index, day):
         x_freq_list, x_Amp_list = x_freq_list[x_mask], x_Amp_list[x_mask]
         y_freq_list, y_Amp_list = y_freq_list[y_mask], y_Amp_list[y_mask]
 
-        width_time = param.n_rotations / max(
-            x_freq_list[np.argmax(x_Amp_list)], y_freq_list[np.argmax(y_Amp_list)]
-        )
+        width_time = param.n_rotations / max(x_freq_list[np.argmax(x_Amp_list)], y_freq_list[np.argmax(y_Amp_list)])
         # width_time = 5
         # width_time = time_arr[-1]
 
@@ -189,7 +188,9 @@ def get_ellipse_info(X, Y, index, day):
             condition = (time_arr >= start_time) & (time_arr < start_time + width_time)
             X_aft = X[condition].reshape([np.sum(condition), 1])
             Y_aft = Y[condition].reshape([np.sum(condition), 1])
-            center_x, center_y, long_axis, short_axis, add_flag_warning = calculate_ellipse_properties(X_aft, Y_aft, index)
+            center_x, center_y, long_axis, short_axis, add_flag_warning = calculate_ellipse_properties(
+                X_aft, Y_aft, index
+            )
             center_x_list.append(center_x)
             center_y_list.append(center_y)
             long_axis_list.append(long_axis)

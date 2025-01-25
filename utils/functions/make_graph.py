@@ -7,7 +7,13 @@ from tqdm import tqdm
 
 from utils import param
 from utils.features import IGNORE_PLOT_COLS, ROTATION_FEATURES, SD_WIDTH_DEPEND_COLS
-from utils.functions import get_tiff_info, read_csv, rot_df_manage, save2csv, frequency_analysis
+from utils.functions import (
+    frequency_analysis,
+    get_tiff_info,
+    read_csv,
+    rot_df_manage,
+    save2csv,
+)
 
 font_size = 20
 fig_size_x = 20
@@ -724,7 +730,10 @@ def dev_plot_fft_coordinates(X, Y, day):
         for j in [0, 1]:
             axs[row, 2 * col + j].grid(True)
             axs[row, 2 * col + j].axvline(x=peak, color="r", alpha=0.6)
-            axs[row, 2 * col + j].set_title(f"No.{i+1}_{xy[j]}  peak:{round(peak, 3)}  width_time:{round(param.n_rotations / peak, 3)}s", fontsize=font_size)
+            axs[row, 2 * col + j].set_title(
+                f"No.{i+1}_{xy[j]}  peak:{round(peak, 3)}  width_time:{round(param.n_rotations / peak, 3)}s",
+                fontsize=font_size,
+            )
             axs[row, 2 * col + j].set_xlabel("Freqency [Hz]", fontsize=font_size)
             axs[row, 2 * col + j].set_ylabel("Amp", fontsize=font_size)
             axs[row, 2 * col + j].set_yscale("log")
