@@ -4,16 +4,17 @@ import pandas as pd
 
 from utils import param
 
+import numpy as np
 
 def read_center_coordinates(day):
-    csv_save_dir = f"{param.save_dir_bef}/{day}/center_coordinate.csv"
+    csv_save_dir = f"{param.save_dir_bef}/{day}/center_coordinate/center_coordinate.csv"
     sample_num, _, _ = param.get_config(day)
 
     df = pd.read_csv(csv_save_dir)
-    center_x_list = df.filter(regex="No.\d+_x").iloc[0, :sample_num].tolist()
-    center_y_list = df.filter(regex="No.\d+_y").iloc[0, :sample_num].tolist()
+    center_x_arr = np.array([df[f"No.{i + 1}_x"].values for i in range(sample_num)])
+    center_y_arr = np.array([df[f"No.{i + 1}_y"].values for i in range(sample_num)])
 
-    return center_x_list, center_y_list
+    return center_x_arr, center_y_arr
 
 
 def read_angle(day):
