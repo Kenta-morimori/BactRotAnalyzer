@@ -45,13 +45,14 @@ def plot_coordinate(x_list, y_list, day, mode):
             max_range = 1.1 * max(x_range, y_range) / 2
             ax.set_xlim(-max_range, max_range)
             ax.set_ylim(-max_range, max_range)
-            ax.scatter(0, 0, c="red")  # center is zero
+            # ax.scatter(0, 0, c="red")  # center is zero
         ax.set_aspect("equal", "box")
         ax.grid(True)
         ax.set_title(f"Trajectory No.{i+1}", fontsize=16)
         ax.set_xlabel(r"x [$\mu$m]", fontsize=16)
         ax.set_ylabel(r"y [$\mu$m]", fontsize=16)
         ax.tick_params(axis="both", which="major", labelsize=16)
+    fig.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05, wspace=0.38, hspace=0.2)
     plt.savefig(f"{save_dir}/trajectory.png")
     plt.close(fig)
 
@@ -91,7 +92,7 @@ def plot_coordinate_with_center(x_list, y_list, center_x_list, center_y_list, da
         ax = fig.add_subplot(gs[row, col])
 
         ax.plot(x_list[i], y_list[i], label="centroid")
-        ax.plot(center_x_list[i], center_y_list[i], label="center")
+        ax.plot(center_x_list[i], center_y_list[i], label="center", alpha=0.5)
 
         # detect x_lim, y_lim
         """
