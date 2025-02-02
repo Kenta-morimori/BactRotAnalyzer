@@ -212,6 +212,46 @@ def get_ellipse_info(X, Y, index, day):
     return center_x_list, center_y_list, np.array(long_axis_list), np.array(short_axis_list)
 
 
+def calculate_msd_sd(x_list, y_list, day):
+    sample_num, FrameRate_list, _ = param.get_config(day)
+
+    msd_list = []
+    D_list = []  # diffusion coefficient
+    for i in range(sample_num):
+        x_arr = np.asarray(x_list[i])
+        y_arr = np.asarray(y_list[i])
+        dt = 1.0 / FrameRate_list[i]
+        n_frames = len(x_arr)
+
+        msds = [0.0]
+        for tau in range(1, n_frames):
+            dx = x_arr[tau:] - x_arr[:-tau]
+            dy = y_arr[tau:] - y_arr[:-tau]
+            msds.append(np.mean(dx**2 + dy**2))
+        msd_list.append(np.array(msds))
+
+        time_lags = np.arange(1, n_frames) * dt
+        slope, _ = np.polyfit(time_lags, msds[1:], 1)
+        D_list.append(slope / 4.0)
+
+    return np.array(msd_list), D_list
+
+
+def get_max_dist(x_list, y_list, day):
+    sample_num, _, _ = param.get_config(day)
+
+    max_dist_list = []
+    for i in range(sample_num):
+        N = len(x_list[i])
+        max_dist_sq = 0
+        for j in range(N):
+            for k in range(j + 1, N):
+                dist_sq = (x_list[i][j] - x_list[i][k]) ** 2 + (y_list[i][j] - y_list[i][k]) ** 2
+                max_dist_sq = max(max_dist_sq, dist_sq)
+        max_dist_list.append(np.sqrt(max_dist_sq))
+    return max_dist_list
+
+
 def extract_centroid(day):
     sample_num, _, _ = param.get_config(day)
     input_dir = f"{param.input_dir_bef}/{day}"
@@ -287,6 +327,13 @@ def extract_centroid(day):
     rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_long_axis, np.mean(long_axis_arr, axis=1), day)
     rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_short_axis, np.mean(short_axis_arr, axis=1), day)
     rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_aspect_ratio, np.mean(aspect_ratio_arr, axis=1), day)
+
+    # rotaion center analysis
+    if param.flag_evaluate_rotaion_center:
+        max_dist_list = get_max_dist(center_x_arr, center_y_arr, day)
+        # MSD
+        msd_2d, D_list = calculate_msd_sd(center_x_arr, center_y_arr, day)
+        make_graph.plot_msd(msd_2d, D_list, max_dist_list, day)
 
     if param.flag_get_angle_with_cell_direcetion:
         save_angle(save_dir, angle_list)

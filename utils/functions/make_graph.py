@@ -113,6 +113,31 @@ def plot_coordinate_with_center(x_list, y_list, center_x_list, center_y_list, da
     plt.close(fig)
 
 
+def plot_msd(msd, D_list, max_dist_list, day):
+    sample_num, FrameRate_list, _ = param.get_config(day)
+
+    save_dir = f"{param.save_dir_bef}/{day}/center_coordinate"
+    os.makedirs(save_dir, exist_ok=True)
+
+    fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
+    for i in range(sample_num):
+        row = i // 2
+        col = i % 2
+        axs[row, col].plot(np.arange(0, len(msd[i])) * (1.0 / FrameRate_list[i]), msd[i])
+        axs[row, col].grid(True)
+        axs[row, col].set_title(
+            # f"MSD No.{i+1} | D={D_list[i]:.2e} | max_dist:{1000 * round(max_dist_list[i], 5)}" + r"[$\mu$m]",
+            f"MSD No.{i+1} | D={D_list[i]:.2e} | max_dist:{round(1000 * max_dist_list[i], 5)} nm",
+            fontsize=font_size,
+        )
+        axs[row, col].set_xlabel("Time [s]", fontsize=18)
+        axs[row, col].set_ylabel("MSD", fontsize=font_size)
+        axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/MSD_2d.png")
+    plt.close(fig)
+
+
 def plot_angular_velocity(angle_list, angular_velocity_list, day):
     sample_num, _, _ = param.get_config(day)
     save_dir = f"{param.save_dir_bef}/{day}/angular_velocity"
