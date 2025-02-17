@@ -127,7 +127,7 @@ def plot_msd(msd, D_list, max_dist_list, day):
         axs[row, col].grid(True)
         axs[row, col].set_title(
             # f"MSD No.{i+1} | D={D_list[i]:.2e} | max_dist:{1000 * round(max_dist_list[i], 5)}" + r"[$\mu$m]",
-            f"MSD No.{i+1} | D={D_list[i]:.2e} | max_dist:{round(1000 * max_dist_list[i], 5)} nm",
+            f"MSD No.{i+1} | {round(len(msd[i]) * (1.0 / FrameRate_list[i]), 3)} s | D={D_list[i]:.2e} | max_dist:{round(1000 * max_dist_list[i], 5)} nm",
             fontsize=font_size,
         )
         axs[row, col].set_xlabel("Time [s]", fontsize=18)

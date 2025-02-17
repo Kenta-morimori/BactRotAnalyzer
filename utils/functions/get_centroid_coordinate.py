@@ -202,8 +202,10 @@ def get_ellipse_info(X, Y, index, day):
             # width_timeの幅でSDが算出できない場合break
             if start_time + width_time >= total_time[index]:
                 rest_data_num = len(time_arr) - len(center_x_list)
-                center_x_list.extend([center_x] * rest_data_num)
-                center_y_list.extend([center_y] * rest_data_num)
+                # center_x_list.extend([center_x] * rest_data_num)
+                # center_y_list.extend([center_y] * rest_data_num)
+                center_x_list.extend([np.NAN] * rest_data_num)
+                center_y_list.extend([np.NAN] * rest_data_num)
                 long_axis_list.extend([long_axis] * rest_data_num)
                 short_axis_list.extend([short_axis] * rest_data_num)
                 break
@@ -214,6 +216,9 @@ def get_ellipse_info(X, Y, index, day):
 
 def calculate_msd_sd(x_list, y_list, day):
     sample_num, FrameRate_list, _ = param.get_config(day)
+
+    x_list = [row[~np.isnan(row)] for row in x_list]
+    y_list = [row[~np.isnan(row)] for row in y_list]
 
     msd_list = []
     D_list = []  # diffusion coefficient
@@ -234,22 +239,38 @@ def calculate_msd_sd(x_list, y_list, day):
         slope, _ = np.polyfit(time_lags, msds[1:], 1)
         D_list.append(slope / 4.0)
 
-    return np.array(msd_list), D_list
+    return np.array(msd_list, dtype=object), D_list
 
 
 def get_max_dist(x_list, y_list, day):
     sample_num, _, _ = param.get_config(day)
+    x_list = [row[~np.isnan(row)] for row in x_list]
+    y_list = [row[~np.isnan(row)] for row in y_list]
 
     max_dist_list = []
+    print("*** Calculating maximum distance ***")
     for i in range(sample_num):
         N = len(x_list[i])
         max_dist_sq = 0
+        print(f"No.{i + 1}")
         for j in range(N):
+            if (j + 1) % 1000 == 0:
+                print(f"{j + 1} / {N}")
             for k in range(j + 1, N):
                 dist_sq = (x_list[i][j] - x_list[i][k]) ** 2 + (y_list[i][j] - y_list[i][k]) ** 2
                 max_dist_sq = max(max_dist_sq, dist_sq)
         max_dist_list.append(np.sqrt(max_dist_sq))
     return max_dist_list
+
+
+def fill_trailing_nan(row):
+    valid_idx = np.where(~np.isnan(row))[0]
+    if valid_idx.size == 0:
+        return row
+    last_valid_idx = valid_idx[-1]
+    row[last_valid_idx+1:] = row[last_valid_idx]
+
+    return row
 
 
 def extract_centroid(day):
@@ -311,6 +332,17 @@ def extract_centroid(day):
     short_axis_arr = np.array(short_axis_list)
     aspect_ratio_arr = np.array(aspect_ratio_list)
 
+    # rotaion center analysis
+    if param.flag_evaluate_rotaion_center:
+        max_dist_list = get_max_dist(center_x_arr, center_y_arr, day)
+        # MSD
+        msd_2d, D_list = calculate_msd_sd(center_x_arr, center_y_arr, day)
+        make_graph.plot_msd(msd_2d, D_list, max_dist_list, day)
+
+    # Completes missing values with the last value
+    center_x_arr = np.apply_along_axis(fill_trailing_nan, 1, center_x_arr)
+    center_y_arr = np.apply_along_axis(fill_trailing_nan, 1, center_y_arr)
+
     # Fix x_list, y_list as center is zero
     x_list_aft = x_arr_bef - center_x_arr
     y_list_aft = y_arr_bef - center_y_arr
@@ -327,13 +359,6 @@ def extract_centroid(day):
     rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_long_axis, np.mean(long_axis_arr, axis=1), day)
     rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_short_axis, np.mean(short_axis_arr, axis=1), day)
     rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_aspect_ratio, np.mean(aspect_ratio_arr, axis=1), day)
-
-    # rotaion center analysis
-    if param.flag_evaluate_rotaion_center:
-        max_dist_list = get_max_dist(center_x_arr, center_y_arr, day)
-        # MSD
-        msd_2d, D_list = calculate_msd_sd(center_x_arr, center_y_arr, day)
-        make_graph.plot_msd(msd_2d, D_list, max_dist_list, day)
 
     if param.flag_get_angle_with_cell_direcetion:
         save_angle(save_dir, angle_list)
