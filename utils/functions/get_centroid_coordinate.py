@@ -273,6 +273,41 @@ def fill_trailing_nan(row):
     return row
 
 
+def dev_get_max_dists(x_list, y_list, day, split_time=0.5):
+    sample_num, _, _ = param.get_config(day)
+    time_list = read_csv.get_timelist(day)
+
+    x_list = [row[~np.isnan(row)] for row in x_list]
+    y_list = [row[~np.isnan(row)] for row in y_list]
+
+    max_dist_list = []
+    print("*** Calculating maximum distance ***")
+    for i in range(sample_num):
+        print(f"No.{i + 1}")
+        x_arr_org = np.array(x_list[i])
+        y_arr_org = np.array(y_list[i])
+        time_arr = np.array(time_list[i])
+        time_arr = time_arr[:min(len(time_arr), len(x_arr_org), len(y_arr_org))]
+
+        max_dists = []
+        time_th = 0
+        while time_th + split_time <= time_arr[-1]:
+            x_arr = x_arr_org[np.where((time_arr >= time_th) & (time_arr <= time_th + split_time))[0]]
+            y_arr = y_arr_org[np.where((time_arr >= time_th) & (time_arr <= time_th + split_time))[0]]
+
+            N = len(x_arr)
+            max_dist_sq = 0
+            for j in range(N):
+                for k in range(j + 1, N):
+                    dist_sq = (x_arr[j] - x_arr[k]) ** 2 + (y_arr[j] - y_arr[k]) ** 2
+                    max_dist_sq = max(max_dist_sq, dist_sq)
+            max_dists.append(np.sqrt(max_dist_sq))
+            time_th += split_time
+        max_dist_list.append(max_dists)
+
+    return np.array(max_dist_list, dtype=object)
+
+
 def extract_centroid(day):
     sample_num, _, _ = param.get_config(day)
     input_dir = f"{param.input_dir_bef}/{day}"
@@ -338,6 +373,11 @@ def extract_centroid(day):
         # MSD
         msd_2d, D_list = calculate_msd_sd(center_x_arr, center_y_arr, day)
         make_graph.plot_msd(msd_2d, D_list, max_dist_list, day)
+        """
+        # dev
+        max_dist_list_st = dev_get_max_dists(center_x_arr, center_y_arr, day)
+        make_graph.dev_plot_max_dist_stat(max_dist_list_st, max_dist_list, day)
+        """
 
     # Completes missing values with the last value
     center_x_arr = np.apply_along_axis(fill_trailing_nan, 1, center_x_arr)

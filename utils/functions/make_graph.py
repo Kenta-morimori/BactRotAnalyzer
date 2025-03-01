@@ -767,3 +767,21 @@ def dev_plot_fft_coordinates(X, Y, day):
     plt.tight_layout()
     plt.savefig(f"{save_dir}/{save_name}")
     plt.close(fig)
+
+
+def dev_plot_max_dist_stat(max_dists, max_dists_all, day):
+    sample_num, _, _ = param.get_config(day)
+
+    save_dir = f"{param.save_dir_bef}/{day}/center_coordinate"
+    os.makedirs(save_dir, exist_ok=True)
+
+    fig, axs = plt.subplots(2, sample_num // 2, figsize=(15, 6))
+    axs = axs.flatten()
+    for i, data in enumerate(max_dists):
+        axs[i].boxplot(data)
+        # axs[i].axhline(y=max_dists_all[i], color="red", linestyle="--")
+        axs[i].set_title(f"No.{i+1} | max_dist={round(max_dists_all[i], 3)}")
+        axs[i].set_xticks([])
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/max_dist_validation.png")
+    plt.close(fig)
