@@ -45,13 +45,14 @@ def plot_coordinate(x_list, y_list, day, mode):
             max_range = 1.1 * max(x_range, y_range) / 2
             ax.set_xlim(-max_range, max_range)
             ax.set_ylim(-max_range, max_range)
-            ax.scatter(0, 0, c="red")  # center is zero
+            # ax.scatter(0, 0, c="red")  # center is zero
         ax.set_aspect("equal", "box")
         ax.grid(True)
         ax.set_title(f"Trajectory No.{i+1}", fontsize=16)
         ax.set_xlabel(r"x [$\mu$m]", fontsize=16)
         ax.set_ylabel(r"y [$\mu$m]", fontsize=16)
         ax.tick_params(axis="both", which="major", labelsize=16)
+    fig.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05, wspace=0.38, hspace=0.2)
     plt.savefig(f"{save_dir}/trajectory.png")
     plt.close(fig)
 
@@ -85,23 +86,27 @@ def plot_coordinate_with_center(x_list, y_list, center_x_list, center_y_list, da
     fig = plt.figure(figsize=(20, 8))
     gs = gridspec.GridSpec(2, sample_num // 2, figure=fig, wspace=0.38, hspace=0.2)
     label = ["centroid", "center"]
+
+    coef = 1.1
     for i in range(sample_num):
         row = i // (sample_num // 2)
         col = i % (sample_num // 2)
         ax = fig.add_subplot(gs[row, col])
 
         ax.plot(x_list[i], y_list[i], label="centroid")
-        ax.plot(center_x_list[i], center_y_list[i], label="center")
+        ax.plot(center_x_list[i], center_y_list[i], label="center", alpha=0.5)
 
         # detect x_lim, y_lim
-        """
-        x_range = max(x_list[i]) - min(x_list[i])
-        y_range = max(y_list[i]) - min(y_list[i])
-        max_range = 1.1 * max(x_range, y_range) / 2
-        ax.set_xlim(-max_range, max_range)
-        ax.set_ylim(-max_range, max_range)
+        ax.set_xlim(
+            ((1 + coef) * min(x_list[i]) + (1 - coef) * max(x_list[i])) / 2,
+            ((1 - coef) * min(x_list[i]) + (1 + coef) * max(x_list[i])) / 2,
+        )
+        ax.set_ylim(
+            ((1 + coef) * min(y_list[i]) + (1 - coef) * max(y_list[i])) / 2,
+            ((1 - coef) * min(y_list[i]) + (1 + coef) * max(y_list[i])) / 2,
+        )
         ax.set_aspect("equal", "box")
-        """
+
         ax.grid(True)
         ax.set_title(f"Trajectory No.{i+1}", fontsize=16)
         ax.set_xlabel(r"x [$\mu$m]", fontsize=16)
@@ -109,6 +114,40 @@ def plot_coordinate_with_center(x_list, y_list, center_x_list, center_y_list, da
         ax.tick_params(axis="both", which="major", labelsize=16)
     ax.legend(label, loc="upper left", bbox_to_anchor=(1, 1))
     plt.savefig(f"{save_dir}/trajectory_with_center.png")
+    plt.close(fig)
+
+
+def plot_msd(msd, D_list, intercept_list, max_dist_list, day):
+    sample_num, FrameRate_list, _ = param.get_config(day)
+
+    save_dir = f"{param.save_dir_bef}/{day}/center_coordinate"
+    os.makedirs(save_dir, exist_ok=True)
+
+    fig = plt.figure(figsize=(50 / 1.5, 20 / 1.5))
+    gs = gridspec.GridSpec(2, sample_num // 2, figure=fig, wspace=0.5, hspace=0.2)
+    for i in range(sample_num):
+        t_list = np.arange(0, len(msd[i])) * (1.0 / FrameRate_list[i])
+        fit_func = t_list * (D_list[i] * 4) + intercept_list[i]
+
+        row = i // (sample_num // 2)
+        col = i % (sample_num // 2)
+        axs = fig.add_subplot(gs[row, col])
+        row = i // 2
+        col = i % 2
+        axs.plot(t_list, msd[i] * 10**4, linewidth=4)
+        axs.plot(t_list, fit_func * 10**4, "--", linewidth=4)
+        axs.grid(True)
+        axs.set_title(
+            # f"MSD No.{i+1} | D={D_list[i]:.2e} | max_dist:{1000 * round(max_dist_list[i], 5)}" + r"[$\mu$m]",
+            f"MSD No.{i+1} | {round(len(msd[i]) * (1.0 / FrameRate_list[i]), 3)} s | D={D_list[i]:.2e} | max_dist:{round(1000 * max_dist_list[i], 5)} nm",
+            fontsize=font_size,
+        )
+        axs.set_xlabel("Δt(s)", fontsize=font_size)
+        axs.set_ylabel("MSD (×10$^{-10}$cm$^2$)", fontsize=font_size)
+        axs.tick_params(axis="both", which="major", labelsize=font_size)
+        axs.set_box_aspect(1)
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/MSD_2d.png")
     plt.close(fig)
 
 
@@ -682,7 +721,8 @@ def dev_plot_sd_FFT_with_rotation(freq_list, Amp_list, day):
     for i in range(sample_num):
         max_x_lim_list.append(max([freq_list[i][j][-1] for j in range(len(width_time_list))]))
 
-    fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
+    fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y + 2))
+    # fig, axs = plt.subplots(5, sample_num // 5, figsize=(15, 23))
     # Angular Velocisy
     for j in range(sample_num):
         row = j // 2
@@ -693,6 +733,7 @@ def dev_plot_sd_FFT_with_rotation(freq_list, Amp_list, day):
         axs[row, col].set_xlim(0, max_x_lim_list[j])
         axs[row, col].set_xlabel("Freqency [Hz]", fontsize=font_size)
         axs[row, col].set_ylabel("Amp", fontsize=font_size)
+        # axs[row, col].set_xscale("log")
         axs[row, col].set_yscale("log")
         axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
 
@@ -740,4 +781,27 @@ def dev_plot_fft_coordinates(X, Y, day):
             axs[row, 2 * col + j].tick_params(axis="both", which="major", labelsize=font_size)
     plt.tight_layout()
     plt.savefig(f"{save_dir}/{save_name}")
+    plt.close(fig)
+
+
+def dev_plot_max_dist_stat(max_dists, max_dists_all, day):
+    sample_num, _, _ = param.get_config(day)
+
+    save_dir = f"{param.save_dir_bef}/{day}/center_coordinate"
+    os.makedirs(save_dir, exist_ok=True)
+    mag = 1
+
+    fig, axs = plt.subplots(2, sample_num // 2, figsize=(50 * mag / 4, 20 * mag / 4))
+    axs = axs.flatten()
+    for i, data in enumerate(max_dists):
+        axs[i].boxplot(data * 1000, positions=[1])
+        axs[i].plot(2, max_dists_all[i] * 1000, "ro", markersize=8)
+        axs[i].set_title(f"No.{i+1} | max_dist={round(max_dists_all[i], 3)} | med:{round(np.median(data), 6)}")
+        axs[i].set_ylabel("Maximum distance moved [nm]", fontsize=font_size * mag / 2.1)
+        axs[i].set_xlabel("Time [s]", fontsize=font_size * mag / 2)
+        axs[i].set_xticks([1, 2])
+        axs[i].set_xticklabels(["0.5", "30"])
+        axs[i].set_xlim(0.5, 2.5)
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/max_dist_validation.png")
     plt.close(fig)

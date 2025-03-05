@@ -30,7 +30,7 @@ def evaluate_switching_averaged(angular_velocity_list_bef, day):
     for i in range(sample_num):
         add_av_data = []
         total_frame = len(angular_velocity_list_bef[i])
-        window_frame = int(window_width_sec * total_frame / total_time)
+        window_frame = int(window_width_sec * total_frame / total_time[i])
 
         for frame_i in range(int(total_frame - window_frame)):
             add_av_data.append(np.mean(angular_velocity_list_bef[i][frame_i : frame_i + window_frame]).astype(float))

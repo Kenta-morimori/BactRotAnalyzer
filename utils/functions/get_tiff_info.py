@@ -27,7 +27,7 @@ def get_timelist(day):
             file_list_sorted = sorted(file_list, key=extract_number)
 
             base_time = None
-            time_list = [0]
+            time_list = [0.0]
             for file_name in file_list_sorted:
                 file_path = os.path.join(data_dir, file_name)
                 if file_name.endswith(".tiff") or file_name.endswith(".tif"):

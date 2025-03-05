@@ -6,13 +6,19 @@ from utils import param  # noqa
 from utils.functions import (  # noqa
     frequency_analysis,
     get_angular_velocity,
+    get_tiff_info,
     input_data,
     make_evaluate_switching,
     make_graph,
+    rot_df_manage,
 )
 
 
 def main(day):
+    rot_df_manage.create_rot_df(day)
+    # make time list
+    get_tiff_info.get_timelist(day)
+
     # obtain centroid coordinates
     x_list, y_list = input_data.input_centroid_coordinate(day)
     # obtain angle, angular velocity

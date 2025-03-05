@@ -84,6 +84,8 @@ n_rotations = 30
 
 flag_evaluating_switching = True  # evaluate switching of rotation
 
+flag_evaluate_rotaion_center = True
+
 ## About Angular Velocity
 flag_evaluate_angular_velocity_abs = False  # Evaluate absolute values of angular velocity
 
