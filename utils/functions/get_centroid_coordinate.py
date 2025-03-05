@@ -222,6 +222,7 @@ def calculate_msd_sd(x_list, y_list, day):
 
     msd_list = []
     D_list = []  # diffusion coefficient
+    intercept_list = []
     for i in range(sample_num):
         x_arr = np.asarray(x_list[i])
         y_arr = np.asarray(y_list[i])
@@ -236,10 +237,11 @@ def calculate_msd_sd(x_list, y_list, day):
         msd_list.append(np.array(msds))
 
         time_lags = np.arange(1, n_frames) * dt
-        slope, _ = np.polyfit(time_lags, msds[1:], 1)
+        slope, intercept = np.polyfit(time_lags, msds[1:], 1)
         D_list.append(slope / 4.0)
+        intercept_list.append(intercept)
 
-    return np.array(msd_list, dtype=object), D_list
+    return np.array(msd_list, dtype=object), D_list, intercept_list
 
 
 def get_max_dist(x_list, y_list, day):
@@ -268,9 +270,34 @@ def fill_trailing_nan(row):
     if valid_idx.size == 0:
         return row
     last_valid_idx = valid_idx[-1]
-    row[last_valid_idx+1:] = row[last_valid_idx]
+    row[last_valid_idx + 1 :] = row[last_valid_idx]
 
     return row
+
+
+def save_msd(msd_2d, D_list, max_dist_list, day):
+    sample_num, _, FrameRate_list = param.get_config(day)
+    save_dir = f"{param.save_dir_bef}/{day}/center_coordinate/"
+    os.makedirs(save_dir, exist_ok=True)
+
+    # MSD
+    csv_save_dir = f"{save_dir}/center_msd.csv"
+    data = {}
+    for i in range(sample_num):
+        data[f"No.{i+1}_t"] = np.arange(0, len(msd_2d[i])) * (1.0 / FrameRate_list[i])
+        data[f"No.{i+1}_msd"] = msd_2d[i]
+    max_len = max(len(v) for v in data.values())
+    df = pd.DataFrame({k: list(v) + [None] * (max_len - len(v)) for k, v in data.items()})
+    df.to_csv(csv_save_dir, index=False)
+
+    # D_list, max_dist
+    csv_save_dir = f"{save_dir}/Diffusion.csv"
+    data = {}
+    for i in range(sample_num):
+        data[f"No.{i+1}_D"] = [D_list[i]]
+        data[f"No.{i+1}_max_dist"] = [max_dist_list[i]]
+    df = pd.DataFrame(data)
+    df.to_csv(csv_save_dir, index=False)
 
 
 def dev_get_max_dists(x_list, y_list, day, split_time=0.5):
@@ -281,13 +308,11 @@ def dev_get_max_dists(x_list, y_list, day, split_time=0.5):
     y_list = [row[~np.isnan(row)] for row in y_list]
 
     max_dist_list = []
-    print("*** Calculating maximum distance ***")
     for i in range(sample_num):
-        print(f"No.{i + 1}")
         x_arr_org = np.array(x_list[i])
         y_arr_org = np.array(y_list[i])
         time_arr = np.array(time_list[i])
-        time_arr = time_arr[:min(len(time_arr), len(x_arr_org), len(y_arr_org))]
+        time_arr = time_arr[: min(len(time_arr), len(x_arr_org), len(y_arr_org))]
 
         max_dists = []
         time_th = 0
@@ -371,13 +396,12 @@ def extract_centroid(day):
     if param.flag_evaluate_rotaion_center:
         max_dist_list = get_max_dist(center_x_arr, center_y_arr, day)
         # MSD
-        msd_2d, D_list = calculate_msd_sd(center_x_arr, center_y_arr, day)
-        make_graph.plot_msd(msd_2d, D_list, max_dist_list, day)
-        """
+        msd_2d, D_list, intercept_list = calculate_msd_sd(center_x_arr, center_y_arr, day)
+        make_graph.plot_msd(msd_2d, D_list, intercept_list, max_dist_list, day)
+        save_msd(msd_2d, D_list, max_dist_list, day)
         # dev
         max_dist_list_st = dev_get_max_dists(center_x_arr, center_y_arr, day)
         make_graph.dev_plot_max_dist_stat(max_dist_list_st, max_dist_list, day)
-        """
 
     # Completes missing values with the last value
     center_x_arr = np.apply_along_axis(fill_trailing_nan, 1, center_x_arr)

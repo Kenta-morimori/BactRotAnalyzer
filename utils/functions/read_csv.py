@@ -6,6 +6,7 @@ from utils import param
 
 import numpy as np
 
+
 def read_center_coordinates(day):
     csv_save_dir = f"{param.save_dir_bef}/{day}/center_coordinate/center_coordinate.csv"
     sample_num, _, _ = param.get_config(day)
