@@ -1,10 +1,9 @@
 from typing import List
 
+import numpy as np
 import pandas as pd
 
 from utils import param
-
-import numpy as np
 
 
 def read_center_coordinates(day):
