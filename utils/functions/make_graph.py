@@ -117,6 +117,41 @@ def plot_coordinate_with_center(x_list, y_list, center_x_list, center_y_list, da
     plt.close(fig)
 
 
+def plot_r(x_list, y_list, day, mode):
+    sample_num, _, _ = param.get_config(day)
+
+    save_dir = f"{param.save_dir_bef}/{day}/{mode}_coordinate"
+    os.makedirs(save_dir, exist_ok=True)
+
+    fig = plt.figure(figsize=(50 / 1.5, 20 / 1.5))
+    gs = gridspec.GridSpec(2, sample_num // 2, figure=fig, wspace=0.5, hspace=0.2)
+
+    time_list = read_csv.get_timelist(day)
+    for i in range(sample_num):
+        row = i // (sample_num // 2)
+        col = i % (sample_num // 2)
+        axs = fig.add_subplot(gs[row, col])
+
+        x_arr = np.array(x_list[i]) - x_list[i][0]
+        y_arr = np.array(y_list[i]) - y_list[i][0]
+        r_arr = np.sqrt(x_arr**2 + y_arr**2)
+
+        if mode == "center":
+            axs.plot(time_list[i][:len(r_arr)], r_arr * 10**3, linewidth=4)
+            axs.set_ylabel("r [nm]", fontsize=font_size)
+        else:
+            axs.plot(time_list[i][:len(r_arr)], r_arr, linewidth=4)
+            axs.set_ylabel("r [μm]", fontsize=font_size)
+        axs.grid(True)
+        axs.set_title(f"No.{i+1}", fontsize=font_size)
+        axs.set_xlabel("Time [s]", fontsize=font_size)
+        axs.tick_params(axis="both", which="major", labelsize=font_size)
+        axs.set_box_aspect(1)
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/r_timeseries.png")
+    plt.close(fig)
+
+
 def plot_msd(msd, D_list, intercept_list, max_dist_list, day):
     sample_num, FrameRate_list, _ = param.get_config(day)
 

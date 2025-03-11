@@ -394,6 +394,7 @@ def extract_centroid(day):
 
     # rotaion center analysis
     if param.flag_evaluate_rotaion_center:
+        make_graph.plot_r(center_x_arr, center_y_arr, day, "center")
         max_dist_list = get_max_dist(center_x_arr, center_y_arr, day)
         # MSD
         msd_2d, D_list, intercept_list = calculate_msd_sd(center_x_arr, center_y_arr, day)
@@ -417,6 +418,7 @@ def extract_centroid(day):
     save_center_of_rotation(save_dir, center_x_arr, center_y_arr)
     make_graph.plot_coordinate(center_x_arr, center_y_arr, day, "center")
     make_graph.plot_coordinate_with_center(x_arr_bef, y_arr_bef, center_x_arr, center_y_arr, day)
+    make_graph.plot_r(x_list_aft, y_list_aft, day, "centroid")
 
     # save long_axis, short_axis
     save_rot_axes(long_axis_arr, short_axis_arr, day)
