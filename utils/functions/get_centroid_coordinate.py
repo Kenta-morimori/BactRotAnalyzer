@@ -16,7 +16,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
 from utils import param
 from utils.features import ROTATION_FEATURES
-from utils.functions import frequency_analysis, make_graph, read_csv, rot_df_manage
+from utils.functions import frequency_analysis, make_graph, read_csv, rot_df_manage, clean_data
 
 
 def contours(img):
@@ -204,28 +204,35 @@ def get_ellipse_info(X, Y, index, day):
                 rest_data_num = len(time_arr) - len(center_x_list)
                 # center_x_list.extend([center_x] * rest_data_num)
                 # center_y_list.extend([center_y] * rest_data_num)
-                center_x_list.extend([np.NAN] * rest_data_num)
-                center_y_list.extend([np.NAN] * rest_data_num)
+                center_x_list.extend([np.mean(center_x_list)] * rest_data_num)
+                center_y_list.extend([np.mean(center_y_list)] * rest_data_num)
                 long_axis_list.extend([long_axis] * rest_data_num)
                 short_axis_list.extend([short_axis] * rest_data_num)
                 break
         if flag_warning:
             print(f"[Warning] No.{index + 1}   alfa / eig_val[0] is negative value")
-    return center_x_list, center_y_list, np.array(long_axis_list), np.array(short_axis_list)
+    return center_x_list, center_y_list, np.array(long_axis_list), np.array(short_axis_list), rest_data_num
 
 
-def calculate_msd_sd(x_list, y_list, day):
+def calculate_msd(x_arr, y_arr, rest_data_num_list, day):
     sample_num, FrameRate_list, _ = param.get_config(day)
-
-    x_list = [row[~np.isnan(row)] for row in x_list]
-    y_list = [row[~np.isnan(row)] for row in y_list]
 
     msd_list = []
     D_list = []  # diffusion coefficient
     intercept_list = []
     for i in range(sample_num):
-        x_arr = np.asarray(x_list[i])
-        y_arr = np.asarray(y_list[i])
+        if not isinstance(x_arr[i], np.ndarray):
+            x_arr_i = np.asarray(x_arr[i])
+        else:
+            x_arr_i = x_arr[i]
+        if not isinstance(y_arr[i], np.ndarray):
+            y_arr_i = np.asarray(y_arr[i])
+        else:
+            y_arr_i = y_arr[i]
+
+        x_arr_i = x_arr_i[:-rest_data_num_list[i]]
+        y_arr_i = y_arr_i[:-rest_data_num_list[i]]
+
         dt = 1.0 / FrameRate_list[i]
         n_frames = len(x_arr)
 
@@ -244,22 +251,40 @@ def calculate_msd_sd(x_list, y_list, day):
     return np.array(msd_list, dtype=object), D_list, intercept_list
 
 
-def get_max_dist(x_list, y_list, day):
+def get_max_dist(x_arr, y_arr, rest_data_num_list, day):
     sample_num, _, _ = param.get_config(day)
-    x_list = [row[~np.isnan(row)] for row in x_list]
-    y_list = [row[~np.isnan(row)] for row in y_list]
 
     max_dist_list = []
     print("*** Calculating maximum distance ***")
     for i in range(sample_num):
-        N = len(x_list[i])
+        if not isinstance(x_arr[i], np.ndarray):
+            x_arr_i = np.asarray(x_arr[i])
+        else:
+            x_arr_i = x_arr[i]
+        if not isinstance(y_arr[i], np.ndarray):
+            y_arr_i = np.asarray(y_arr[i])
+        else:
+            y_arr_i = y_arr[i]
+
+        x_arr_i = x_arr_i[:-rest_data_num_list[i]]
+        y_arr_i = y_arr_i[:-rest_data_num_list[i]]
+
+        # Check if lengths of x_list and y_list match
+        try:
+            if len(x_arr_i) != len(y_arr_i):
+                raise ValueError(f"Length mismatch in sample {i + 1}: x_list length is {len(x_arr_i)}, y_list length is {len(y_arr_i)}")
+        except ValueError as e:
+            print(e)
+            continue
+
+        N = len(x_arr_i)
         max_dist_sq = 0
         print(f"No.{i + 1}")
         for j in range(N):
             if (j + 1) % 1000 == 0:
                 print(f"{j + 1} / {N}")
             for k in range(j + 1, N):
-                dist_sq = (x_list[i][j] - x_list[i][k]) ** 2 + (y_list[i][j] - y_list[i][k]) ** 2
+                dist_sq = (x_arr_i[j] -  x_arr_i[k]) ** 2 + (y_arr_i[j] - y_arr_i[k]) ** 2
                 max_dist_sq = max(max_dist_sq, dist_sq)
         max_dist_list.append(np.sqrt(max_dist_sq))
     return max_dist_list
@@ -379,24 +404,42 @@ def extract_centroid(day):
     center_x_list, center_y_list = [], []
     long_axis_list, short_axis_list = [], []
     aspect_ratio_list = []
+    rest_data_num_list = []
+    if param.flag_correct_center_outlier:
+        center_x_list_bef, center_y_list_bef = [], []
     for i in range(sample_num):
-        center_x, center_y, long_axis, short_axis = get_ellipse_info(x_arr_bef[i], y_arr_bef[i], i, day)
-        center_x_list.append(center_x)
-        center_y_list.append(center_y)
+        center_x_bef, center_y_bef, long_axis, short_axis, rest_data_num = get_ellipse_info(x_arr_bef[i], y_arr_bef[i], i, day)
+
+        # Correct rotation center
+        if param.flag_correct_center_outlier:
+            center_x_list_bef.append(center_x_bef)
+            center_y_list_bef.append(center_y_bef)
+            center_x_aft = clean_data.correct_rotation_center(center_x_bef, i, day)
+            center_y_aft = clean_data.correct_rotation_center(center_y_bef, i, day)
+        else:
+            center_x_aft = center_x_bef
+            center_y_aft = center_y_bef
+
+        center_x_list.append(center_x_aft)
+        center_y_list.append(center_y_aft)
         long_axis_list.append(long_axis)
         short_axis_list.append(short_axis)
         aspect_ratio_list.append(short_axis / long_axis)
+        rest_data_num_list.append(rest_data_num)
     center_x_arr = np.array(center_x_list)
     center_y_arr = np.array(center_y_list)
     long_axis_arr = np.array(long_axis_list)
     short_axis_arr = np.array(short_axis_list)
     aspect_ratio_arr = np.array(aspect_ratio_list)
 
+    if param.flag_correct_center_outlier:
+        make_graph.plot_center_colleration(np.array(center_x_list_bef), np.array(center_y_list_bef), day)
+
     # rotaion center analysis
     if param.flag_evaluate_rotaion_center:
-        max_dist_list = get_max_dist(center_x_arr, center_y_arr, day)
+        max_dist_list = get_max_dist(center_x_arr, center_y_arr, rest_data_num_list, day)
         # MSD
-        msd_2d, D_list, intercept_list = calculate_msd_sd(center_x_arr, center_y_arr, day)
+        msd_2d, D_list, intercept_list = calculate_msd(center_x_arr, center_y_arr, rest_data_num_list, day)
         make_graph.plot_msd(msd_2d, D_list, intercept_list, max_dist_list, day)
         save_msd(msd_2d, D_list, max_dist_list, day)
         # dev

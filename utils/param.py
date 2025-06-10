@@ -85,17 +85,24 @@ n_rotations = 30
 flag_evaluating_switching = True  # evaluate switching of rotation
 
 flag_evaluate_rotaion_center = True
+flag_correct_center_outlier = True
+mode_correct_center_outlier = 1
+num_std_center = 2
+"""
+0: use TIFF time info
+1: use SD threshold
+"""
 
 ## About Angular Velocity
 flag_evaluate_angular_velocity_abs = False  # Evaluate absolute values of angular velocity
 
-flag_correct_av_outlier = True  # Trimming with thresholds
+flag_correct_av_outlier = False  # Correct drop data
 mode_correct_av_outlier = 1
 """
 0: use SD threshold
 1: use TIFF time info
 """
-num_std_dev = 8
+num_std_av = 8
 
 flag_av_completion = True  # Complement data
 mode_av_completion = 0
