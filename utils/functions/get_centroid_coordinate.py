@@ -16,7 +16,13 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
 from utils import param
 from utils.features import ROTATION_FEATURES
-from utils.functions import frequency_analysis, make_graph, read_csv, rot_df_manage, clean_data
+from utils.functions import (
+    clean_data,
+    frequency_analysis,
+    make_graph,
+    read_csv,
+    rot_df_manage,
+)
 
 
 def contours(img):
