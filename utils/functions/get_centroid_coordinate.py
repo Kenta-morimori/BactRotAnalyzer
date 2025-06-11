@@ -230,8 +230,8 @@ def calculate_msd(x_arr, y_arr, rest_data_num_list, day):
         else:
             y_arr_i = y_arr[i]
 
-        x_arr_i = x_arr_i[:-rest_data_num_list[i]]
-        y_arr_i = y_arr_i[:-rest_data_num_list[i]]
+        x_arr_i = x_arr_i[: -rest_data_num_list[i]]
+        y_arr_i = y_arr_i[: -rest_data_num_list[i]]
 
         dt = 1.0 / FrameRate_list[i]
         n_frames = len(x_arr)
@@ -266,13 +266,15 @@ def get_max_dist(x_arr, y_arr, rest_data_num_list, day):
         else:
             y_arr_i = y_arr[i]
 
-        x_arr_i = x_arr_i[:-rest_data_num_list[i]]
-        y_arr_i = y_arr_i[:-rest_data_num_list[i]]
+        x_arr_i = x_arr_i[: -rest_data_num_list[i]]
+        y_arr_i = y_arr_i[: -rest_data_num_list[i]]
 
         # Check if lengths of x_list and y_list match
         try:
             if len(x_arr_i) != len(y_arr_i):
-                raise ValueError(f"Length mismatch in sample {i + 1}: x_list length is {len(x_arr_i)}, y_list length is {len(y_arr_i)}")
+                raise ValueError(
+                    f"Length mismatch in sample {i + 1}: x_list length is {len(x_arr_i)}, y_list length is {len(y_arr_i)}"
+                )
         except ValueError as e:
             print(e)
             continue
@@ -284,7 +286,7 @@ def get_max_dist(x_arr, y_arr, rest_data_num_list, day):
             if (j + 1) % 1000 == 0:
                 print(f"{j + 1} / {N}")
             for k in range(j + 1, N):
-                dist_sq = (x_arr_i[j] -  x_arr_i[k]) ** 2 + (y_arr_i[j] - y_arr_i[k]) ** 2
+                dist_sq = (x_arr_i[j] - x_arr_i[k]) ** 2 + (y_arr_i[j] - y_arr_i[k]) ** 2
                 max_dist_sq = max(max_dist_sq, dist_sq)
         max_dist_list.append(np.sqrt(max_dist_sq))
     return max_dist_list
@@ -408,7 +410,9 @@ def extract_centroid(day):
     if param.flag_correct_center_outlier:
         center_x_list_bef, center_y_list_bef = [], []
     for i in range(sample_num):
-        center_x_bef, center_y_bef, long_axis, short_axis, rest_data_num = get_ellipse_info(x_arr_bef[i], y_arr_bef[i], i, day)
+        center_x_bef, center_y_bef, long_axis, short_axis, rest_data_num = get_ellipse_info(
+            x_arr_bef[i], y_arr_bef[i], i, day
+        )
 
         # Correct rotation center
         if param.flag_correct_center_outlier:

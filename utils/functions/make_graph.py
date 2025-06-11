@@ -293,10 +293,10 @@ def plot_center_colleration(center_x_list, center_y_list, day):
             ax_dist = axs[2 * i + 1]
             ax_dist.hist(center_list[i], bins=30, orientation="horizontal", alpha=0.7)
 
-            if mode_correct_av_outlier == 0:   # use TIFF time info
+            if mode_correct_av_outlier == 0:  # use TIFF time info
                 for complement_index in complement_index_list:
                     ax_dist.axhline(center_list[i][complement_index], color="red", linestyle="--")
-            elif mode_correct_av_outlier == 1: # use SD threshold
+            elif mode_correct_av_outlier == 1:  # use SD threshold
                 ax_dist.axhline(lower_th, color="red", linestyle="--")
                 ax_dist.axhline(upper_th, color="red", linestyle="--")
             ax_dist.set_title(f"Distribution No.{i + 1}")
