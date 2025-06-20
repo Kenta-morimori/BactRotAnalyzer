@@ -660,6 +660,48 @@ def plot_rot_param(day):
     plt.close(fig)
 
 
+def dev_plot_centroid_and_center(x_list, y_list, center_x_list, center_y_list, day):
+    sample_num, _, _ = param.get_config(day)
+    save_dir = f"{param.save_dir_bef}/{day}/centroid_coordinate"
+    os.makedirs(save_dir, exist_ok=True)
+    # plot x, y
+    time_list = read_csv.get_timelist(day)
+    for label in ["x", "y"]:
+        fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
+        plot_label = ["centroid", "center"]
+        if label == "x":
+            xy_list = x_list
+            xy_center_list = center_x_list
+            xy_plot_label = r"x [$\mu$m]"
+            xy_save_label = "x_coordinate_bef_correlation.png"
+        elif label == "y":
+            xy_list = y_list
+            xy_center_list = center_y_list
+            xy_plot_label = r"y [$\mu$m]"
+            xy_save_label = "y_coordinate_bef_correlationf.png"
+
+        for i in range(sample_num):
+            row = i // 2
+            col = i % 2
+            # 標準化    
+            xy_arr_norm = np.array(xy_list[i])
+            xy_arr_norm = (xy_arr_norm - np.nanmean(xy_arr_norm)) / np.nanstd(xy_arr_norm)
+            xy_center_arr_norm = np.array(xy_center_list[i])
+            xy_center_arr_norm = (xy_center_arr_norm - np.nanmean(xy_center_arr_norm)) / np.nanstd(xy_center_arr_norm)
+
+            axs[row, col].plot(time_list[i], xy_arr_norm, label="centroid", alpha=0.7)
+            axs[row, col].plot(time_list[i][:len(xy_center_arr_norm)], xy_center_arr_norm, label="center", alpha=0.7)
+            axs[row, col].grid(True)
+            axs[row, col].set_title(f"Trajectory No.{i+1}", fontsize=font_size)
+            axs[row, col].set_xlabel("Time [s]", fontsize=18)
+            axs[row, col].set_ylabel(xy_plot_label, fontsize=font_size)
+            axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
+        axs[row, col].legend(plot_label, loc="upper left", bbox_to_anchor=(1, 1))
+        plt.tight_layout()
+        plt.savefig(f"{save_dir}/{xy_save_label}")
+        plt.close(fig)
+
+
 def dev_plot_time_list(day):
     sample_num, _, _ = param.get_config(day)
     save_dir = f"{param.save_dir_bef}/{day}/dev"

@@ -444,6 +444,7 @@ def extract_centroid(day):
 
     if param.flag_correct_center_outlier:
         make_graph.plot_center_colleration(np.array(center_x_list_bef), np.array(center_y_list_bef), day)
+        make_graph.dev_plot_centroid_and_center(x_arr_bef, y_arr_bef, center_x_list_bef, center_y_list_bef, day)
 
     # rotaion center analysis
     if param.flag_evaluate_rotaion_center:
