@@ -44,16 +44,20 @@ def contours(img):
 # Save centroid coordinates (cannot be written in save2csv.py due to subprocess)
 def save_centorid_cordinate(save_dir, x_list, y_list):
     data_num = len(x_list)
-    data_len = len(x_list[0])
+    max_len = max(len(x_list[i]) for i in range(data_num))
     os.makedirs(save_dir, exist_ok=True)
     save_name = "centroid_coordinate.csv"
 
-    with open(f"{save_dir}/{save_name}", "w", newline="") as csvfile:
+    with open(os.path.join(save_dir, save_name), "w", newline="") as csvfile:
         csvwriter = csv.writer(csvfile)
         headers = [f"{xy}_{i+1}" for i in range(data_num) for xy in ("x", "y")]
         csvwriter.writerow(headers)
-        for i in range(data_len):
-            row = [item for pair in zip(x_list, y_list) for item in [pair[0][i], pair[1][i]]]
+        for i in range(max_len):
+            row = []
+            for j in range(data_num):
+                x_val = x_list[j][i] if i < len(x_list[j]) else ""
+                y_val = y_list[j][i] if i < len(y_list[j]) else ""
+                row.extend([x_val, y_val])
             csvwriter.writerow(row)
 
 
@@ -65,8 +69,8 @@ def save_center_of_rotation(save_dir, center_x_list, center_y_list):
 
     data = {}
     for i in range(sample_num):
-        data[f"No.{i+1}_x"] = center_x_list[i]
-        data[f"No.{i+1}_y"] = center_y_list[i]
+        data[f"No.{i+1}_x"] = pd.Series(center_x_list[i])
+        data[f"No.{i+1}_y"] = pd.Series(center_y_list[i])
     df = pd.DataFrame(data)
     df.to_csv(csv_save_dir, index=False)
 
@@ -163,6 +167,11 @@ def get_ellipse_info(X, Y, index, day):
     center_x_list, center_y_list = [], []
     long_axis_list, short_axis_list = [], []
 
+    if isinstance(X, list):
+        X = np.array(X)
+    if isinstance(Y, list):
+        Y = np.array(Y)
+
     if param.flag_get_angle_with_cell_direcetion:
         size = len(X)
         X = X.reshape([size, 1])
@@ -185,15 +194,16 @@ def get_ellipse_info(X, Y, index, day):
         y_freq_list, y_Amp_list = y_freq_list[y_mask], y_Amp_list[y_mask]
 
         width_time = param.n_rotations / max(x_freq_list[np.argmax(x_Amp_list)], y_freq_list[np.argmax(y_Amp_list)])
-        # width_time = 5
-        # width_time = time_arr[-1]
 
         start_time = 0.0
         flag_warning = False
         while 1:
             condition = (time_arr >= start_time) & (time_arr < start_time + width_time)
-            X_aft = X[condition].reshape([np.sum(condition), 1])
-            Y_aft = Y[condition].reshape([np.sum(condition), 1])
+            condition = np.array(condition, dtype=bool)
+            # X_aft = X[condition].reshape([np.sum(condition), 1])
+            # Y_aft = Y[condition].reshape([np.sum(condition), 1])
+            X_aft = X[condition].reshape(-1, 1)
+            Y_aft = Y[condition].reshape(-1, 1)
             center_x, center_y, long_axis, short_axis, add_flag_warning = calculate_ellipse_properties(
                 X_aft, Y_aft, index
             )
@@ -240,12 +250,12 @@ def calculate_msd(x_arr, y_arr, rest_data_num_list, day):
         y_arr_i = y_arr_i[: -rest_data_num_list[i]]
 
         dt = 1.0 / FrameRate_list[i]
-        n_frames = len(x_arr)
+        n_frames = len(x_arr_i)
 
         msds = [0.0]
         for tau in range(1, n_frames):
-            dx = x_arr[tau:] - x_arr[:-tau]
-            dy = y_arr[tau:] - y_arr[:-tau]
+            dx = x_arr_i[tau:] - x_arr_i[:-tau]
+            dy = y_arr_i[tau:] - y_arr_i[:-tau]
             msds.append(np.mean(dx**2 + dy**2))
         msd_list.append(np.array(msds))
 
@@ -299,12 +309,12 @@ def get_max_dist(x_arr, y_arr, rest_data_num_list, day):
 
 
 def fill_trailing_nan(row):
+    row = np.array(row, dtype=float)
     valid_idx = np.where(~np.isnan(row))[0]
     if valid_idx.size == 0:
         return row
     last_valid_idx = valid_idx[-1]
     row[last_valid_idx + 1 :] = row[last_valid_idx]
-
     return row
 
 
@@ -337,8 +347,8 @@ def dev_get_max_dists(x_list, y_list, day, split_time=0.5):
     sample_num, _, _ = param.get_config(day)
     time_list = read_csv.get_timelist(day)
 
-    x_list = [row[~np.isnan(row)] for row in x_list]
-    y_list = [row[~np.isnan(row)] for row in y_list]
+    x_list = [np.array(row)[~np.isnan(row)] for row in x_list]
+    y_list = [np.array(row)[~np.isnan(row)] for row in y_list]
 
     max_dist_list = []
     for i in range(sample_num):
@@ -373,13 +383,14 @@ def extract_centroid(day):
     px2um_x, px2um_y = param.get_px2um_config(day)
 
     file_name_list_bef = glob.glob(f"{input_dir}/*.avi")
-    sort_num: List[tuple[str, int]] = []
-    for x in file_name_list_bef:
-        match = re.search(r"_([0-9]+)\.avi$", x)
-        if match:
-            sort_num.append((x, int(match.group(1))))
-    sort_num.sort(key=lambda x: x[1])
-    file_name_list_aft: List[str] = [x[0] for x in sort_num]
+    file_name_list_aft = sorted(
+        file_name_list_bef,
+        key=lambda x: int(re.search(r'(\d+)', os.path.basename(x)).group())
+    )
+
+    if len(file_name_list_aft) == 0:
+        print("Error: No .avi files found in the input directory. Please check the path and file existence.")
+        sys.exit(1)
 
     x_list_bef, y_list_bef, angle_list = [], [], []
     for file_name in file_name_list_aft:
@@ -403,8 +414,8 @@ def extract_centroid(day):
             # adjust angle (-π/2 ~ π/2)
             add_angle_list_aft = adjust_angle(add_angle_list_bef)
             angle_list.append(add_angle_list_aft)
-    x_arr_bef = np.array(x_list_bef)
-    y_arr_bef = np.array(y_list_bef)
+    x_arr_bef = np.array(x_list_bef, dtype=object)
+    y_arr_bef = np.array(y_list_bef, dtype=object)
     # dev
     make_graph.dev_plot_fft_coordinates(x_arr_bef, y_arr_bef, day)
 
@@ -436,17 +447,18 @@ def extract_centroid(day):
         short_axis_list.append(short_axis)
         aspect_ratio_list.append(short_axis / long_axis)
         rest_data_num_list.append(rest_data_num)
-    center_x_arr = np.array(center_x_list)
-    center_y_arr = np.array(center_y_list)
-    long_axis_arr = np.array(long_axis_list)
-    short_axis_arr = np.array(short_axis_list)
-    aspect_ratio_arr = np.array(aspect_ratio_list)
+    center_x_arr = np.array(center_x_list, dtype=object)
+    center_y_arr = np.array(center_y_list, dtype=object)
+    long_axis_arr = np.array(long_axis_list, dtype=object)
+    short_axis_arr = np.array(short_axis_list, dtype=object)
+    aspect_ratio_arr = np.array(aspect_ratio_list, dtype=object)
 
     if param.flag_correct_center_outlier:
-        make_graph.plot_center_colleration(np.array(center_x_list_bef), np.array(center_y_list_bef), day)
+        make_graph.plot_center_colleration(np.array(center_x_list_bef, dtype=object), np.array(center_y_list_bef, dtype=object), day)
         make_graph.dev_plot_centroid_and_center(x_arr_bef, y_arr_bef, center_x_list_bef, center_y_list_bef, day)
 
     # rotaion center analysis
+    """
     if param.flag_evaluate_rotaion_center:
         max_dist_list = get_max_dist(center_x_arr, center_y_arr, rest_data_num_list, day)
         # MSD
@@ -456,21 +468,24 @@ def extract_centroid(day):
         # dev
         max_dist_list_st = dev_get_max_dists(center_x_arr, center_y_arr, day)
         make_graph.dev_plot_max_dist_stat(max_dist_list_st, max_dist_list, day)
+    """
 
     # Completes missing values with the last value
-    center_x_arr = np.apply_along_axis(fill_trailing_nan, 1, center_x_arr)
-    center_y_arr = np.apply_along_axis(fill_trailing_nan, 1, center_y_arr)
+    # center_x_arr = np.apply_along_axis(fill_trailing_nan, 1, center_x_arr)
+    # center_y_arr = np.apply_along_axis(fill_trailing_nan, 1, center_y_arr)
+    center_x_arr = np.array([fill_trailing_nan(row) for row in center_x_arr], dtype=object)
+    center_y_arr = np.array([fill_trailing_nan(row) for row in center_y_arr], dtype=object)
 
     # Fix x_list, y_list as center is zero
     x_list_aft = x_arr_bef - center_x_arr
     y_list_aft = y_arr_bef - center_y_arr
 
     # save
-    save_centorid_cordinate(save_dir, x_list_aft, y_list_aft)
-    make_graph.plot_coordinate(x_list_aft, y_list_aft, day, "centroid")
     save_center_of_rotation(save_dir, center_x_arr, center_y_arr)
     make_graph.plot_coordinate(center_x_arr, center_y_arr, day, "center")
     make_graph.plot_coordinate_with_center(x_arr_bef, y_arr_bef, center_x_arr, center_y_arr, day)
+    save_centorid_cordinate(save_dir, x_list_aft, y_list_aft)
+    make_graph.plot_coordinate(x_list_aft, y_list_aft, day, "centroid")
 
     # save long_axis, short_axis
     save_rot_axes(long_axis_arr, short_axis_arr, day)

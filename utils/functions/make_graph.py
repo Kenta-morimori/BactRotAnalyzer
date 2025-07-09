@@ -209,7 +209,7 @@ def plot_av_colleration(angular_velocity_list, day):
     save_dir = f"{param.save_dir_bef}/{day}/angular_velocity"
     os.makedirs(save_dir, exist_ok=True)
     time_list = read_csv.get_timelist(day)
-    jump_time_index_list = get_tiff_info.detect_time_jumps_with_sd(time_list, day)
+    jump_time_index_list = get_tiff_info.detect_time_jumps(time_list, day)
 
     fig, axs = plt.subplots(
         5,
@@ -274,8 +274,8 @@ def plot_center_colleration(center_x_list, center_y_list, day):
             ax_ts.plot(time_list[i][: len(center_list[i])], center_list[i])
 
             if mode_correct_av_outlier == 0:  # use TIFF time info
-                detect_time_jumps_with_sd = get_tiff_info.detect_time_jumps_with_sd(time_list, day)
-                complement_index_list = detect_time_jumps_with_sd[i]
+                jump_time_index_list = get_tiff_info.detect_time_jumps(time_list, day)
+                complement_index_list = jump_time_index_list[i]
             elif mode_correct_av_outlier == 1:  # use SD threshold
                 num_std_center = param.num_std_center
                 mean = np.nanmean(center_list[i])
@@ -673,12 +673,12 @@ def dev_plot_centroid_and_center(x_list, y_list, center_x_list, center_y_list, d
             xy_list = x_list
             xy_center_list = center_x_list
             xy_plot_label = r"x [$\mu$m]"
-            xy_save_label = "x_coordinate_bef_correlation.png"
+            xy_save_label = "x_centroid_center_bef_corr.png"
         elif label == "y":
             xy_list = y_list
             xy_center_list = center_y_list
             xy_plot_label = r"y [$\mu$m]"
-            xy_save_label = "y_coordinate_bef_correlationf.png"
+            xy_save_label = "y_centroid_center_bef_corr.png"
 
         for i in range(sample_num):
             row = i // 2
