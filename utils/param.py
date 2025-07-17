@@ -32,7 +32,10 @@ def get_config(day):
     if flag_use_tiff_log:
         csv_save_dir = f"{save_dir_bef}/{day}/time_list.csv"
         df = pd.read_csv(csv_save_dir)
-        time_list = df.values.T.tolist()
+        time_list = [
+            [x for x in df[col].dropna().tolist()]
+            for col in df.columns
+        ]
         for i in range(sample_num):
             FrameRate_list.append(len(time_list[i]) / time_list[i][-1])
             total_time_list.append(time_list[i][-1])
@@ -81,6 +84,7 @@ def get_tiffinfo_config(day):
 # flag_get_angle_with_cell_direcetion = True
 flag_get_angle_with_cell_direcetion = False  # beads assay
 n_rotations = 30
+min_ref_centroid_num = 20
 
 flag_evaluating_switching = True  # evaluate switching of rotation
 
@@ -97,10 +101,10 @@ num_std_center = 2
 flag_evaluate_angular_velocity_abs = False  # Evaluate absolute values of angular velocity
 
 flag_correct_av_outlier = False  # Correct drop data
-mode_correct_av_outlier = 1
+mode_correct_av_outlier = 0
 """
-0: use SD threshold
-1: use TIFF time info
+0: use TIFF time info
+1: use SD threshold
 """
 num_std_av = 8
 

@@ -85,6 +85,17 @@ def save_rot_axes(long_axis_list, short_axis_list, day):
     for i in range(sample_num):
         data[f"No.{i+1}_long_axis"] = long_axis_list[i]
         data[f"No.{i+1}_short_axis"] = short_axis_list[i]
+    # Pad lists to the same length if necessary
+    max_len = max(len(data[f"No.{i+1}_long_axis"]) for i in range(sample_num))
+    for i in range(sample_num):
+        long_axis = data[f"No.{i+1}_long_axis"]
+        short_axis = data[f"No.{i+1}_short_axis"]
+        if len(long_axis) < max_len:
+            long_axis = list(long_axis) + [None] * (max_len - len(long_axis))
+            data[f"No.{i+1}_long_axis"] = long_axis
+        if len(short_axis) < max_len:
+            short_axis = list(short_axis) + [None] * (max_len - len(short_axis))
+            data[f"No.{i+1}_short_axis"] = short_axis
     df = pd.DataFrame(data)
     df.to_csv(csv_save_dir, index=False)
 
@@ -120,7 +131,10 @@ def save_angle(save_dir, angle_list):
             csvwriter.writerow(row)
 
 
-def calculate_ellipse_properties(X, Y, index):
+def calculate_ellipse_properties(X, Y):
+    X = np.asarray(X, dtype=np.float64)
+    Y = np.asarray(Y, dtype=np.float64)
+
     A = np.hstack([X**2, X * Y, Y**2, X, Y])
     b = np.ones_like(X)
     x_arr = np.linalg.lstsq(A, b, rcond=None)[0].squeeze()
@@ -176,7 +190,7 @@ def get_ellipse_info(X, Y, index, day):
         size = len(X)
         X = X.reshape([size, 1])
         Y = Y.reshape([size, 1])
-        center_x, center_y, long_axis, short_axis, _ = calculate_ellipse_properties(X, Y, index)
+        center_x, center_y, long_axis, short_axis, _ = calculate_ellipse_properties(X, Y)
         center_x_list = [center_x] * size
         center_y_list = [center_y] * size
         long_axis_list = [long_axis] * size
@@ -200,13 +214,21 @@ def get_ellipse_info(X, Y, index, day):
         while 1:
             condition = (time_arr >= start_time) & (time_arr < start_time + width_time)
             condition = np.array(condition, dtype=bool)
-            # X_aft = X[condition].reshape([np.sum(condition), 1])
-            # Y_aft = Y[condition].reshape([np.sum(condition), 1])
             X_aft = X[condition].reshape(-1, 1)
             Y_aft = Y[condition].reshape(-1, 1)
-            center_x, center_y, long_axis, short_axis, add_flag_warning = calculate_ellipse_properties(
-                X_aft, Y_aft, index
-            )
+
+            # Set a threshold for the number of centroid coordinate data points.
+            if (len(X_aft) < param.min_ref_centroid_num) or (len(X_aft) < param.min_ref_centroid_num):
+                center_x = np.nan
+                center_y = np.nan
+                long_axis = np.nan
+                short_axis = np.nan
+                add_flag_warning = False
+            else:
+                center_x, center_y, long_axis, short_axis, add_flag_warning = calculate_ellipse_properties(
+                    X_aft, Y_aft
+                )
+
             center_x_list.append(center_x)
             center_y_list.append(center_y)
             long_axis_list.append(long_axis)
@@ -218,10 +240,21 @@ def get_ellipse_info(X, Y, index, day):
             # width_timeの幅でSDが算出できない場合break
             if start_time + width_time >= total_time[index]:
                 rest_data_num = len(time_arr) - len(center_x_list)
-                # center_x_list.extend([center_x] * rest_data_num)
-                # center_y_list.extend([center_y] * rest_data_num)
-                center_x_list.extend([np.mean(center_x_list)] * rest_data_num)
-                center_y_list.extend([np.mean(center_y_list)] * rest_data_num)
+
+                # Imputation of missing values
+                if np.isnan(center_x_list).any():
+                    valid_center_x = [v for v in center_x_list if not np.isnan(v)]
+                    mean_center_x = np.mean(valid_center_x) if valid_center_x else 0
+                    center_x_list = [mean_center_x if np.isnan(v) else v for v in center_x_list]
+                if np.isnan(center_y_list).any():
+                    valid_center_y = [v for v in center_y_list if not np.isnan(v)]
+                    mean_center_y = np.mean(valid_center_y) if valid_center_y else 0
+                    center_y_list = [mean_center_y if np.isnan(v) else v for v in center_y_list]
+    
+                # center_x_list.extend([np.mean(center_x_list)] * rest_data_num)
+                # center_y_list.extend([np.mean(center_y_list)] * rest_data_num)
+                center_x_list.extend([center_x_list[-1]] * rest_data_num)
+                center_y_list.extend([center_y_list[-1]] * rest_data_num)
                 long_axis_list.extend([long_axis] * rest_data_num)
                 short_axis_list.extend([short_axis] * rest_data_num)
                 break

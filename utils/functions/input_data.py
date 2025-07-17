@@ -4,8 +4,8 @@ import subprocess
 import pandas as pd
 
 from utils import param
-from utils.features import ROTATION_FEATURES
-from utils.functions import read_csv, rot_df_manage
+# from utils.features import ROTATION_FEATURES
+# from utils.functions import read_csv, rot_df_manage
 
 
 def input_centroid_coordinate(day):
@@ -14,20 +14,23 @@ def input_centroid_coordinate(day):
 
     if not os.path.isfile(csv_dir):
         subprocess.run(["Python3", "utils/functions/get_centroid_coordinate.py", day])
+    """
     else:
         long_axis_list, short_axis_list, aspect_ratio_list = read_csv.get_rot_axes(day)
         rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_long_axis, long_axis_list, day)
         rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_short_axis, short_axis_list, day)
         rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_aspect_ratio, aspect_ratio_list, day)
+    """
 
     x_list, y_list = [], []
     df = pd.read_csv(csv_dir)
     column_list = df.columns.tolist()
 
     for i, column_name in enumerate(column_list):
+        col_data = df[column_name].dropna()
         if i % 2 == 0:
-            x_list.append(df[column_name])
+            x_list.append(col_data)
         else:
-            y_list.append(df[column_name])
+            y_list.append(col_data)
 
     return x_list, y_list
