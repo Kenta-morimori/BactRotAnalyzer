@@ -1,8 +1,8 @@
 import csv
 import os
+from itertools import zip_longest
 
 import pandas as pd
-from itertools import zip_longest
 
 from utils import param
 
