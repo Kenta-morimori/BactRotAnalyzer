@@ -30,10 +30,7 @@ def get_timelist(day):
     csv_save_dir = f"{param.save_dir_bef}/{day}/time_list.csv"
 
     df = pd.read_csv(csv_save_dir)
-    time_list = [
-        [x for x in df[col].dropna().tolist()]
-        for col in df.columns
-    ]
+    time_list = [[x for x in df[col].dropna().tolist()] for col in df.columns]
 
     return time_list
 

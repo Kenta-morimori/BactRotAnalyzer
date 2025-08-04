@@ -32,10 +32,7 @@ def get_config(day):
     if flag_use_tiff_log:
         csv_save_dir = f"{save_dir_bef}/{day}/time_list.csv"
         df = pd.read_csv(csv_save_dir)
-        time_list = [
-            [x for x in df[col].dropna().tolist()]
-            for col in df.columns
-        ]
+        time_list = [[x for x in df[col].dropna().tolist()] for col in df.columns]
         for i in range(sample_num):
             FrameRate_list.append(len(time_list[i]) / time_list[i][-1])
             total_time_list.append(time_list[i][-1])

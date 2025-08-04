@@ -6,7 +6,6 @@ import re
 
 # import statistics
 import sys
-from typing import List
 
 import cv2
 import numpy as np
@@ -225,9 +224,7 @@ def get_ellipse_info(X, Y, index, day):
                 short_axis = np.nan
                 add_flag_warning = False
             else:
-                center_x, center_y, long_axis, short_axis, add_flag_warning = calculate_ellipse_properties(
-                    X_aft, Y_aft
-                )
+                center_x, center_y, long_axis, short_axis, add_flag_warning = calculate_ellipse_properties(X_aft, Y_aft)
 
             center_x_list.append(center_x)
             center_y_list.append(center_y)
@@ -237,7 +234,6 @@ def get_ellipse_info(X, Y, index, day):
                 flag_warning = True
 
             start_time += 1 / FrameRate[index]
-            # width_timeの幅でSDが算出できない場合break
             if start_time + width_time >= total_time[index]:
                 rest_data_num = len(time_arr) - len(center_x_list)
 
@@ -250,7 +246,7 @@ def get_ellipse_info(X, Y, index, day):
                     valid_center_y = [v for v in center_y_list if not np.isnan(v)]
                     mean_center_y = np.mean(valid_center_y) if valid_center_y else 0
                     center_y_list = [mean_center_y if np.isnan(v) else v for v in center_y_list]
-    
+
                 # center_x_list.extend([np.mean(center_x_list)] * rest_data_num)
                 # center_y_list.extend([np.mean(center_y_list)] * rest_data_num)
                 center_x_list.extend([center_x_list[-1]] * rest_data_num)
@@ -416,10 +412,7 @@ def extract_centroid(day):
     px2um_x, px2um_y = param.get_px2um_config(day)
 
     file_name_list_bef = glob.glob(f"{input_dir}/*.avi")
-    file_name_list_aft = sorted(
-        file_name_list_bef,
-        key=lambda x: int(re.search(r'(\d+)', os.path.basename(x)).group())
-    )
+    file_name_list_aft = sorted(file_name_list_bef, key=lambda x: int(re.findall(r"\d+", os.path.basename(x))[-1]))
 
     if len(file_name_list_aft) == 0:
         print("Error: No .avi files found in the input directory. Please check the path and file existence.")
@@ -487,7 +480,9 @@ def extract_centroid(day):
     aspect_ratio_arr = np.array(aspect_ratio_list, dtype=object)
 
     if param.flag_correct_center_outlier:
-        make_graph.plot_center_colleration(np.array(center_x_list_bef, dtype=object), np.array(center_y_list_bef, dtype=object), day)
+        make_graph.plot_center_colleration(
+            np.array(center_x_list_bef, dtype=object), np.array(center_y_list_bef, dtype=object), day
+        )
         make_graph.dev_plot_centroid_and_center(x_arr_bef, y_arr_bef, center_x_list_bef, center_y_list_bef, day)
 
     # rotaion center analysis

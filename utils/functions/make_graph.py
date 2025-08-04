@@ -664,6 +664,9 @@ def dev_plot_centroid_and_center(x_list, y_list, center_x_list, center_y_list, d
     sample_num, _, _ = param.get_config(day)
     save_dir = f"{param.save_dir_bef}/{day}/centroid_coordinate"
     os.makedirs(save_dir, exist_ok=True)
+
+    flag_normalize = False
+
     # plot x, y
     time_list = read_csv.get_timelist(day)
     for label in ["x", "y"]:
@@ -683,14 +686,21 @@ def dev_plot_centroid_and_center(x_list, y_list, center_x_list, center_y_list, d
         for i in range(sample_num):
             row = i // 2
             col = i % 2
-            # 標準化    
-            xy_arr_norm = np.array(xy_list[i])
-            xy_arr_norm = (xy_arr_norm - np.nanmean(xy_arr_norm)) / np.nanstd(xy_arr_norm)
-            xy_center_arr_norm = np.array(xy_center_list[i])
-            xy_center_arr_norm = (xy_center_arr_norm - np.nanmean(xy_center_arr_norm)) / np.nanstd(xy_center_arr_norm)
 
-            axs[row, col].plot(time_list[i], xy_arr_norm, label="centroid", alpha=0.7)
-            axs[row, col].plot(time_list[i][:len(xy_center_arr_norm)], xy_center_arr_norm, label="center", alpha=0.7)
+            if flag_normalize:
+                xy_arr_norm = np.array(xy_list[i])
+                xy_arr_norm = (xy_arr_norm - np.nanmean(xy_arr_norm)) / np.nanstd(xy_arr_norm)
+                xy_center_arr_norm = np.array(xy_center_list[i])
+                xy_center_arr_norm = (xy_center_arr_norm - np.nanmean(xy_center_arr_norm)) / np.nanstd(
+                    xy_center_arr_norm
+                )
+                axs[row, col].plot(time_list[i], xy_arr_norm, label="centroid", alpha=0.7)
+                axs[row, col].plot(
+                    time_list[i][: len(xy_center_arr_norm)], xy_center_arr_norm, label="center", alpha=0.7
+                )
+            else:
+                axs[row, col].plot(time_list[i], xy_list[i], label="centroid", alpha=0.7)
+                axs[row, col].plot(time_list[i][: len(xy_center_list[i])], xy_center_list[i], label="center", alpha=0.7)
             axs[row, col].grid(True)
             axs[row, col].set_title(f"Trajectory No.{i+1}", fontsize=font_size)
             axs[row, col].set_xlabel("Time [s]", fontsize=18)
