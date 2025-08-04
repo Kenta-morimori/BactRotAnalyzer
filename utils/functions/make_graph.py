@@ -209,7 +209,7 @@ def plot_av_colleration(angular_velocity_list, day):
     save_dir = f"{param.save_dir_bef}/{day}/angular_velocity"
     os.makedirs(save_dir, exist_ok=True)
     time_list = read_csv.get_timelist(day)
-    jump_time_index_list = get_tiff_info.detect_time_jumps_with_sd(time_list, day)
+    jump_time_index_list = get_tiff_info.detect_time_jumps(time_list, day)
 
     fig, axs = plt.subplots(
         5,
@@ -225,11 +225,11 @@ def plot_av_colleration(angular_velocity_list, day):
         ax_ts.set_xlim(0, time_list[i][len(angular_velocity_list[i])])
 
         if mode_correct_av_outlier == 0:  # use SD threshold
-            num_std_dev = param.num_std_dev
+            num_std_av = param.num_std_av
             mean = np.mean(angular_velocity_list[i])
             std_dev = np.std(angular_velocity_list[i])
-            lower_th = mean - num_std_dev * std_dev
-            upper_th = mean + num_std_dev * std_dev
+            lower_th = mean - num_std_av * std_dev
+            upper_th = mean + num_std_av * std_dev
             ax_ts.axhline(lower_th, color="red", linestyle="--")
             ax_ts.axhline(upper_th, color="red", linestyle="--")
         elif mode_correct_av_outlier == 1:  # use TIFF time info
@@ -251,6 +251,58 @@ def plot_av_colleration(angular_velocity_list, day):
     plt.tight_layout()
     plt.savefig(f"{save_dir}/angular-velocity_outlier.png")
     plt.close(fig)
+
+
+def plot_center_colleration(center_x_list, center_y_list, day):
+    sample_num, _, _ = param.get_config(day)
+    mode_correct_av_outlier = param.mode_correct_av_outlier
+    save_dir = f"{param.save_dir_bef}/{day}/center_coordinate"
+    os.makedirs(save_dir, exist_ok=True)
+
+    time_list = read_csv.get_timelist(day)
+    for center_i, center_list in enumerate([center_x_list, center_y_list]):
+        fig, axs = plt.subplots(
+            5,
+            2 * sample_num // 5,
+            figsize=(fig_size_x, fig_size_y),
+            gridspec_kw={"width_ratios": [5, 1] * (sample_num // 5)},
+        )
+        axs = axs.flatten()
+        for i in range(sample_num):
+            # Time series plot (left plot)
+            ax_ts = axs[2 * i]
+            ax_ts.plot(time_list[i][: len(center_list[i])], center_list[i])
+
+            if mode_correct_av_outlier == 0:  # use TIFF time info
+                jump_time_index_list = get_tiff_info.detect_time_jumps(time_list, day)
+                complement_index_list = jump_time_index_list[i]
+            elif mode_correct_av_outlier == 1:  # use SD threshold
+                num_std_center = param.num_std_center
+                mean = np.nanmean(center_list[i])
+                std_dev = np.nanstd(center_list[i])
+                lower_th = mean - num_std_center * std_dev
+                upper_th = mean + num_std_center * std_dev
+                complement_index_list = [i for i, x in enumerate(center_list[i]) if x < lower_th or upper_th < x]
+
+            for complement_index in complement_index_list:
+                ax_ts.axvline(time_list[i][complement_index], color="red", linestyle="--")
+
+            ax_ts.set_title(f"Angular Velocity No.{i + 1}")
+
+            # Distribution plot (right plot)
+            ax_dist = axs[2 * i + 1]
+            ax_dist.hist(center_list[i], bins=30, orientation="horizontal", alpha=0.7)
+
+            if mode_correct_av_outlier == 0:  # use TIFF time info
+                for complement_index in complement_index_list:
+                    ax_dist.axhline(center_list[i][complement_index], color="red", linestyle="--")
+            elif mode_correct_av_outlier == 1:  # use SD threshold
+                ax_dist.axhline(lower_th, color="red", linestyle="--")
+                ax_dist.axhline(upper_th, color="red", linestyle="--")
+            ax_dist.set_title(f"Distribution No.{i + 1}")
+        plt.tight_layout()
+        plt.savefig(f"{save_dir}/center_outlier.png")
+        plt.close(fig)
 
 
 def plot_angular_velocity_rot_part(angular_velocity_list, th_list, th_list_means, th_list_median, day):
@@ -606,6 +658,58 @@ def plot_rot_param(day):
     plt.tight_layout()
     plt.savefig(f"{save_dir}/rot_param_relation.png")
     plt.close(fig)
+
+
+def dev_plot_centroid_and_center(x_list, y_list, center_x_list, center_y_list, day):
+    sample_num, _, _ = param.get_config(day)
+    save_dir = f"{param.save_dir_bef}/{day}/centroid_coordinate"
+    os.makedirs(save_dir, exist_ok=True)
+
+    flag_normalize = False
+
+    # plot x, y
+    time_list = read_csv.get_timelist(day)
+    for label in ["x", "y"]:
+        fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
+        plot_label = ["centroid", "center"]
+        if label == "x":
+            xy_list = x_list
+            xy_center_list = center_x_list
+            xy_plot_label = r"x [$\mu$m]"
+            xy_save_label = "x_centroid_center_bef_corr.png"
+        elif label == "y":
+            xy_list = y_list
+            xy_center_list = center_y_list
+            xy_plot_label = r"y [$\mu$m]"
+            xy_save_label = "y_centroid_center_bef_corr.png"
+
+        for i in range(sample_num):
+            row = i // 2
+            col = i % 2
+
+            if flag_normalize:
+                xy_arr_norm = np.array(xy_list[i])
+                xy_arr_norm = (xy_arr_norm - np.nanmean(xy_arr_norm)) / np.nanstd(xy_arr_norm)
+                xy_center_arr_norm = np.array(xy_center_list[i])
+                xy_center_arr_norm = (xy_center_arr_norm - np.nanmean(xy_center_arr_norm)) / np.nanstd(
+                    xy_center_arr_norm
+                )
+                axs[row, col].plot(time_list[i], xy_arr_norm, label="centroid", alpha=0.7)
+                axs[row, col].plot(
+                    time_list[i][: len(xy_center_arr_norm)], xy_center_arr_norm, label="center", alpha=0.7
+                )
+            else:
+                axs[row, col].plot(time_list[i], xy_list[i], label="centroid", alpha=0.7)
+                axs[row, col].plot(time_list[i][: len(xy_center_list[i])], xy_center_list[i], label="center", alpha=0.7)
+            axs[row, col].grid(True)
+            axs[row, col].set_title(f"Trajectory No.{i+1}", fontsize=font_size)
+            axs[row, col].set_xlabel("Time [s]", fontsize=18)
+            axs[row, col].set_ylabel(xy_plot_label, fontsize=font_size)
+            axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
+        axs[row, col].legend(plot_label, loc="upper left", bbox_to_anchor=(1, 1))
+        plt.tight_layout()
+        plt.savefig(f"{save_dir}/{xy_save_label}")
+        plt.close(fig)
 
 
 def dev_plot_time_list(day):

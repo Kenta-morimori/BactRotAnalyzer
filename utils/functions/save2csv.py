@@ -1,5 +1,6 @@
 import csv
 import os
+from itertools import zip_longest
 
 import pandas as pd
 
@@ -9,12 +10,14 @@ from utils import param
 def save_time_list(time_list, day):
     save_dir = f"{param.save_dir_bef}/{day}/"
     os.makedirs(save_dir, exist_ok=True)
+
     header = [f"No.{i+1}" for i in range(len(time_list))]
-    csv_save_dir = f"{param.save_dir_bef}/{day}/time_list.csv"
-    with open(csv_save_dir, "w", newline="") as csvfile:
+    csv_save_path = os.path.join(save_dir, "time_list.csv")
+
+    with open(csv_save_path, "w", newline="") as csvfile:
         csvwriter = csv.writer(csvfile)
         csvwriter.writerow(header)
-        for row in zip(*time_list):
+        for row in zip_longest(*time_list, fillvalue=None):
             csvwriter.writerow(row)
 
 

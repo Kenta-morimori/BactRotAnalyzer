@@ -6,7 +6,6 @@ import re
 
 # import statistics
 import sys
-from typing import List
 
 import cv2
 import numpy as np
@@ -16,7 +15,13 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
 from utils import param
 from utils.features import ROTATION_FEATURES
-from utils.functions import frequency_analysis, make_graph, read_csv, rot_df_manage
+from utils.functions import (
+    clean_data,
+    frequency_analysis,
+    make_graph,
+    read_csv,
+    rot_df_manage,
+)
 
 
 def contours(img):
@@ -38,16 +43,20 @@ def contours(img):
 # Save centroid coordinates (cannot be written in save2csv.py due to subprocess)
 def save_centorid_cordinate(save_dir, x_list, y_list):
     data_num = len(x_list)
-    data_len = len(x_list[0])
+    max_len = max(len(x_list[i]) for i in range(data_num))
     os.makedirs(save_dir, exist_ok=True)
     save_name = "centroid_coordinate.csv"
 
-    with open(f"{save_dir}/{save_name}", "w", newline="") as csvfile:
+    with open(os.path.join(save_dir, save_name), "w", newline="") as csvfile:
         csvwriter = csv.writer(csvfile)
         headers = [f"{xy}_{i+1}" for i in range(data_num) for xy in ("x", "y")]
         csvwriter.writerow(headers)
-        for i in range(data_len):
-            row = [item for pair in zip(x_list, y_list) for item in [pair[0][i], pair[1][i]]]
+        for i in range(max_len):
+            row = []
+            for j in range(data_num):
+                x_val = x_list[j][i] if i < len(x_list[j]) else ""
+                y_val = y_list[j][i] if i < len(y_list[j]) else ""
+                row.extend([x_val, y_val])
             csvwriter.writerow(row)
 
 
@@ -59,8 +68,8 @@ def save_center_of_rotation(save_dir, center_x_list, center_y_list):
 
     data = {}
     for i in range(sample_num):
-        data[f"No.{i+1}_x"] = center_x_list[i]
-        data[f"No.{i+1}_y"] = center_y_list[i]
+        data[f"No.{i+1}_x"] = pd.Series(center_x_list[i])
+        data[f"No.{i+1}_y"] = pd.Series(center_y_list[i])
     df = pd.DataFrame(data)
     df.to_csv(csv_save_dir, index=False)
 
@@ -75,6 +84,17 @@ def save_rot_axes(long_axis_list, short_axis_list, day):
     for i in range(sample_num):
         data[f"No.{i+1}_long_axis"] = long_axis_list[i]
         data[f"No.{i+1}_short_axis"] = short_axis_list[i]
+    # Pad lists to the same length if necessary
+    max_len = max(len(data[f"No.{i+1}_long_axis"]) for i in range(sample_num))
+    for i in range(sample_num):
+        long_axis = data[f"No.{i+1}_long_axis"]
+        short_axis = data[f"No.{i+1}_short_axis"]
+        if len(long_axis) < max_len:
+            long_axis = list(long_axis) + [None] * (max_len - len(long_axis))
+            data[f"No.{i+1}_long_axis"] = long_axis
+        if len(short_axis) < max_len:
+            short_axis = list(short_axis) + [None] * (max_len - len(short_axis))
+            data[f"No.{i+1}_short_axis"] = short_axis
     df = pd.DataFrame(data)
     df.to_csv(csv_save_dir, index=False)
 
@@ -110,7 +130,10 @@ def save_angle(save_dir, angle_list):
             csvwriter.writerow(row)
 
 
-def calculate_ellipse_properties(X, Y, index):
+def calculate_ellipse_properties(X, Y):
+    X = np.asarray(X, dtype=np.float64)
+    Y = np.asarray(Y, dtype=np.float64)
+
     A = np.hstack([X**2, X * Y, Y**2, X, Y])
     b = np.ones_like(X)
     x_arr = np.linalg.lstsq(A, b, rcond=None)[0].squeeze()
@@ -157,11 +180,16 @@ def get_ellipse_info(X, Y, index, day):
     center_x_list, center_y_list = [], []
     long_axis_list, short_axis_list = [], []
 
+    if isinstance(X, list):
+        X = np.array(X)
+    if isinstance(Y, list):
+        Y = np.array(Y)
+
     if param.flag_get_angle_with_cell_direcetion:
         size = len(X)
         X = X.reshape([size, 1])
         Y = Y.reshape([size, 1])
-        center_x, center_y, long_axis, short_axis, _ = calculate_ellipse_properties(X, Y, index)
+        center_x, center_y, long_axis, short_axis, _ = calculate_ellipse_properties(X, Y)
         center_x_list = [center_x] * size
         center_y_list = [center_y] * size
         long_axis_list = [long_axis] * size
@@ -179,18 +207,25 @@ def get_ellipse_info(X, Y, index, day):
         y_freq_list, y_Amp_list = y_freq_list[y_mask], y_Amp_list[y_mask]
 
         width_time = param.n_rotations / max(x_freq_list[np.argmax(x_Amp_list)], y_freq_list[np.argmax(y_Amp_list)])
-        # width_time = 5
-        # width_time = time_arr[-1]
 
         start_time = 0.0
         flag_warning = False
         while 1:
             condition = (time_arr >= start_time) & (time_arr < start_time + width_time)
-            X_aft = X[condition].reshape([np.sum(condition), 1])
-            Y_aft = Y[condition].reshape([np.sum(condition), 1])
-            center_x, center_y, long_axis, short_axis, add_flag_warning = calculate_ellipse_properties(
-                X_aft, Y_aft, index
-            )
+            condition = np.array(condition, dtype=bool)
+            X_aft = X[condition].reshape(-1, 1)
+            Y_aft = Y[condition].reshape(-1, 1)
+
+            # Set a threshold for the number of centroid coordinate data points.
+            if (len(X_aft) < param.min_ref_centroid_num) or (len(X_aft) < param.min_ref_centroid_num):
+                center_x = np.nan
+                center_y = np.nan
+                long_axis = np.nan
+                short_axis = np.nan
+                add_flag_warning = False
+            else:
+                center_x, center_y, long_axis, short_axis, add_flag_warning = calculate_ellipse_properties(X_aft, Y_aft)
+
             center_x_list.append(center_x)
             center_y_list.append(center_y)
             long_axis_list.append(long_axis)
@@ -199,40 +234,57 @@ def get_ellipse_info(X, Y, index, day):
                 flag_warning = True
 
             start_time += 1 / FrameRate[index]
-            # width_timeの幅でSDが算出できない場合break
             if start_time + width_time >= total_time[index]:
                 rest_data_num = len(time_arr) - len(center_x_list)
-                # center_x_list.extend([center_x] * rest_data_num)
-                # center_y_list.extend([center_y] * rest_data_num)
-                center_x_list.extend([np.NAN] * rest_data_num)
-                center_y_list.extend([np.NAN] * rest_data_num)
+
+                # Imputation of missing values
+                if np.isnan(center_x_list).any():
+                    valid_center_x = [v for v in center_x_list if not np.isnan(v)]
+                    mean_center_x = np.mean(valid_center_x) if valid_center_x else 0
+                    center_x_list = [mean_center_x if np.isnan(v) else v for v in center_x_list]
+                if np.isnan(center_y_list).any():
+                    valid_center_y = [v for v in center_y_list if not np.isnan(v)]
+                    mean_center_y = np.mean(valid_center_y) if valid_center_y else 0
+                    center_y_list = [mean_center_y if np.isnan(v) else v for v in center_y_list]
+
+                # center_x_list.extend([np.mean(center_x_list)] * rest_data_num)
+                # center_y_list.extend([np.mean(center_y_list)] * rest_data_num)
+                center_x_list.extend([center_x_list[-1]] * rest_data_num)
+                center_y_list.extend([center_y_list[-1]] * rest_data_num)
                 long_axis_list.extend([long_axis] * rest_data_num)
                 short_axis_list.extend([short_axis] * rest_data_num)
                 break
         if flag_warning:
             print(f"[Warning] No.{index + 1}   alfa / eig_val[0] is negative value")
-    return center_x_list, center_y_list, np.array(long_axis_list), np.array(short_axis_list)
+    return center_x_list, center_y_list, np.array(long_axis_list), np.array(short_axis_list), rest_data_num
 
 
-def calculate_msd_sd(x_list, y_list, day):
+def calculate_msd(x_arr, y_arr, rest_data_num_list, day):
     sample_num, FrameRate_list, _ = param.get_config(day)
-
-    x_list = [row[~np.isnan(row)] for row in x_list]
-    y_list = [row[~np.isnan(row)] for row in y_list]
 
     msd_list = []
     D_list = []  # diffusion coefficient
     intercept_list = []
     for i in range(sample_num):
-        x_arr = np.asarray(x_list[i])
-        y_arr = np.asarray(y_list[i])
+        if not isinstance(x_arr[i], np.ndarray):
+            x_arr_i = np.asarray(x_arr[i])
+        else:
+            x_arr_i = x_arr[i]
+        if not isinstance(y_arr[i], np.ndarray):
+            y_arr_i = np.asarray(y_arr[i])
+        else:
+            y_arr_i = y_arr[i]
+
+        x_arr_i = x_arr_i[: -rest_data_num_list[i]]
+        y_arr_i = y_arr_i[: -rest_data_num_list[i]]
+
         dt = 1.0 / FrameRate_list[i]
-        n_frames = len(x_arr)
+        n_frames = len(x_arr_i)
 
         msds = [0.0]
         for tau in range(1, n_frames):
-            dx = x_arr[tau:] - x_arr[:-tau]
-            dy = y_arr[tau:] - y_arr[:-tau]
+            dx = x_arr_i[tau:] - x_arr_i[:-tau]
+            dy = y_arr_i[tau:] - y_arr_i[:-tau]
             msds.append(np.mean(dx**2 + dy**2))
         msd_list.append(np.array(msds))
 
@@ -244,34 +296,54 @@ def calculate_msd_sd(x_list, y_list, day):
     return np.array(msd_list, dtype=object), D_list, intercept_list
 
 
-def get_max_dist(x_list, y_list, day):
+def get_max_dist(x_arr, y_arr, rest_data_num_list, day):
     sample_num, _, _ = param.get_config(day)
-    x_list = [row[~np.isnan(row)] for row in x_list]
-    y_list = [row[~np.isnan(row)] for row in y_list]
 
     max_dist_list = []
     print("*** Calculating maximum distance ***")
     for i in range(sample_num):
-        N = len(x_list[i])
+        if not isinstance(x_arr[i], np.ndarray):
+            x_arr_i = np.asarray(x_arr[i])
+        else:
+            x_arr_i = x_arr[i]
+        if not isinstance(y_arr[i], np.ndarray):
+            y_arr_i = np.asarray(y_arr[i])
+        else:
+            y_arr_i = y_arr[i]
+
+        x_arr_i = x_arr_i[: -rest_data_num_list[i]]
+        y_arr_i = y_arr_i[: -rest_data_num_list[i]]
+
+        # Check if lengths of x_list and y_list match
+        try:
+            if len(x_arr_i) != len(y_arr_i):
+                raise ValueError(
+                    f"Length mismatch in sample {i + 1}: x_list length is {len(x_arr_i)}, y_list length is {len(y_arr_i)}"
+                )
+        except ValueError as e:
+            print(e)
+            continue
+
+        N = len(x_arr_i)
         max_dist_sq = 0
         print(f"No.{i + 1}")
         for j in range(N):
             if (j + 1) % 1000 == 0:
                 print(f"{j + 1} / {N}")
             for k in range(j + 1, N):
-                dist_sq = (x_list[i][j] - x_list[i][k]) ** 2 + (y_list[i][j] - y_list[i][k]) ** 2
+                dist_sq = (x_arr_i[j] - x_arr_i[k]) ** 2 + (y_arr_i[j] - y_arr_i[k]) ** 2
                 max_dist_sq = max(max_dist_sq, dist_sq)
         max_dist_list.append(np.sqrt(max_dist_sq))
     return max_dist_list
 
 
 def fill_trailing_nan(row):
+    row = np.array(row, dtype=float)
     valid_idx = np.where(~np.isnan(row))[0]
     if valid_idx.size == 0:
         return row
     last_valid_idx = valid_idx[-1]
     row[last_valid_idx + 1 :] = row[last_valid_idx]
-
     return row
 
 
@@ -304,8 +376,8 @@ def dev_get_max_dists(x_list, y_list, day, split_time=0.5):
     sample_num, _, _ = param.get_config(day)
     time_list = read_csv.get_timelist(day)
 
-    x_list = [row[~np.isnan(row)] for row in x_list]
-    y_list = [row[~np.isnan(row)] for row in y_list]
+    x_list = [np.array(row)[~np.isnan(row)] for row in x_list]
+    y_list = [np.array(row)[~np.isnan(row)] for row in y_list]
 
     max_dist_list = []
     for i in range(sample_num):
@@ -340,13 +412,11 @@ def extract_centroid(day):
     px2um_x, px2um_y = param.get_px2um_config(day)
 
     file_name_list_bef = glob.glob(f"{input_dir}/*.avi")
-    sort_num: List[tuple[str, int]] = []
-    for x in file_name_list_bef:
-        match = re.search(r"_([0-9]+)\.avi$", x)
-        if match:
-            sort_num.append((x, int(match.group(1))))
-    sort_num.sort(key=lambda x: x[1])
-    file_name_list_aft: List[str] = [x[0] for x in sort_num]
+    file_name_list_aft = sorted(file_name_list_bef, key=lambda x: int(re.findall(r"\d+", os.path.basename(x))[-1]))
+
+    if len(file_name_list_aft) == 0:
+        print("Error: No .avi files found in the input directory. Please check the path and file existence.")
+        sys.exit(1)
 
     x_list_bef, y_list_bef, angle_list = [], [], []
     for file_name in file_name_list_aft:
@@ -370,8 +440,8 @@ def extract_centroid(day):
             # adjust angle (-π/2 ~ π/2)
             add_angle_list_aft = adjust_angle(add_angle_list_bef)
             angle_list.append(add_angle_list_aft)
-    x_arr_bef = np.array(x_list_bef)
-    y_arr_bef = np.array(y_list_bef)
+    x_arr_bef = np.array(x_list_bef, dtype=object)
+    y_arr_bef = np.array(y_list_bef, dtype=object)
     # dev
     make_graph.dev_plot_fft_coordinates(x_arr_bef, y_arr_bef, day)
 
@@ -379,44 +449,71 @@ def extract_centroid(day):
     center_x_list, center_y_list = [], []
     long_axis_list, short_axis_list = [], []
     aspect_ratio_list = []
+    rest_data_num_list = []
+    if param.flag_correct_center_outlier:
+        center_x_list_bef, center_y_list_bef = [], []
     for i in range(sample_num):
-        center_x, center_y, long_axis, short_axis = get_ellipse_info(x_arr_bef[i], y_arr_bef[i], i, day)
-        center_x_list.append(center_x)
-        center_y_list.append(center_y)
+        center_x_bef, center_y_bef, long_axis, short_axis, rest_data_num = get_ellipse_info(
+            x_arr_bef[i], y_arr_bef[i], i, day
+        )
+
+        # Correct rotation center
+        if param.flag_correct_center_outlier:
+            center_x_list_bef.append(center_x_bef)
+            center_y_list_bef.append(center_y_bef)
+            center_x_aft = clean_data.correct_rotation_center(center_x_bef, i, day)
+            center_y_aft = clean_data.correct_rotation_center(center_y_bef, i, day)
+        else:
+            center_x_aft = center_x_bef
+            center_y_aft = center_y_bef
+
+        center_x_list.append(center_x_aft)
+        center_y_list.append(center_y_aft)
         long_axis_list.append(long_axis)
         short_axis_list.append(short_axis)
         aspect_ratio_list.append(short_axis / long_axis)
-    center_x_arr = np.array(center_x_list)
-    center_y_arr = np.array(center_y_list)
-    long_axis_arr = np.array(long_axis_list)
-    short_axis_arr = np.array(short_axis_list)
-    aspect_ratio_arr = np.array(aspect_ratio_list)
+        rest_data_num_list.append(rest_data_num)
+    center_x_arr = np.array(center_x_list, dtype=object)
+    center_y_arr = np.array(center_y_list, dtype=object)
+    long_axis_arr = np.array(long_axis_list, dtype=object)
+    short_axis_arr = np.array(short_axis_list, dtype=object)
+    aspect_ratio_arr = np.array(aspect_ratio_list, dtype=object)
+
+    if param.flag_correct_center_outlier:
+        make_graph.plot_center_colleration(
+            np.array(center_x_list_bef, dtype=object), np.array(center_y_list_bef, dtype=object), day
+        )
+        make_graph.dev_plot_centroid_and_center(x_arr_bef, y_arr_bef, center_x_list_bef, center_y_list_bef, day)
 
     # rotaion center analysis
+    """
     if param.flag_evaluate_rotaion_center:
-        max_dist_list = get_max_dist(center_x_arr, center_y_arr, day)
+        max_dist_list = get_max_dist(center_x_arr, center_y_arr, rest_data_num_list, day)
         # MSD
-        msd_2d, D_list, intercept_list = calculate_msd_sd(center_x_arr, center_y_arr, day)
+        msd_2d, D_list, intercept_list = calculate_msd(center_x_arr, center_y_arr, rest_data_num_list, day)
         make_graph.plot_msd(msd_2d, D_list, intercept_list, max_dist_list, day)
         save_msd(msd_2d, D_list, max_dist_list, day)
         # dev
         max_dist_list_st = dev_get_max_dists(center_x_arr, center_y_arr, day)
         make_graph.dev_plot_max_dist_stat(max_dist_list_st, max_dist_list, day)
+    """
 
     # Completes missing values with the last value
-    center_x_arr = np.apply_along_axis(fill_trailing_nan, 1, center_x_arr)
-    center_y_arr = np.apply_along_axis(fill_trailing_nan, 1, center_y_arr)
+    # center_x_arr = np.apply_along_axis(fill_trailing_nan, 1, center_x_arr)
+    # center_y_arr = np.apply_along_axis(fill_trailing_nan, 1, center_y_arr)
+    center_x_arr = np.array([fill_trailing_nan(row) for row in center_x_arr], dtype=object)
+    center_y_arr = np.array([fill_trailing_nan(row) for row in center_y_arr], dtype=object)
 
     # Fix x_list, y_list as center is zero
     x_list_aft = x_arr_bef - center_x_arr
     y_list_aft = y_arr_bef - center_y_arr
 
     # save
-    save_centorid_cordinate(save_dir, x_list_aft, y_list_aft)
-    make_graph.plot_coordinate(x_list_aft, y_list_aft, day, "centroid")
     save_center_of_rotation(save_dir, center_x_arr, center_y_arr)
     make_graph.plot_coordinate(center_x_arr, center_y_arr, day, "center")
     make_graph.plot_coordinate_with_center(x_arr_bef, y_arr_bef, center_x_arr, center_y_arr, day)
+    save_centorid_cordinate(save_dir, x_list_aft, y_list_aft)
+    make_graph.plot_coordinate(x_list_aft, y_list_aft, day, "centroid")
 
     # save long_axis, short_axis
     save_rot_axes(long_axis_arr, short_axis_arr, day)

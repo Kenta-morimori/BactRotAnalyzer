@@ -51,7 +51,10 @@ def get_timelist(day):
     save2csv.save_time_list(time_list_all, day)
 
 
-def detect_time_jumps_with_sd(time_list, day):
+def detect_time_jumps(time_list, day):
+    """
+    Detects time jumps in the time series data by calculating the difference between consecutive timestamps.
+    """
     sample_num, _, _ = param.get_config(day)
 
     jump_time_index_list: list[list[float]] = [[] for _ in range(sample_num)]
