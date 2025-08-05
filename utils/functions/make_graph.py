@@ -4,6 +4,7 @@ import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
+import math
 
 from utils import param
 from utils.features import IGNORE_PLOT_COLS, ROTATION_FEATURES, SD_WIDTH_DEPEND_COLS
@@ -29,12 +30,14 @@ def plot_coordinate(x_list, y_list, day, mode):
     # Pixel to µm conversion.
     # x_list, y_list = (np.array(x_list) * px2um_x).tolist(), (np.array(y_list) * px2um_y).tolist()
 
+    cols = 5
+    rows = max(1, math.ceil(sample_num / cols))
     # plot centroid coordinate
     fig = plt.figure(figsize=(20, 8))
-    gs = gridspec.GridSpec(2, sample_num // 2, figure=fig, wspace=0.38, hspace=0.2)
+    gs = gridspec.GridSpec(rows, cols, figure=fig, wspace=0.38, hspace=0.2)
     for i in range(sample_num):
-        row = i // (sample_num // 2)
-        col = i % (sample_num // 2)
+        row = i // cols
+        col = i % cols
         ax = fig.add_subplot(gs[row, col])
         ax.plot(x_list[i], y_list[i])
 
@@ -61,11 +64,13 @@ def plot_coordinate(x_list, y_list, day, mode):
     xy_plot_label = [r"x [$\mu$m]", r"y [$\mu$m]"]
     xy_save_label = ["x_coordinate.png", "y_coordinate.png"]
 
+    cols = 2
+    rows = max(1, math.ceil(sample_num / cols))
     for label_i, xy_list in enumerate([x_list, y_list]):
-        fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
+        fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
         for i in range(sample_num):
-            row = i // 2
-            col = i % 2
+            row = i // cols
+            col = i % cols
             axs[row, col].plot(time_list[i], xy_list[i])
             axs[row, col].grid(True)
             axs[row, col].set_title(f"Trajectory No.{i+1}", fontsize=font_size)
@@ -119,21 +124,21 @@ def plot_coordinate_with_center(x_list, y_list, center_x_list, center_y_list, da
 
 def plot_msd(msd, D_list, intercept_list, max_dist_list, day):
     sample_num, FrameRate_list, _ = param.get_config(day)
-
     save_dir = f"{param.save_dir_bef}/{day}/center_coordinate"
     os.makedirs(save_dir, exist_ok=True)
 
-    fig = plt.figure(figsize=(50 / 1.5, 20 / 1.5))
-    gs = gridspec.GridSpec(2, sample_num // 2, figure=fig, wspace=0.5, hspace=0.2)
+    cols = 5
+    rows = max(1, math.ceil(sample_num / cols))
+    fig = plt.figure(figsize=(20, 4 * rows), layout="constrained")
+    gs = gridspec.GridSpec(rows, cols, figure=fig, wspace=0.5, hspace=0.2)
     for i in range(sample_num):
         t_list = np.arange(0, len(msd[i])) * (1.0 / FrameRate_list[i])
         fit_func = t_list * (D_list[i] * 4) + intercept_list[i]
 
-        row = i // (sample_num // 2)
-        col = i % (sample_num // 2)
+        row = i // cols
+        col = i % cols
         axs = fig.add_subplot(gs[row, col])
-        row = i // 2
-        col = i % 2
+
         axs.plot(t_list, msd[i] * 10**4, linewidth=4)
         axs.plot(t_list, fit_func * 10**4, "--", linewidth=4)
         axs.grid(True)
@@ -146,7 +151,7 @@ def plot_msd(msd, D_list, intercept_list, max_dist_list, day):
         axs.set_ylabel("MSD (×10$^{-10}$cm$^2$)", fontsize=font_size)
         axs.tick_params(axis="both", which="major", labelsize=font_size)
         axs.set_box_aspect(1)
-    plt.tight_layout()
+    # plt.tight_layout()
     plt.savefig(f"{save_dir}/MSD_2d.png")
     plt.close(fig)
 
@@ -157,10 +162,12 @@ def plot_angular_velocity(angle_list, angular_velocity_list, day):
     os.makedirs(save_dir, exist_ok=True)
     time_list = read_csv.get_timelist(day)
 
-    fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
+    cols = 2
+    rows = max(1, math.ceil(sample_num / cols))
+    fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
     for i in range(sample_num):
-        row = i // 2
-        col = i % 2
+        row = i // cols
+        col = i % cols
         axs[row, col].plot(time_list[i], angle_list[i])
         axs[row, col].grid(True)
         axs[row, col].set_title(f"Angle Time-series No.{i+1}", fontsize=font_size)
@@ -172,10 +179,10 @@ def plot_angular_velocity(angle_list, angular_velocity_list, day):
     plt.savefig(f"{save_dir}/angle_time-series.png")
     plt.close(fig)
 
-    fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
+    fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
     for i in range(sample_num):
-        row = i // 2
-        col = i % 2
+        row = i // cols
+        col = i % cols
         axs[row, col].plot(time_list[i][: len(angular_velocity_list[i])], angular_velocity_list[i])
         axs[row, col].grid(True)
         axs[row, col].set_title(f"Anglar Velocity Time-series No.{i+1}", fontsize=font_size)
@@ -187,10 +194,10 @@ def plot_angular_velocity(angle_list, angular_velocity_list, day):
     plt.savefig(f"{save_dir}/angular-velocity_time-series.png")
     plt.close(fig)
 
-    fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
+    fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
     for i in range(sample_num):
-        row = i // 2
-        col = i % 2
+        row = i // cols
+        col = i % cols
         axs[row, col].plot(time_list[i][: len(angular_velocity_list[i])], [abs(x) for x in angular_velocity_list[i]])
         axs[row, col].grid(True)
         axs[row, col].set_title(f"Anglar Velocity Time-series No.{i+1}", fontsize=font_size)
@@ -211,9 +218,12 @@ def plot_av_colleration(angular_velocity_list, day):
     time_list = read_csv.get_timelist(day)
     jump_time_index_list = get_tiff_info.detect_time_jumps(time_list, day)
 
+    cols = 2
+    rows = max(1, math.ceil(sample_num / cols))
+
     fig, axs = plt.subplots(
-        5,
-        2 * sample_num // 5,
+        rows,
+        cols,
         figsize=(fig_size_x, fig_size_y),
         gridspec_kw={"width_ratios": [5, 1] * (sample_num // 5)},
     )
@@ -259,11 +269,14 @@ def plot_center_colleration(center_x_list, center_y_list, day):
     save_dir = f"{param.save_dir_bef}/{day}/center_coordinate"
     os.makedirs(save_dir, exist_ok=True)
 
+    cols = 2
+    rows = max(1, math.ceil(sample_num / cols))
+
     time_list = read_csv.get_timelist(day)
     for center_i, center_list in enumerate([center_x_list, center_y_list]):
         fig, axs = plt.subplots(
-            5,
-            2 * sample_num // 5,
+            rows,
+            2 * cols,
             figsize=(fig_size_x, fig_size_y),
             gridspec_kw={"width_ratios": [5, 1] * (sample_num // 5)},
         )
@@ -312,10 +325,13 @@ def plot_angular_velocity_rot_part(angular_velocity_list, th_list, th_list_means
     time_list = read_csv.get_timelist(day)
     labels = ["original AV", "original k-means", "mean k-means", "median k-means"]
 
-    fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
+    cols = 2
+    rows = max(1, math.ceil(sample_num / cols))
+
+    fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
     for i in range(sample_num):
-        row = i // 2
-        col = i % 2
+        row = i // cols
+        col = i % cols
         axs[row, col].plot(
             time_list[i][: len(angular_velocity_list[i])], angular_velocity_list[i], alpha=0.7, label="original AV"
         )
@@ -341,10 +357,12 @@ def plot_averaged_angular_velocity(angular_velocity_list, day):
     os.makedirs(save_dir, exist_ok=True)
     time_list = read_csv.get_timelist(day)
 
-    fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
+    cols = 2
+    rows = max(1, math.ceil(sample_num / cols))
+    fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
     for i in range(sample_num):
-        row = i // 2
-        col = i % 2
+        row = i // cols
+        col = i % cols
         axs[row, col].plot(time_list[i][: len(angular_velocity_list[i])], angular_velocity_list[i])
         axs[row, col].grid(True)
         axs[row, col].set_xlim(0, time_list[i][len(angular_velocity_list[i])])
@@ -363,10 +381,12 @@ def plot_fft(freq_list, Amp_list, save_dir, save_name, day, flag_add_peak=False)
     os.makedirs(save_dir, exist_ok=True)
     peak_list = []
 
-    fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
+    cols = 2
+    rows = max(1, math.ceil(sample_num / cols))
+    fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
     for i in range(sample_num):
-        row = i // 2
-        col = i % 2
+        row = i // cols
+        col = i % cols
         axs[row, col].plot(freq_list[i], Amp_list[i])
         if flag_add_peak:
             max_amp_index = np.argmax(Amp_list[i])
@@ -395,14 +415,16 @@ def plot_SD_list(SD_list, day, flag_std):
     save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series"
     os.makedirs(save_dir, exist_ok=True)
 
+    cols = 2
+    rows = max(1, math.ceil(sample_num / cols))
     # sepalate save
     for i, width_time in enumerate(width_time_list):
         time_list = read_csv.get_timelist(day)
 
-        fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
+        fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
         for j in range(sample_num):
-            row = j // 2
-            col = j % 2
+            row = j // cols
+            col = j % cols
             axs[row, col].plot(time_list[j][: len(SD_list[j][i])], SD_list[j][i])
             axs[row, col].grid(True)
             if flag_std:
@@ -427,13 +449,13 @@ def plot_SD_list(SD_list, day, flag_std):
     for width_time in width_time_list:
         plot_label_list.append(f"SD {width_time}s")
 
-    fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
+    fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
     for i, width_time in enumerate(width_time_list):
         time_list = read_csv.get_timelist(day)
 
         for j in range(sample_num):
-            row = j // 2
-            col = j % 2
+            row = j // cols
+            col = j % cols
             axs[row, col].plot(
                 time_list[j][: len(SD_list[j][i])], SD_list[j][i], label=f"SD {width_time}s", c=color_list[i], alpha=0.7
             )
@@ -466,12 +488,14 @@ def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
     for i in range(sample_num):
         max_x_lim_list.append(max([freq_list[i][j][-1] for j in range(len(width_time_list))]))
 
+    cols = 2
+    rows = max(1, math.ceil(sample_num / cols))
     # sepalate save
     for i, width_time in enumerate(width_time_list):
-        fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
+        fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
         for j in range(sample_num):
-            row = j // 2
-            col = j % 2
+            row = j // cols
+            col = j % cols
             axs[row, col].plot(freq_list[j][i], Amp_list[j][i])
             axs[row, col].grid(True)
             if flag_std:
@@ -497,11 +521,11 @@ def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
     for width_time in width_time_list:
         plot_label_list.append(f"SD {width_time}s")
 
-    fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
+    fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
     for i, width_time in enumerate(width_time_list):
         for j in range(sample_num):
-            row = j // 2
-            col = j % 2
+            row = j // cols
+            col = j % cols
             axs[row, col].plot(freq_list[j][i], Amp_list[j][i], label=f"SD {width_time}s", c=color_list[i], alpha=0.7)
             axs[row, col].grid(True)
             if flag_std:
@@ -550,6 +574,7 @@ def plot_SD_FFT_decline(decrease_list, ref_point_list, day):
     plt.close(fig)
 
 
+# 2つのdayでデータが違う場合の処理を追加
 def plot_compare_SD_FFT_decline(decrease_list1, decrease_list2, ref_point_list1, ref_point_list2, day1, day2):
     width_time_list = param.SD_window_width_list
     save_dir = f"{param.save_dir_bef}/compare_SD_FFT_decline/{day1}-{day2}/"
@@ -667,49 +692,59 @@ def dev_plot_centroid_and_center(x_list, y_list, center_x_list, center_y_list, d
 
     flag_normalize = False
 
+    cols = 2
+    rows = max(1, math.ceil(sample_num / cols))
     # plot x, y
     time_list = read_csv.get_timelist(day)
-    for label in ["x", "y"]:
-        fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
-        plot_label = ["centroid", "center"]
-        if label == "x":
-            xy_list = x_list
-            xy_center_list = center_x_list
-            xy_plot_label = r"x [$\mu$m]"
-            xy_save_label = "x_centroid_center_bef_corr.png"
-        elif label == "y":
-            xy_list = y_list
-            xy_center_list = center_y_list
-            xy_plot_label = r"y [$\mu$m]"
-            xy_save_label = "y_centroid_center_bef_corr.png"
 
-        for i in range(sample_num):
-            row = i // 2
-            col = i % 2
+    for flag_normalize in [False, True]:
+        for label in ["x", "y"]:
+            fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
+            plot_label = ["centroid", "center"]
+            if label == "x":
+                xy_list = x_list
+                xy_center_list = center_x_list
+                xy_plot_label = r"x [$\mu$m]"
+                if flag_normalize:
+                    xy_save_label = "x_centroid_center_bef_corr_normalized.png"
+                else:
+                    xy_save_label = "x_centroid_center_bef_corr.png"
+            elif label == "y":
+                xy_list = y_list
+                xy_center_list = center_y_list
+                xy_plot_label = r"y [$\mu$m]"
+                if flag_normalize:
+                    xy_save_label = "y_centroid_center_bef_corr_normalized.png"
+                else:
+                    xy_save_label = "y_centroid_center_bef_corr.png"
 
-            if flag_normalize:
-                xy_arr_norm = np.array(xy_list[i])
-                xy_arr_norm = (xy_arr_norm - np.nanmean(xy_arr_norm)) / np.nanstd(xy_arr_norm)
-                xy_center_arr_norm = np.array(xy_center_list[i])
-                xy_center_arr_norm = (xy_center_arr_norm - np.nanmean(xy_center_arr_norm)) / np.nanstd(
-                    xy_center_arr_norm
-                )
-                axs[row, col].plot(time_list[i], xy_arr_norm, label="centroid", alpha=0.7)
-                axs[row, col].plot(
-                    time_list[i][: len(xy_center_arr_norm)], xy_center_arr_norm, label="center", alpha=0.7
-                )
-            else:
-                axs[row, col].plot(time_list[i], xy_list[i], label="centroid", alpha=0.7)
-                axs[row, col].plot(time_list[i][: len(xy_center_list[i])], xy_center_list[i], label="center", alpha=0.7)
-            axs[row, col].grid(True)
-            axs[row, col].set_title(f"Trajectory No.{i+1}", fontsize=font_size)
-            axs[row, col].set_xlabel("Time [s]", fontsize=18)
-            axs[row, col].set_ylabel(xy_plot_label, fontsize=font_size)
-            axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
-        axs[row, col].legend(plot_label, loc="upper left", bbox_to_anchor=(1, 1))
-        plt.tight_layout()
-        plt.savefig(f"{save_dir}/{xy_save_label}")
-        plt.close(fig)
+            for i in range(sample_num):
+                row = i // cols
+                col = i % cols
+
+                if flag_normalize:
+                    xy_arr_norm = np.array(xy_list[i])
+                    xy_arr_norm = (xy_arr_norm - np.nanmean(xy_arr_norm)) / np.nanstd(xy_arr_norm)
+                    xy_center_arr_norm = np.array(xy_center_list[i])
+                    xy_center_arr_norm = (xy_center_arr_norm - np.nanmean(xy_center_arr_norm)) / np.nanstd(
+                        xy_center_arr_norm
+                    )
+                    axs[row, col].plot(time_list[i], xy_arr_norm, label="centroid", alpha=0.7)
+                    axs[row, col].plot(
+                        time_list[i][: len(xy_center_arr_norm)], xy_center_arr_norm, label="center", alpha=0.7
+                    )
+                else:
+                    axs[row, col].plot(time_list[i], xy_list[i], label="centroid", alpha=0.7)
+                    axs[row, col].plot(time_list[i][: len(xy_center_list[i])], xy_center_list[i], label="center", alpha=0.7)
+                axs[row, col].grid(True)
+                axs[row, col].set_title(f"Trajectory No.{i+1}", fontsize=font_size)
+                axs[row, col].set_xlabel("Time [s]", fontsize=18)
+                axs[row, col].set_ylabel(xy_plot_label, fontsize=font_size)
+                axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
+            axs[row, col].legend(plot_label, loc="upper left", bbox_to_anchor=(1, 1))
+            plt.tight_layout()
+            plt.savefig(f"{save_dir}/{xy_save_label}")
+            plt.close(fig)
 
 
 def dev_plot_time_list(day):
@@ -722,10 +757,12 @@ def dev_plot_time_list(day):
         [time_list[i][j] - time_list[i][j - 1] for j in range(1, len(time_list[i]))] for i in range(len(time_list))
     ]
 
-    fig, axs = plt.subplots(5, 2 * sample_num // 5, figsize=(2 * fig_size_x, fig_size_y))
+    cols = 2
+    rows = max(1, math.ceil(sample_num / cols))
+    fig, axs = plt.subplots(rows, 2 * cols, figsize=(2 * fig_size_x, fig_size_y))
     for i in range(sample_num):
-        row = i // 2
-        col = i % 2
+        row = i // cols
+        col = i % cols
         # time list
         axs[row, 2 * col].plot(time_list[i])
         axs[row, 2 * col].grid(True)
@@ -757,13 +794,15 @@ def dev_plot_sd_data_num(data_num_list, day):
     for width_time in width_time_list:
         plot_label_list.append(f"SD {width_time}s")
 
-    fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
+    cols = 2
+    rows = max(1, math.ceil(sample_num / cols))
+    fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
     for i, width_time in enumerate(width_time_list):
         time_list = read_csv.get_timelist(day)
 
         for j in range(sample_num):
-            row = j // 2
-            col = j % 2
+            row = j // cols
+            col = j % cols
             axs[row, col].plot(
                 time_list[j][: len(data_num_list[j][i])],
                 data_num_list[j][i],
@@ -789,10 +828,13 @@ def dev_plot_av_with_stats(av_list, av_means, av_medians, day):
     time_list = read_csv.get_timelist(day)
     labels = ["original", "mean", "median"]
 
-    fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y))
+    cols = 2
+    rows = max(1, math.ceil(sample_num / cols))
+
+    fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
     for i in range(sample_num):
-        row = i // 2
-        col = i % 2
+        row = i // cols
+        col = i % cols
         axs[row, col].plot(time_list[i][: len(av_list[i])], av_list[i], alpha=0.7)
         axs[row, col].plot(time_list[i][: len(av_means[i])], av_means[i], alpha=0.9)
         axs[row, col].plot(time_list[i][: len(av_medians[i])], av_medians[i], alpha=0.9)
@@ -824,13 +866,15 @@ def dev_plot_sd_FFT_with_rotation(freq_list, Amp_list, day):
     max_x_lim_list = []
     for i in range(sample_num):
         max_x_lim_list.append(max([freq_list[i][j][-1] for j in range(len(width_time_list))]))
-
-    fig, axs = plt.subplots(5, sample_num // 5, figsize=(fig_size_x, fig_size_y + 2))
+    
+    cols = 2
+    rows = max(1, math.ceil(sample_num / cols))
+    fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y + 2))
     # fig, axs = plt.subplots(5, sample_num // 5, figsize=(15, 23))
     # Angular Velocisy
     for j in range(sample_num):
-        row = j // 2
-        col = j % 2
+        row = j // cols
+        col = j % cols
         axs[row, col].plot(av_freq_list[j], av_Amp_list[j], label="Rotation Data", c="black", alpha=0.8)
         axs[row, col].grid(True)
         axs[row, col].set_title(f"Standardized SD Time-series No.{j+1}", fontsize=font_size)
@@ -844,8 +888,8 @@ def dev_plot_sd_FFT_with_rotation(freq_list, Amp_list, day):
     # SD
     for i, width_time in enumerate(width_time_list):
         for j in range(sample_num):
-            row = j // 2
-            col = j % 2
+            row = j // cols
+            col = j % cols
             axs[row, col].plot(freq_list[j][i], Amp_list[j][i], label=f"SD {width_time}s", c=color_list[i], alpha=0.7)
         axs[-1][-1].legend(plot_label_list, loc="upper left", bbox_to_anchor=(1, 1))
     plt.tight_layout()
@@ -859,14 +903,17 @@ def dev_plot_fft_coordinates(X, Y, day):
     save_name = "centroid_coodinate_fft.png"
     os.makedirs(save_dir, exist_ok=True)
 
-    fig, axs = plt.subplots(5, 2 * sample_num // 5, figsize=(2 * fig_size_x, fig_size_y))
+    cols = 2
+    rows = max(1, math.ceil(sample_num / cols))
+
+    fig, axs = plt.subplots(rows, 2 * cols, figsize=(2 * fig_size_x, fig_size_y))
     for i in range(sample_num):
         x_freq_list, x_Amp_list = frequency_analysis.fft(X[i], 1 / FrameRate[i])
         y_freq_list, y_Amp_list = frequency_analysis.fft(Y[i], 1 / FrameRate[i])
         peak = max(x_freq_list[np.argmax(x_Amp_list)], y_freq_list[np.argmax(y_Amp_list)])
 
-        row = i // 2
-        col = i % 2
+        row = i // cols
+        col = i % cols
         axs[row, 2 * col].plot(x_freq_list, x_Amp_list)
         axs[row, 2 * col + 1].plot(y_freq_list, y_Amp_list)
         axs[row, 2 * col].set_xlim(0, x_freq_list[-1])
@@ -895,7 +942,9 @@ def dev_plot_max_dist_stat(max_dists, max_dists_all, day):
     os.makedirs(save_dir, exist_ok=True)
     mag = 1
 
-    fig, axs = plt.subplots(2, sample_num // 2, figsize=(50 * mag / 4, 20 * mag / 4))
+    cols = 2
+    rows = max(1, math.ceil(sample_num / cols))
+    fig, axs = plt.subplots(rows, cols, figsize=(50 * mag / 4, 20 * mag / 4))
     axs = axs.flatten()
     for i, data in enumerate(max_dists):
         axs[i].boxplot(data * 1000, positions=[1])
