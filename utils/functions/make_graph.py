@@ -156,6 +156,66 @@ def plot_msd(msd, D_list, intercept_list, max_dist_list, day):
     plt.close(fig)
 
 
+def plot_rot_axes(long_axis_arr, short_axis_arr, aspect_ratio_arr, day):
+    sample_num, _, _ = param.get_config(day)
+    save_dir = f"{param.save_dir_bef}/{day}/other_rot_features"
+    os.makedirs(save_dir, exist_ok=True)
+
+    # sepalate save
+    time_list = read_csv.get_timelist(day)
+    plot_label = ["long_axis", "short_axis"]
+
+    cols = 2
+    rows = max(1, math.ceil(sample_num / cols))
+    fig, axs = plt.subplots(rows, 2 * cols, figsize=(2 * fig_size_x, fig_size_y))
+    for i in range(sample_num):
+        row = i // cols
+        col = i % cols
+        # long axis, short axis
+        axs[row, 2 * col].plot(time_list[i][: len(long_axis_arr[i])], long_axis_arr[i], label="long_axis")
+        axs[row, 2 * col].plot(time_list[i][: len(short_axis_arr[i])], short_axis_arr[i], label="short_axis")
+        axs[row, 2 * col].grid(True)
+        axs[row, 2 * col].set_title(f"Rotation Axes No.{i+1}", fontsize=font_size)
+        axs[row, 2 * col].set_ylabel("Axes length [μm]", fontsize=font_size)
+        axs[row, 2 * col].set_xlabel("Time [s]", fontsize=font_size)
+        axs[row, 2 * col].tick_params(axis="both", which="major", labelsize=font_size)
+        # aspect ratio
+        axs[row, 2 * col + 1].plot(time_list[i][: len(aspect_ratio_arr[i])], aspect_ratio_arr[i])
+        axs[row, 2 * col + 1].grid(True)
+        axs[row, 2 * col + 1].set_title(f"Rotation Axes Ratio No.{i+1}", fontsize=font_size)
+        axs[row, 2 * col + 1].set_ylabel("Axes Ratio", fontsize=font_size)
+        axs[row, 2 * col + 1].set_xlabel("Time [s]", fontsize=font_size)
+        axs[row, 2 * col + 1].tick_params(axis="both", which="major", labelsize=font_size)
+    axs[row, col].legend(plot_label, loc="upper left", bbox_to_anchor=(1, 1))
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/rotation_axes.png")
+    plt.close(fig)
+
+
+def plot_r(r_arr, day):
+    sample_num, _, _ = param.get_config(day)
+    save_dir = f"{param.save_dir_bef}/{day}/other_rot_features"
+    os.makedirs(save_dir, exist_ok=True)
+
+    # sepalate save
+    time_list = read_csv.get_timelist(day)
+    cols = 2
+    rows = max(1, math.ceil(sample_num / cols))
+    fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
+    for i in range(sample_num):
+        row = i // cols
+        col = i % cols
+        axs[row, col].plot(time_list[i], r_arr[i])
+        axs[row, col].grid(True)
+        axs[row, col].set_title(f"Rotation Axes No.{i+1}", fontsize=font_size)
+        axs[row, col].set_ylabel("Axes length [μm]", fontsize=font_size)
+        axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
+        axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/r_time-series.png")
+    plt.close(fig)
+
+
 def plot_angular_velocity(angle_list, angular_velocity_list, day):
     sample_num, _, _ = param.get_config(day)
     save_dir = f"{param.save_dir_bef}/{day}/angular_velocity"
@@ -735,7 +795,9 @@ def dev_plot_centroid_and_center(x_list, y_list, center_x_list, center_y_list, d
                     )
                 else:
                     axs[row, col].plot(time_list[i], xy_list[i], label="centroid", alpha=0.7)
-                    axs[row, col].plot(time_list[i][: len(xy_center_list[i])], xy_center_list[i], label="center", alpha=0.7)
+                    axs[row, col].plot(
+                        time_list[i][: len(xy_center_list[i])], xy_center_list[i], label="center", alpha=0.7
+                    )
                 axs[row, col].grid(True)
                 axs[row, col].set_title(f"Trajectory No.{i+1}", fontsize=font_size)
                 axs[row, col].set_xlabel("Time [s]", fontsize=18)
@@ -866,7 +928,7 @@ def dev_plot_sd_FFT_with_rotation(freq_list, Amp_list, day):
     max_x_lim_list = []
     for i in range(sample_num):
         max_x_lim_list.append(max([freq_list[i][j][-1] for j in range(len(width_time_list))]))
-    
+
     cols = 2
     rows = max(1, math.ceil(sample_num / cols))
     fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y + 2))

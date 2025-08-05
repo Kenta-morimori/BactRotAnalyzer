@@ -76,7 +76,7 @@ def save_center_of_rotation(save_dir, center_x_list, center_y_list):
 
 def save_rot_axes(long_axis_list, short_axis_list, day):
     sample_num, _, _ = param.get_config(day)
-    save_dir = f"{param.save_dir_bef}/{day}/centroid_coordinate/"
+    save_dir = f"{param.save_dir_bef}/{day}/other_rot_features/"
     csv_save_dir = f"{save_dir}/rotation_axes.csv"
     os.makedirs(save_dir, exist_ok=True)
 
@@ -207,6 +207,7 @@ def get_ellipse_info(X, Y, index, day):
         y_freq_list, y_Amp_list = y_freq_list[y_mask], y_Amp_list[y_mask]
 
         width_time = param.n_rotations / max(x_freq_list[np.argmax(x_Amp_list)], y_freq_list[np.argmax(y_Amp_list)])
+        print(f"No.{index + 1}   width_time: {width_time:.2f} s   min_ref_centroid_num: {param.min_ref_centroid_num}")
 
         start_time = 0.0
         flag_warning = False
@@ -251,8 +252,6 @@ def get_ellipse_info(X, Y, index, day):
                 # center_y_list.extend([np.mean(center_y_list)] * rest_data_num)
                 center_x_list.extend([center_x_list[-1]] * rest_data_num)
                 center_y_list.extend([center_y_list[-1]] * rest_data_num)
-                long_axis_list.extend([long_axis] * rest_data_num)
-                short_axis_list.extend([short_axis] * rest_data_num)
                 break
         if flag_warning:
             print(f"[Warning] No.{index + 1}   alfa / eig_val[0] is negative value")
@@ -478,6 +477,7 @@ def extract_centroid(day):
     long_axis_arr = np.array(long_axis_list, dtype=object)
     short_axis_arr = np.array(short_axis_list, dtype=object)
     aspect_ratio_arr = np.array(aspect_ratio_list, dtype=object)
+    make_graph.plot_rot_axes(long_axis_arr, short_axis_arr, aspect_ratio_arr, day)
 
     if param.flag_correct_center_outlier:
         make_graph.plot_center_colleration(
@@ -486,8 +486,7 @@ def extract_centroid(day):
         make_graph.dev_plot_centroid_and_center(x_arr_bef, y_arr_bef, center_x_list_bef, center_y_list_bef, day)
 
     # rotaion center analysis
-    """
-    if param.flag_evaluate_rotaion_center:
+    if param.flag_evaluate_rotaion_center_movement:
         max_dist_list = get_max_dist(center_x_arr, center_y_arr, rest_data_num_list, day)
         # MSD
         msd_2d, D_list, intercept_list = calculate_msd(center_x_arr, center_y_arr, rest_data_num_list, day)
@@ -496,7 +495,6 @@ def extract_centroid(day):
         # dev
         max_dist_list_st = dev_get_max_dists(center_x_arr, center_y_arr, day)
         make_graph.dev_plot_max_dist_stat(max_dist_list_st, max_dist_list, day)
-    """
 
     # Completes missing values with the last value
     # center_x_arr = np.apply_along_axis(fill_trailing_nan, 1, center_x_arr)
@@ -517,12 +515,37 @@ def extract_centroid(day):
 
     # save long_axis, short_axis
     save_rot_axes(long_axis_arr, short_axis_arr, day)
-    rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_long_axis, np.mean(long_axis_arr, axis=1), day)
-    rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_short_axis, np.mean(short_axis_arr, axis=1), day)
-    rot_df_manage.update_rot_df(ROTATION_FEATURES.rot_aspect_ratio, np.mean(aspect_ratio_arr, axis=1), day)
+    rot_df_manage.update_rot_df(
+        ROTATION_FEATURES.rot_long_axis, np.array([np.mean(x) if np.size(x) else np.nan for x in long_axis_arr]), day
+    )
+    rot_df_manage.update_rot_df(
+        ROTATION_FEATURES.rot_short_axis, np.array([np.mean(x) if np.size(x) else np.nan for x in short_axis_arr]), day
+    )
+    rot_df_manage.update_rot_df(
+        ROTATION_FEATURES.rot_aspect_ratio,
+        np.array([np.mean(x) if np.size(x) else np.nan for x in aspect_ratio_arr]),
+        day,
+    )
 
     if param.flag_get_angle_with_cell_direcetion:
         save_angle(save_dir, angle_list)
+
+    # obtaion r_list
+    r_list = []
+    for i in range(sample_num):
+        if not isinstance(x_list_bef[i], np.ndarray):
+            x_arr_i = np.asarray(x_list_bef[i])
+        else:
+            x_arr_i = x_list_bef[i]
+        if not isinstance(y_list_bef[i], np.ndarray):
+            y_arr_i = np.asarray(y_list_bef[i])
+        else:
+            y_arr_i = y_list_aft[i]
+        center_x_arr_i = center_x_arr[i]
+        center_y_arr_i = center_y_arr[i]
+        r_list.append(np.sqrt((x_arr_i - center_x_arr_i) ** 2 + (y_arr_i - center_y_arr_i) ** 2))
+    r_arr = np.array(r_list, dtype=object)
+    make_graph.plot_r(r_arr, day)
 
 
 if __name__ == "__main__":
