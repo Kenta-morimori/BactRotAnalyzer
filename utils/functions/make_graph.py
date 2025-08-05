@@ -1,10 +1,10 @@
+import math
 import os
 
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
-import math
 
 from utils import param
 from utils.features import IGNORE_PLOT_COLS, ROTATION_FEATURES, SD_WIDTH_DEPEND_COLS
