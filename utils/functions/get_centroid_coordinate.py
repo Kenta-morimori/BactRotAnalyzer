@@ -533,14 +533,8 @@ def extract_centroid(day):
     # obtaion r_list
     r_list = []
     for i in range(sample_num):
-        if not isinstance(x_list_bef[i], np.ndarray):
-            x_arr_i = np.asarray(x_list_bef[i])
-        else:
-            x_arr_i = x_list_bef[i]
-        if not isinstance(y_list_bef[i], np.ndarray):
-            y_arr_i = np.asarray(y_list_bef[i])
-        else:
-            y_arr_i = y_list_aft[i]
+        x_arr_i = np.asarray(x_list_bef[i])
+        y_arr_i = np.asarray(y_list_bef[i])
         center_x_arr_i = center_x_arr[i]
         center_y_arr_i = center_y_arr[i]
         r_list.append(np.sqrt((x_arr_i - center_x_arr_i) ** 2 + (y_arr_i - center_y_arr_i) ** 2))
