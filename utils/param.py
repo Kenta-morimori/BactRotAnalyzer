@@ -81,11 +81,11 @@ def get_tiffinfo_config(day):
 # flag_get_angle_with_cell_direcetion = True
 flag_get_angle_with_cell_direcetion = False  # beads assay
 n_rotations = 30
-min_ref_centroid_num = 20
+min_ref_centroid_num = 30
 
 flag_evaluating_switching = True  # evaluate switching of rotation
 
-flag_evaluate_rotaion_center = True
+flag_evaluate_rotaion_center_movement = False  # MSD etc.
 flag_correct_center_outlier = True
 mode_correct_center_outlier = 1
 num_std_center = 2
