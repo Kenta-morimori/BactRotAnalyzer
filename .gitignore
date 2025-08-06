@@ -10,6 +10,7 @@ outputs/*
 !outputs/test_data
 scripts/dev_*
 utils/functions/dev_*
+notebooks/
 
 venv/
 utils/__pycache__
