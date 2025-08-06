@@ -115,12 +115,13 @@ def save_sd_fft(save_dir, freq_list, Amp_list):
     width_list = param.SD_window_width_list
     df = pd.DataFrame()
 
+    cols = []
     for i in range(len(freq_list)):
         for j, width in enumerate(width_list):
-            freq_key = f"No.{i+1}_{width}s_freq"
-            amp_key = f"No.{i+1}_{width}s_Amp"
-            df[freq_key] = pd.Series(freq_list[i][j])
-            df[amp_key] = pd.Series(Amp_list[i][j])
+            f = pd.Series(freq_list[i][j], dtype="float64", name=f"No.{i+1}_{width}s_freq")
+            a = pd.Series(Amp_list[i][j],  dtype="float64", name=f"No.{i+1}_{width}s_Amp")
+            cols.extend([f, a])
+    df = pd.concat(cols, axis=1, copy=False)
     df.to_csv(csv_save_dir, index=False)
 
 
