@@ -497,8 +497,6 @@ def extract_centroid(day):
         make_graph.dev_plot_max_dist_stat(max_dist_list_st, max_dist_list, day)
 
     # Completes missing values with the last value
-    # center_x_arr = np.apply_along_axis(fill_trailing_nan, 1, center_x_arr)
-    # center_y_arr = np.apply_along_axis(fill_trailing_nan, 1, center_y_arr)
     center_x_arr = np.array([fill_trailing_nan(row) for row in center_x_arr], dtype=object)
     center_y_arr = np.array([fill_trailing_nan(row) for row in center_y_arr], dtype=object)
 
@@ -540,6 +538,8 @@ def extract_centroid(day):
         r_list.append(np.sqrt((x_arr_i - center_x_arr_i) ** 2 + (y_arr_i - center_y_arr_i) ** 2))
     r_arr = np.array(r_list, dtype=object)
     make_graph.plot_r(r_arr, day)
+    r_arr_mean = np.array([np.mean(r) if np.size(r) else np.nan for r in r_arr])
+    rot_df_manage.update_rot_df(ROTATION_FEATURES.rotation_r, r_arr_mean, day)
 
 
 if __name__ == "__main__":

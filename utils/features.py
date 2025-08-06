@@ -7,6 +7,7 @@ class ROTATION_FEATURES:
     rot_long_axis: str = "rot_long_axis"
     rot_short_axis: str = "rot_short_axis"
     rot_aspect_ratio: str = "rot_aspect_ratio"
+    rotation_r: str = "rotation_r"
     angle_FFT_peak: str = "angle_FFT_peak"
     rot_angular_velosity_th: str = "rot_angular_velosity_th"
     # angular_velosity_mean_rot_part: str = "angular_velosity_mean_rot_part"
