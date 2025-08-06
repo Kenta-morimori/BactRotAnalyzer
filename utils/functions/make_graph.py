@@ -338,7 +338,7 @@ def plot_center_colleration(center_x_list, center_y_list, day):
             rows,
             2 * cols,
             figsize=(fig_size_x, fig_size_y),
-            gridspec_kw={"width_ratios": [5, 1] * (sample_num // 5)},
+            gridspec_kw={"width_ratios": [5, 1] * cols},
         )
         axs = axs.flatten()
         for i in range(sample_num):
