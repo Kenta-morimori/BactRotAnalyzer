@@ -87,15 +87,18 @@ def plot_coordinate_with_center(x_list, y_list, center_x_list, center_y_list, da
     save_dir = f"{param.save_dir_bef}/{day}/centroid_coordinate"
     os.makedirs(save_dir, exist_ok=True)
 
+    cols = 5
+    rows = max(1, math.ceil(sample_num / cols))
+
     # plot centroid coordinate
     fig = plt.figure(figsize=(20, 8))
-    gs = gridspec.GridSpec(2, sample_num // 2, figure=fig, wspace=0.38, hspace=0.2)
+    gs = gridspec.GridSpec(rows, cols, figure=fig, wspace=0.38, hspace=0.2)
     label = ["centroid", "center"]
 
     coef = 1.1
     for i in range(sample_num):
-        row = i // (sample_num // 2)
-        col = i % (sample_num // 2)
+        row = i // cols
+        col = i % cols
         ax = fig.add_subplot(gs[row, col])
 
         ax.plot(x_list[i], y_list[i], label="centroid")
