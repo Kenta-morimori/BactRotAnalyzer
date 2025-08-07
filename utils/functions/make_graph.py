@@ -326,9 +326,8 @@ def plot_av_colleration(angular_velocity_list, day):
     plt.close(fig)
 
 
-def plot_center_colleration(center_x_list, center_y_list, day):
+def plot_center_colleration(center_x_list, center_y_list, complement_index_list, day):
     sample_num, _, _ = param.get_config(day)
-    mode_correct_av_outlier = param.mode_correct_av_outlier
     save_dir = f"{param.save_dir_bef}/{day}/center_coordinate"
     os.makedirs(save_dir, exist_ok=True)
 
@@ -348,33 +347,32 @@ def plot_center_colleration(center_x_list, center_y_list, day):
             # Time series plot (left plot)
             ax_ts = axs[2 * i]
             ax_ts.plot(time_list[i][: len(center_list[i])], center_list[i])
-
-            if mode_correct_av_outlier == 0:  # use TIFF time info
-                jump_time_index_list = get_tiff_info.detect_time_jumps(time_list, day)
-                complement_index_list = jump_time_index_list[i]
-            elif mode_correct_av_outlier == 1:  # use SD threshold
-                num_std_center = param.num_std_center
-                mean = np.nanmean(center_list[i])
-                std_dev = np.nanstd(center_list[i])
-                lower_th = mean - num_std_center * std_dev
-                upper_th = mean + num_std_center * std_dev
-                complement_index_list = [i for i, x in enumerate(center_list[i]) if x < lower_th or upper_th < x]
-
-            for complement_index in complement_index_list:
-                ax_ts.axvline(time_list[i][complement_index], color="red", linestyle="--")
-
+            if len(complement_index_list[i][0]) > 0:
+                for complement_index in complement_index_list[i][0]:
+                    ax_ts.axvline(time_list[i][complement_index], color="red", linestyle="--")
+            if len(complement_index_list[i][1]) > 0:
+                for complement_index in complement_index_list[i][1]:
+                    ax_ts.axvline(time_list[i][complement_index], color="red", linestyle="--")
             ax_ts.set_title(f"Angular Velocity No.{i + 1}")
 
             # Distribution plot (right plot)
             ax_dist = axs[2 * i + 1]
             ax_dist.hist(center_list[i], bins=30, orientation="horizontal", alpha=0.7)
 
-            if mode_correct_av_outlier == 0:  # use TIFF time info
-                for complement_index in complement_index_list:
+            if len(complement_index_list[i][0]) > 0:
+                for complement_index in complement_index_list[i][0]:
                     ax_dist.axhline(center_list[i][complement_index], color="red", linestyle="--")
-            elif mode_correct_av_outlier == 1:  # use SD threshold
-                ax_dist.axhline(lower_th, color="red", linestyle="--")
-                ax_dist.axhline(upper_th, color="red", linestyle="--")
+            if len(complement_index_list[i][1]) > 0:
+                for complement_index in complement_index_list[i][1]:
+                    ax_dist.axhline(center_list[i][complement_index], color="red", linestyle="--")
+            if param.mode_correct_center_outlier == 1:  # use SD threshold
+                num_std_dev = param.num_std_center
+                mean = np.nanmean(center_list[i])
+                std_dev = np.nanstd(center_list[i])
+                lower_th = mean - num_std_dev * std_dev
+                upper_th = mean + num_std_dev * std_dev
+                ax_dist.axhline(lower_th, color="green", linestyle="--")
+                ax_dist.axhline(upper_th, color="green", linestyle="--")
             ax_dist.set_title(f"Distribution No.{i + 1}")
         plt.tight_layout()
         plt.savefig(f"{save_dir}/center_outlier.png")

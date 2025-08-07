@@ -207,7 +207,7 @@ def get_ellipse_info(X, Y, index, day):
         y_freq_list, y_Amp_list = y_freq_list[y_mask], y_Amp_list[y_mask]
 
         width_time = param.n_rotations / max(x_freq_list[np.argmax(x_Amp_list)], y_freq_list[np.argmax(y_Amp_list)])
-        print(f"No.{index + 1}   width_time: {width_time:.2f} s   min_ref_centroid_num: {param.min_ref_centroid_num}")
+        print(f"No.{index + 1}   width_time: {width_time:.2f} s")
 
         start_time = 0.0
         flag_warning = False
@@ -449,6 +449,7 @@ def extract_centroid(day):
     long_axis_list, short_axis_list = [], []
     aspect_ratio_list = []
     rest_data_num_list = []
+    complement_index_list = []
     if param.flag_correct_center_outlier:
         center_x_list_bef, center_y_list_bef = [], []
     for i in range(sample_num):
@@ -460,11 +461,14 @@ def extract_centroid(day):
         if param.flag_correct_center_outlier:
             center_x_list_bef.append(center_x_bef)
             center_y_list_bef.append(center_y_bef)
-            center_x_aft = clean_data.correct_rotation_center(center_x_bef, i, day)
-            center_y_aft = clean_data.correct_rotation_center(center_y_bef, i, day)
+            center_x_aft, complement_indexs_x = clean_data.correct_rotation_center(center_x_bef, i, day)
+            center_y_aft, complement_indexs_y = clean_data.correct_rotation_center(center_y_bef, i, day)
+            complement_index_list.append([complement_indexs_x, complement_indexs_y])
         else:
             center_x_aft = center_x_bef
             center_y_aft = center_y_bef
+
+        print(f"No.{i + 1} {complement_indexs_x} {complement_indexs_y}")
 
         center_x_list.append(center_x_aft)
         center_y_list.append(center_y_aft)
@@ -481,7 +485,7 @@ def extract_centroid(day):
 
     if param.flag_correct_center_outlier:
         make_graph.plot_center_colleration(
-            np.array(center_x_list_bef, dtype=object), np.array(center_y_list_bef, dtype=object), day
+            np.array(center_x_list_bef, dtype=object), np.array(center_y_list_bef, dtype=object), complement_index_list, day
         )
         make_graph.dev_plot_centroid_and_center(x_arr_bef, y_arr_bef, center_x_list_bef, center_y_list_bef, day)
 

@@ -88,10 +88,11 @@ flag_evaluating_switching = True  # evaluate switching of rotation
 flag_evaluate_rotaion_center_movement = False  # MSD etc.
 flag_correct_center_outlier = True
 mode_correct_center_outlier = 1
-num_std_center = 2
+num_std_center = 5
 """
 0: use TIFF time info
-1: use SD threshold
+1: use SD threshold (+ use TIFF time info)
+2: use Outlier treatment algorithm (+ use TIFF time info)
 """
 
 ## About Angular Velocity

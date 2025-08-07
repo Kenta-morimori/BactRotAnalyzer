@@ -3,6 +3,8 @@ import numpy as np
 from utils import param
 from utils.functions import get_tiff_info, read_csv
 
+from sklearn.ensemble import IsolationForest
+
 
 # Trimming with thresholds
 def correct_angular_velocity_outlier(data, idx, day):
@@ -48,25 +50,30 @@ def correct_rotation_center(data, idx, day):
     """
     n_neighbors = 2  # number of neighbors to consider for averaging
 
-    if param.mode_correct_av_outlier == 0:  # use TIFF time info
-        time_list = read_csv.get_timelist(day)
-        detect_time_jumps = get_tiff_info.detect_time_jumps(time_list, day)
-        # complement_index_list = detect_time_jumps_with_sd[idx]
-        complement_index_list = []
-        for i in detect_time_jumps[idx]:
-            complement_index_list.append(i)
-            if i > 0:
-                complement_index_list.append(i - 1)
-            if i < len(data) - 1:
-                complement_index_list.append(i + 1)
-        complement_index_list = list(set(complement_index_list))
-    elif param.mode_correct_av_outlier == 1:  # use SD threshold
+    # use TIFF time info (default)
+    complement_index_list = []
+    time_list = read_csv.get_timelist(day)
+    detect_time_jumps = get_tiff_info.detect_time_jumps(time_list, day)
+    # complement_index_list = detect_time_jumps_with_sd[idx]
+    for i in detect_time_jumps[idx]:
+        complement_index_list.append(i)
+        if i > 0:
+            complement_index_list.append(i - 1)
+        if i < len(data) - 1:
+            complement_index_list.append(i + 1)
+
+    if param.mode_correct_center_outlier == 1:  # use SD threshold
         num_std_dev = param.num_std_center
         mean = np.nanmean(data)
         std_dev = np.nanstd(data)
         lower_th = mean - num_std_dev * std_dev
         upper_th = mean + num_std_dev * std_dev
-        complement_index_list = [i for i, x in enumerate(data) if x < lower_th or upper_th < x]
+        complement_index_list.extend([i for i, x in enumerate(data) if x < lower_th or upper_th < x])
+    if param.mode_correct_center_outlier == 2:  # use Outlier treatment algorithm]
+        # ここを追加
+        print("hogehoge")
+
+    complement_index_list = list(set(complement_index_list))
 
     data_aft = []
     for j in range(len(data)):
@@ -90,4 +97,4 @@ def correct_rotation_center(data, idx, day):
         else:
             data_aft.append(data[j])
 
-    return data_aft
+    return data_aft, complement_index_list
