@@ -489,7 +489,7 @@ def main(day):
     if param.flag_correct_center_outlier:
         center_x_arr_bef = np.array(center_x_list_bef, dtype=object)
         center_y_arr_bef = np.array(center_y_list_bef, dtype=object)
-        make_graph.plot_center_colleration(center_x_arr_bef,  center_y_arr_bef, complement_index_list, day)
+        make_graph.plot_center_colleration(center_x_arr_bef, center_y_arr_bef, complement_index_list, day)
         make_graph.dev_plot_centroid_and_center(x_arr_bef, y_arr_bef, center_x_list_bef, center_y_list_bef, day)
         save_center_of_rotation(save_dir, center_x_arr_bef, center_y_arr_bef, flag_bef_correct=True)
 
