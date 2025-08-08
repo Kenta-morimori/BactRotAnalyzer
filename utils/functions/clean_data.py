@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import IsolationForest
 
 from utils import param
 from utils.functions import get_tiff_info, read_csv
