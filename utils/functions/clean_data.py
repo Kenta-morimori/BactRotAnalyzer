@@ -1,9 +1,9 @@
 import numpy as np
+import pandas as pd
+from sklearn.ensemble import IsolationForest
 
 from utils import param
 from utils.functions import get_tiff_info, read_csv
-
-from sklearn.ensemble import IsolationForest
 
 
 # Trimming with thresholds
@@ -70,8 +70,14 @@ def correct_rotation_center(data, idx, day):
         upper_th = mean + num_std_dev * std_dev
         complement_index_list.extend([i for i, x in enumerate(data) if x < lower_th or upper_th < x])
     if param.mode_correct_center_outlier == 2:  # use Outlier treatment algorithm]
-        # ここを追加
-        print("hogehoge")
+        k_mad = 10
+        s = pd.Series(data)
+        med = s.median()
+        mad = np.median(np.abs(s - med))
+        eps = np.finfo(float).eps
+        mz = 0.6745 * (s - med) / (mad + eps)
+        add_complement_index = np.where(np.abs(mz) > k_mad)[0]
+        complement_index_list.extend(add_complement_index.tolist())
 
     complement_index_list = list(set(complement_index_list))
 

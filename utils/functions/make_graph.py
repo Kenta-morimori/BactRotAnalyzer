@@ -124,6 +124,38 @@ def plot_coordinate_with_center(x_list, y_list, center_x_list, center_y_list, da
     plt.savefig(f"{save_dir}/trajectory_with_center.png")
     plt.close(fig)
 
+    time_list = read_csv.get_timelist(day)
+    cols = 2
+    rows = max(1, math.ceil(sample_num / cols))
+    for axis_label in ["x", "y"]:
+        fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
+        plot_label = ["centroid", "center"]
+        if axis_label == "x":
+            xy_list = x_list
+            xy_center_list = center_x_list
+            xy_plot_label = r"x [$\mu$m]"
+            xy_save_label = "x_centroid_center.png"
+        elif axis_label == "y":
+            xy_list = y_list
+            xy_center_list = center_y_list
+            xy_plot_label = r"y [$\mu$m]"
+            xy_save_label = "y_centroid_center.png"
+
+        for i in range(sample_num):
+            row = i // cols
+            col = i % cols
+            axs[row, col].plot(time_list[i], xy_list[i], label="centroid", alpha=0.7)
+            axs[row, col].plot(time_list[i][: len(xy_center_list[i])], xy_center_list[i], label="center", alpha=0.7)
+            axs[row, col].grid(True)
+            axs[row, col].set_title(f"Trajectory No.{i+1}", fontsize=font_size)
+            axs[row, col].set_xlabel("Time [s]", fontsize=18)
+            axs[row, col].set_ylabel(xy_plot_label, fontsize=font_size)
+            axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
+        axs[row, col].legend(plot_label, loc="upper left", bbox_to_anchor=(1, 1))
+        plt.tight_layout()
+        plt.savefig(f"{save_dir}/{xy_save_label}")
+        plt.close(fig)
+
 
 def plot_msd(msd, D_list, intercept_list, max_dist_list, day):
     sample_num, FrameRate_list, _ = param.get_config(day)
@@ -353,7 +385,7 @@ def plot_center_colleration(center_x_list, center_y_list, complement_index_list,
             if len(complement_index_list[i][1]) > 0:
                 for complement_index in complement_index_list[i][1]:
                     ax_ts.axvline(time_list[i][complement_index], color="red", linestyle="--")
-            ax_ts.set_title(f"Angular Velocity No.{i + 1}")
+            ax_ts.set_title(f"Center Coodinate No.{i + 1}")
 
             # Distribution plot (right plot)
             ax_dist = axs[2 * i + 1]
@@ -375,7 +407,10 @@ def plot_center_colleration(center_x_list, center_y_list, complement_index_list,
                 ax_dist.axhline(upper_th, color="green", linestyle="--")
             ax_dist.set_title(f"Distribution No.{i + 1}")
         plt.tight_layout()
-        plt.savefig(f"{save_dir}/center_outlier.png")
+        if center_i == 0:
+            plt.savefig(f"{save_dir}/center_outlier_x.png")
+        else:
+            plt.savefig(f"{save_dir}/center_outlier_y.png")
         plt.close(fig)
 
 
