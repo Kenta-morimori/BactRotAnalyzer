@@ -60,10 +60,13 @@ def save_centorid_cordinate(save_dir, x_list, y_list):
             csvwriter.writerow(row)
 
 
-def save_center_of_rotation(save_dir, center_x_list, center_y_list):
+def save_center_of_rotation(save_dir, center_x_list, center_y_list, flag_bef_correct=False):
     sample_num, _, _ = param.get_config(day)
     save_dir = f"{param.save_dir_bef}/{day}/center_coordinate/"
-    csv_save_dir = f"{save_dir}/center_coordinate.csv"
+    if flag_bef_correct:
+        csv_save_dir = f"{save_dir}/center_coordinate_bef_correct.csv"
+    else:
+        csv_save_dir = f"{save_dir}/center_coordinate.csv"
     os.makedirs(save_dir, exist_ok=True)
 
     data = {}
@@ -207,7 +210,7 @@ def get_ellipse_info(X, Y, index, day):
         y_freq_list, y_Amp_list = y_freq_list[y_mask], y_Amp_list[y_mask]
 
         width_time = param.n_rotations / max(x_freq_list[np.argmax(x_Amp_list)], y_freq_list[np.argmax(y_Amp_list)])
-        print(f"No.{index + 1}   width_time: {width_time:.2f} s   min_ref_centroid_num: {param.min_ref_centroid_num}")
+        print(f"No.{index + 1}   width_time: {width_time:.2f} s")
 
         start_time = 0.0
         flag_warning = False
@@ -404,7 +407,7 @@ def dev_get_max_dists(x_list, y_list, day, split_time=0.5):
     return np.array(max_dist_list, dtype=object)
 
 
-def extract_centroid(day):
+def main(day):
     sample_num, _, _ = param.get_config(day)
     input_dir = f"{param.input_dir_bef}/{day}"
     save_dir = f"{param.save_dir_bef}/{day}"
@@ -449,6 +452,7 @@ def extract_centroid(day):
     long_axis_list, short_axis_list = [], []
     aspect_ratio_list = []
     rest_data_num_list = []
+    complement_index_list = []
     if param.flag_correct_center_outlier:
         center_x_list_bef, center_y_list_bef = [], []
     for i in range(sample_num):
@@ -460,11 +464,14 @@ def extract_centroid(day):
         if param.flag_correct_center_outlier:
             center_x_list_bef.append(center_x_bef)
             center_y_list_bef.append(center_y_bef)
-            center_x_aft = clean_data.correct_rotation_center(center_x_bef, i, day)
-            center_y_aft = clean_data.correct_rotation_center(center_y_bef, i, day)
+            center_x_aft, complement_indexs_x = clean_data.correct_rotation_center(center_x_bef, i, day)
+            center_y_aft, complement_indexs_y = clean_data.correct_rotation_center(center_y_bef, i, day)
+            complement_index_list.append([complement_indexs_x, complement_indexs_y])
         else:
             center_x_aft = center_x_bef
             center_y_aft = center_y_bef
+
+        print(f"No.{i + 1} {complement_indexs_x} {complement_indexs_y}")
 
         center_x_list.append(center_x_aft)
         center_y_list.append(center_y_aft)
@@ -480,10 +487,11 @@ def extract_centroid(day):
     make_graph.plot_rot_axes(long_axis_arr, short_axis_arr, aspect_ratio_arr, day)
 
     if param.flag_correct_center_outlier:
-        make_graph.plot_center_colleration(
-            np.array(center_x_list_bef, dtype=object), np.array(center_y_list_bef, dtype=object), day
-        )
+        center_x_arr_bef = np.array(center_x_list_bef, dtype=object)
+        center_y_arr_bef = np.array(center_y_list_bef, dtype=object)
+        make_graph.plot_center_colleration(center_x_arr_bef, center_y_arr_bef, complement_index_list, day)
         make_graph.dev_plot_centroid_and_center(x_arr_bef, y_arr_bef, center_x_list_bef, center_y_list_bef, day)
+        save_center_of_rotation(save_dir, center_x_arr_bef, center_y_arr_bef, flag_bef_correct=True)
 
     # rotaion center analysis
     if param.flag_evaluate_rotaion_center_movement:
@@ -493,8 +501,8 @@ def extract_centroid(day):
         make_graph.plot_msd(msd_2d, D_list, intercept_list, max_dist_list, day)
         save_msd(msd_2d, D_list, max_dist_list, day)
         # dev
-        max_dist_list_st = dev_get_max_dists(center_x_arr, center_y_arr, day)
-        make_graph.dev_plot_max_dist_stat(max_dist_list_st, max_dist_list, day)
+        # max_dist_list_st = dev_get_max_dists(center_x_arr, center_y_arr, day)
+        # make_graph.dev_plot_max_dist_stat(max_dist_list_st, max_dist_list, day)
 
     # Completes missing values with the last value
     center_x_arr = np.array([fill_trailing_nan(row) for row in center_x_arr], dtype=object)
@@ -544,4 +552,4 @@ def extract_centroid(day):
 
 if __name__ == "__main__":
     day = sys.argv[1]
-    extract_centroid(day)
+    main(day)
