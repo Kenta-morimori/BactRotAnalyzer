@@ -91,6 +91,8 @@ def get_angular_velocity(x_list, y_list, day):
     # obtain Angular Velocity mean
     angular_velocity_mean_list = [np.nanmean(sublist) for sublist in angular_velocity_list]
     angular_velocity_sd_list = [np.nanstd(sublist) for sublist in angular_velocity_list]
+
+    # evaluate switching
     make_evaluate_switching.get_angular_velocity_rot_part(angular_velocity_list, day)
 
     if param.flag_correct_av_outlier:
