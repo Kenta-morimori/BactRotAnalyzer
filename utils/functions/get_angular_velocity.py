@@ -1,6 +1,9 @@
 import copy
-
+import csv
 import numpy as np
+import pandas as pd
+
+import sys
 
 from utils import param
 from utils.features import ROTATION_FEATURES
@@ -11,6 +14,7 @@ from utils.functions import (
     read_csv,
     rot_df_manage,
     save2csv,
+    frequency_analysis,
 )
 
 
@@ -49,7 +53,7 @@ def normalized_angle(angle_bef):
 
 
 def get_angular_velocity(x_list, y_list, day):
-    sample_num, FrameRate_list, _ = param.get_config(day)
+    sample_num, FrameRate, _ = param.get_config(day)
     angle_list, angular_velocity_list = [], []
     angular_velocity_list_bef_corr = []
 
@@ -76,7 +80,7 @@ def get_angular_velocity(x_list, y_list, day):
             elif angle_diff < -np.pi:
                 angle_diff += 2 * np.pi
             # CCWを正にするために-1をかける
-            add_angular_velocity = np.append(add_angular_velocity, -1 * angle_diff * FrameRate_list[i])
+            add_angular_velocity = np.append(add_angular_velocity, -1 * angle_diff * FrameRate[i])
 
         # correct angular velocity
         add_angular_velocity_bef_corr = np.array(copy.deepcopy(add_angular_velocity))
@@ -88,19 +92,77 @@ def get_angular_velocity(x_list, y_list, day):
         else:
             angular_velocity_list.append(add_angular_velocity)
             angular_velocity_list_bef_corr.append(add_angular_velocity_bef_corr)
-    # obtain Angular Velocity mean
-    angular_velocity_mean_list = [np.nanmean(sublist) for sublist in angular_velocity_list]
-    angular_velocity_sd_list = [np.nanstd(sublist) for sublist in angular_velocity_list]
 
-    # evaluate switching
-    make_evaluate_switching.get_angular_velocity_rot_part(angular_velocity_list, day)
+    # save
+    # plot angle, angular velocity
+    make_graph.plot_angular_velocity(angle_list, angular_velocity_list, day)
 
     if param.flag_correct_av_outlier:
         # check colleration
         make_graph.plot_av_colleration(angular_velocity_list_bef_corr, day)
-    # save
     save2csv.save_angle_angular_velocity(angle_list, angular_velocity_list, day)
-    rot_df_manage.update_rot_df(ROTATION_FEATURES.angular_velosity_mean, angular_velocity_mean_list, day)
-    rot_df_manage.update_rot_df(ROTATION_FEATURES.angular_velosity_sd, angular_velocity_sd_list, day)
+    rot_df_manage.update_rot_df(
+        ROTATION_FEATURES.angular_velosity_mean,
+        [np.nanmean(sublist) for sublist in angular_velocity_list],
+        day,
+    )
+    rot_df_manage.update_rot_df(
+        ROTATION_FEATURES.angular_velosity_sd,
+        [np.nanstd(sublist) for sublist in angular_velocity_list],
+        day,
+    )
+
+    # FFT
+    frequency_analysis.fft_angle(angle_list, day)
+    frequency_analysis.fft_angular_velocity(angular_velocity_list, day)
+
+    # obtain Angular Velocity mean
+    time_list = read_csv.get_timelist(day)
+
+    flag_use_conts_width_time = True
+    conts_width_time = 0.1
+    if not flag_use_conts_width_time:
+        freq_list, Amp_list = read_csv.get_angle_FFT(day)
+
+    angular_velocity_mean_list = []
+    for i in range(sample_num):
+        time_arr = np.array(time_list[i][: len(angular_velocity_list[i])])
+        total_time_i = time_arr[-1]
+        if flag_use_conts_width_time:
+            width_time = conts_width_time
+        else:
+            width_time = param.n_rotations / freq_list[i][np.argmax(Amp_list[i])]
+
+        add_angular_velocity_mean = []
+        start_time = 0.0
+        while 1:
+            condition = (time_arr >= start_time) & (time_arr < start_time + width_time)
+            condition = np.array(condition, dtype=bool)
+            # av_i = angular_velocity_list[i][condition].reshape(-1, 1)
+            av_i = angular_velocity_list[i][condition]
+
+            if len(av_i) < param.min_ref_av_num:
+                add_angular_velocity_mean.append(np.nan)
+            else:
+                add_angular_velocity_mean.append(np.nanmean(av_i))
+            start_time += 1 / FrameRate[i]
+            if start_time + width_time >= total_time_i:
+                break
+        angular_velocity_mean_list.append(add_angular_velocity_mean)
+
+    csv_save_dir = f"{param.save_dir_bef}/{day}/angular_velocity/angular-velocity_time-series_mean.csv"
+    header = [f"No.{i + 1}" for i in range(sample_num)]
+    with open(csv_save_dir, "w", newline="") as csvfile:
+        csvwriter = csv.writer(csvfile)
+        csvwriter.writerow(header)
+        for row in zip(*angle_list):
+            csvwriter.writerow(row)
+
+    # plot Averaged Angular Velocity
+    make_graph.plot_averaged_angular_velocity(angular_velocity_list, angular_velocity_mean_list, day)
+
+    # evaluate switching
+    cw_ratio_list = make_evaluate_switching.evaluate_switching_averaged(angular_velocity_mean_list, day)
+    rot_df_manage.update_rot_df(ROTATION_FEATURES.cw_ratio, cw_ratio_list, day)
 
     return angle_list, angular_velocity_list

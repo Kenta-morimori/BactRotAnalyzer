@@ -286,7 +286,7 @@ def plot_angular_velocity(angle_list, angular_velocity_list, day):
         axs[row, col].set_ylabel("Angular Velocity [rad/s]", fontsize=font_size)
         axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
     plt.tight_layout()
-    plt.savefig(f"{save_dir}/angular-velocity_time-series.png")
+    plt.savefig(f"{save_dir}/angular_velocity_time-series.png")
     plt.close(fig)
 
     fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
@@ -301,7 +301,7 @@ def plot_angular_velocity(angle_list, angular_velocity_list, day):
         axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
         axs[row, col].set_xlim(0, time_list[i][len(angular_velocity_list[i])])
     plt.tight_layout()
-    plt.savefig(f"{save_dir}/angular-velocity_time-series_abs.png")
+    plt.savefig(f"{save_dir}/angular_velocity_time-series_abs.png")
     plt.close(fig)
 
 
@@ -354,7 +354,7 @@ def plot_av_colleration(angular_velocity_list, day):
                 ax_dist.axhline(angular_velocity_list[i][jump_time_index], color="red", linestyle="--")
         ax_dist.set_title(f"Distribution No.{i + 1}")
     plt.tight_layout()
-    plt.savefig(f"{save_dir}/angular-velocity_outlier.png")
+    plt.savefig(f"{save_dir}/angular_velocity_outlier.png")
     plt.close(fig)
 
 
@@ -443,11 +443,11 @@ def plot_angular_velocity_rot_part(angular_velocity_list, th_list, th_list_means
         axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
     axs[-1][-1].legend(labels, loc="upper left", bbox_to_anchor=(1, 1))
     plt.tight_layout()
-    plt.savefig(f"{save_dir}/angular-velocity_rot_part.png")
+    plt.savefig(f"{save_dir}/angular_velocity_rot_part.png")
     plt.close(fig)
 
 
-def plot_averaged_angular_velocity(angular_velocity_list, day):
+def plot_averaged_angular_velocity(angular_velocity_list, angular_velocity_mean_list, day):
     sample_num, _, _ = param.get_config(day)
     save_dir = f"{param.save_dir_bef}/{day}/angular_velocity"
     os.makedirs(save_dir, exist_ok=True)
@@ -456,10 +456,16 @@ def plot_averaged_angular_velocity(angular_velocity_list, day):
     cols = 2
     rows = max(1, math.ceil(sample_num / cols))
     fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
+    plot_label = ["original", "mean"]
     for i in range(sample_num):
         row = i // cols
         col = i % cols
-        axs[row, col].plot(time_list[i][: len(angular_velocity_list[i])], angular_velocity_list[i])
+        axs[row, col].plot(
+            time_list[i][: len(angular_velocity_list[i])], angular_velocity_list[i], label="original", alpha=0.6
+        )
+        axs[row, col].plot(
+            time_list[i][: len(angular_velocity_mean_list[i])], angular_velocity_mean_list[i], label="mean", alpha=0.6
+        )
         axs[row, col].grid(True)
         axs[row, col].set_xlim(0, time_list[i][len(angular_velocity_list[i])])
         axs[row, col].set_title(f"Anglar Velocity Time-series No.{i+1}", fontsize=font_size)
@@ -467,8 +473,9 @@ def plot_averaged_angular_velocity(angular_velocity_list, day):
         axs[row, col].set_ylabel("Anglular Velocity [rad/s]", fontsize=font_size)
         axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
         axs[row, col].set_xlim(0, time_list[i][len(angular_velocity_list[i])])
+    axs[row, col].legend(plot_label, loc="upper left", bbox_to_anchor=(1, 1))
     plt.tight_layout()
-    plt.savefig(f"{save_dir}/angular-velocity_time-series_averaged.png")
+    plt.savefig(f"{save_dir}/angular_velocity_time-series_averaged.png")
     plt.close(fig)
 
 
@@ -943,7 +950,7 @@ def dev_plot_av_with_stats(av_list, av_means, av_medians, day):
         axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
     axs[-1][-1].legend(labels, loc="upper left", bbox_to_anchor=(1, 1))
     plt.tight_layout()
-    plt.savefig(f"{save_dir}/angular-velocity_with_stats.png")
+    plt.savefig(f"{save_dir}/angular_velocity_with_stats.png")
     plt.close(fig)
 
 

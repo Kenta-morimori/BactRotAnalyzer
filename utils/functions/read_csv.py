@@ -87,7 +87,7 @@ def get_angle_FFT(day):
     sample_num, _, _ = param.get_config(day)
 
     df = pd.read_csv(csv_save_dir)
-    freq_list = [df[f"No.{i + 1}_freq"].tolist() for i in range(sample_num)]
-    Amp_list = [df[f"No.{i + 1}_Amp"].tolist() for i in range(sample_num)]
+    freq_list = [[x for x in df[f"No.{i + 1}_freq"].dropna().tolist()] for i in range(sample_num)]
+    Amp_list = [[x for x in df[f"No.{i + 1}_Amp"].dropna().tolist()] for i in range(sample_num)]
 
     return freq_list, Amp_list

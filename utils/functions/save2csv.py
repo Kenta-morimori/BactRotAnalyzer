@@ -61,20 +61,6 @@ def save_sd_time_series(sd_list, day, flag_std=False):
     df.to_csv(csv_save_dir, index=False)
 
 
-def save_switching_value(switching_value_list, day, flag_averaged=False):
-    if flag_averaged:
-        csv_save_dir = f"{param.save_dir_bef}/{day}/switching_value_averagedAV.csv"
-    else:
-        csv_save_dir = f"{param.save_dir_bef}/{day}/switching_value.csv"
-    sample_num, _, _ = param.get_config(day)
-
-    with open(csv_save_dir, "w", newline="") as csvfile:
-        csvwriter = csv.writer(csvfile)
-        headers = [f"No.{i+1}" for i in range(sample_num)]
-        csvwriter.writerow(headers)
-        csvwriter.writerow(switching_value_list)
-
-
 def save_fft(save_dir, save_name, freq_list, Amp_list):
     csv_save_dir = f"{save_dir}/{save_name}.csv"
 

@@ -471,8 +471,6 @@ def main(day):
             center_x_aft = center_x_bef
             center_y_aft = center_y_bef
 
-        print(f"No.{i + 1} {complement_indexs_x} {complement_indexs_y}")
-
         center_x_list.append(center_x_aft)
         center_y_list.append(center_y_aft)
         long_axis_list.append(long_axis)

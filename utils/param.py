@@ -85,7 +85,7 @@ min_ref_centroid_num = 30
 
 flag_evaluating_switching = True  # evaluate switching of rotation
 
-flag_evaluate_rotaion_center_movement = True  # MSD etc.
+flag_evaluate_rotaion_center_movement = False  # MSD etc.
 flag_correct_center_outlier = True
 mode_correct_center_outlier = 2
 """
@@ -115,6 +115,8 @@ mode_av_completion = 0
 """
 
 flag_kmean = False
+
+min_ref_av_num = 10  # Average
 
 
 # fluctuation analysis
