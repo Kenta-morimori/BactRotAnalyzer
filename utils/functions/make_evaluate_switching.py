@@ -1,3 +1,5 @@
+from typing import Union
+
 import numpy as np
 from sklearn.cluster import KMeans
 
@@ -9,7 +11,7 @@ from utils.functions import make_graph, make_scale, rot_df_manage
 def evaluate_switching_averaged(angular_velocity_mean_list, day):
     sample_num, _, _ = param.get_config(day)
 
-    cw_ratio_list = []
+    cw_ratio_list: list[Union[int, float]] = []
     # get ngular_velocity_list average using window function
     for i in range(sample_num):
         cw_count, ccw_count = 0, 0

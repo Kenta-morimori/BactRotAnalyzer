@@ -1,9 +1,7 @@
 import copy
 import csv
-import sys
 
 import numpy as np
-import pandas as pd
 
 from utils import param
 from utils.features import ROTATION_FEATURES
