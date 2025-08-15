@@ -1,6 +1,6 @@
+import argparse
 import os
 import sys
-import argparse
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 from utils.functions import (  # noqa

@@ -1,20 +1,20 @@
 import copy
 import csv
+import sys
+
 import numpy as np
 import pandas as pd
-
-import sys
 
 from utils import param
 from utils.features import ROTATION_FEATURES
 from utils.functions import (
     clean_data,
+    frequency_analysis,
     make_evaluate_switching,
     make_graph,
     read_csv,
     rot_df_manage,
     save2csv,
-    frequency_analysis,
 )
 
 
