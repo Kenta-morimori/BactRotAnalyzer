@@ -360,7 +360,7 @@ def plot_av_colleration(angular_velocity_list, day):
 
 def plot_center_colleration(center_x_list, center_y_list, complement_index_list, day):
     sample_num, _, _ = param.get_config(day)
-    save_dir = f"{param.save_dir_bef}/{day}/center_coordinate"
+    save_dir = f"{param.save_dir_bef}/{day}/center_coordinate/bef_correction"
     os.makedirs(save_dir, exist_ok=True)
 
     cols = 2
@@ -790,7 +790,7 @@ def plot_rot_param(day):
 
 def dev_plot_centroid_and_center(x_list, y_list, center_x_list, center_y_list, day):
     sample_num, _, _ = param.get_config(day)
-    save_dir = f"{param.save_dir_bef}/{day}/centroid_coordinate"
+    save_dir = f"{param.save_dir_bef}/{day}/centroid_coordinate/bef_correction"
     os.makedirs(save_dir, exist_ok=True)
 
     flag_normalize = False
