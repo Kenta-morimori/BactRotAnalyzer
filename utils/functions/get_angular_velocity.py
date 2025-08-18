@@ -114,53 +114,57 @@ def get_angular_velocity(x_list, y_list, day):
     frequency_analysis.fft_angle(angle_list, day)
     frequency_analysis.fft_angular_velocity(angular_velocity_list, day)
 
-    # obtain Angular Velocity mean
-    time_list = read_csv.get_timelist(day)
-
-    flag_use_conts_width_time = True
-    conts_width_time = 0.1
-    if not flag_use_conts_width_time:
-        freq_list, Amp_list = read_csv.get_angle_FFT(day)
-
-    angular_velocity_mean_list = []
-    for i in range(sample_num):
-        time_arr = np.array(time_list[i][: len(angular_velocity_list[i])])
-        total_time_i = time_arr[-1]
-        if flag_use_conts_width_time:
-            width_time = conts_width_time
-        else:
-            width_time = param.n_rotations / freq_list[i][np.argmax(Amp_list[i])]
-
-        add_angular_velocity_mean = []
-        start_time = 0.0
-        while 1:
-            condition = (time_arr >= start_time) & (time_arr < start_time + width_time)
-            condition = np.array(condition, dtype=bool)
-            # av_i = angular_velocity_list[i][condition].reshape(-1, 1)
-            av_i = angular_velocity_list[i][condition]
-
-            if len(av_i) < param.min_ref_av_num:
-                add_angular_velocity_mean.append(np.nan)
-            else:
-                add_angular_velocity_mean.append(np.nanmean(av_i))
-            start_time += 1 / FrameRate[i]
-            if start_time + width_time >= total_time_i:
-                break
-        angular_velocity_mean_list.append(add_angular_velocity_mean)
-
-    csv_save_dir = f"{param.save_dir_bef}/{day}/angular_velocity/angular-velocity_time-series_mean.csv"
-    header = [f"No.{i + 1}" for i in range(sample_num)]
-    with open(csv_save_dir, "w", newline="") as csvfile:
-        csvwriter = csv.writer(csvfile)
-        csvwriter.writerow(header)
-        for row in zip(*angle_list):
-            csvwriter.writerow(row)
-
-    # plot Averaged Angular Velocity
-    make_graph.plot_averaged_angular_velocity(angular_velocity_list, angular_velocity_mean_list, day)
-
     # evaluate switching
-    cw_ratio_list = make_evaluate_switching.evaluate_switching_averaged(angular_velocity_mean_list, day)
+    if param.flag_eval_switching_with_averaged_av:
+        # obtain Angular Velocity mean
+        time_list = read_csv.get_timelist(day)
+
+        flag_use_conts_width_time = True
+        conts_width_time = 0.1
+        if not flag_use_conts_width_time:
+            freq_list, Amp_list = read_csv.get_angle_FFT(day)
+
+        angular_velocity_mean_list = []
+        for i in range(sample_num):
+            time_arr = np.array(time_list[i][: len(angular_velocity_list[i])])
+            total_time_i = time_arr[-1]
+            if flag_use_conts_width_time:
+                width_time = conts_width_time
+            else:
+                width_time = param.n_rotations / freq_list[i][np.argmax(Amp_list[i])]
+
+            add_angular_velocity_mean = []
+            start_time = 0.0
+            while 1:
+                condition = (time_arr >= start_time) & (time_arr < start_time + width_time)
+                condition = np.array(condition, dtype=bool)
+                # av_i = angular_velocity_list[i][condition].reshape(-1, 1)
+                av_i = angular_velocity_list[i][condition]
+
+                if len(av_i) < param.min_ref_av_num:
+                    add_angular_velocity_mean.append(np.nan)
+                else:
+                    add_angular_velocity_mean.append(np.nanmean(av_i))
+                start_time += 1 / FrameRate[i]
+                if start_time + width_time >= total_time_i:
+                    break
+            angular_velocity_mean_list.append(add_angular_velocity_mean)
+
+        csv_save_dir = f"{param.save_dir_bef}/{day}/angular_velocity/angular-velocity_time-series_mean.csv"
+        header = [f"No.{i + 1}" for i in range(sample_num)]
+        with open(csv_save_dir, "w", newline="") as csvfile:
+            csvwriter = csv.writer(csvfile)
+            csvwriter.writerow(header)
+            for row in zip(*angle_list):
+                csvwriter.writerow(row)
+
+        # plot Averaged Angular Velocity
+        make_graph.plot_averaged_angular_velocity(angular_velocity_list, angular_velocity_mean_list, day)
+
+        # evaluate switching
+        cw_ratio_list = make_evaluate_switching.evaluate_switching_averaged(angular_velocity_mean_list, day)
+    else:
+        cw_ratio_list = make_evaluate_switching.evaluate_switching_averaged(angular_velocity_list, day)
     rot_df_manage.update_rot_df(ROTATION_FEATURES.cw_ratio, cw_ratio_list, day)
 
     return angle_list, angular_velocity_list

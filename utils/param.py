@@ -118,6 +118,8 @@ flag_kmean = False
 
 min_ref_av_num = 10  # Average
 
+## Switching
+flag_eval_switching_with_averaged_av = False
 
 # fluctuation analysis
 SD_window_width_list = [0.1, 0.5, 1.0]
