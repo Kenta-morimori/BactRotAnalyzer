@@ -122,8 +122,8 @@ min_ref_av_num = 10  # Average
 flag_eval_switching_with_averaged_av = False
 
 # fluctuation analysis
-SD_window_width_list = [0.1, 0.5, 1.0]
-# SD_window_width_list = [0.1, 0.2, 0.5, 1.0, 1.5, 2.0]
+# SD_window_width_list = [0.1, 0.5, 1.0]
+SD_window_width_list = [0.1, 0.2, 0.5, 1.0, 1.5, 2.0]
 
 
 # evaluate SD FFT low Amp and decline
