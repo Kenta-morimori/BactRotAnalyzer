@@ -62,7 +62,7 @@ def save_centorid_cordinate(save_dir, x_list, y_list):
 
 def save_center_of_rotation(save_dir, center_x_list, center_y_list, flag_bef_correct=False):
     sample_num, _, _ = param.get_config(day)
-    save_dir = f"{param.save_dir_bef}/{day}/center_coordinate/"
+    save_dir = f"{param.save_dir_bef}/{day}/center_coordinate/bef_correction"
     if flag_bef_correct:
         csv_save_dir = f"{save_dir}/center_coordinate_bef_correct.csv"
     else:
@@ -464,14 +464,12 @@ def main(day):
         if param.flag_correct_center_outlier:
             center_x_list_bef.append(center_x_bef)
             center_y_list_bef.append(center_y_bef)
-            center_x_aft, complement_indexs_x = clean_data.correct_rotation_center(center_x_bef, i, day)
-            center_y_aft, complement_indexs_y = clean_data.correct_rotation_center(center_y_bef, i, day)
+            center_x_aft, complement_indexs_x = clean_data.correct_rotation_center(center_x_bef, i, day, "x")
+            center_y_aft, complement_indexs_y = clean_data.correct_rotation_center(center_y_bef, i, day, "y")
             complement_index_list.append([complement_indexs_x, complement_indexs_y])
         else:
             center_x_aft = center_x_bef
             center_y_aft = center_y_bef
-
-        print(f"No.{i + 1} {complement_indexs_x} {complement_indexs_y}")
 
         center_x_list.append(center_x_aft)
         center_y_list.append(center_y_aft)

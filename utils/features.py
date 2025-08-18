@@ -14,6 +14,7 @@ class ROTATION_FEATURES:
     # angular_velosity_sd_rot_part: str = "angular_velosity_sd_rot_part"
     angular_velosity_mean: str = "angular_velosity_mean"
     angular_velosity_sd: str = "angular_velosity_sd"
+    cw_ratio: str = "cw_ratio"
     SD_FFT_Amp_decrease: str = "SD_FFT_Amp_decrease"
     SD_window_data_num_mean: str = "SD_window_data_num_mean"
     SD_FFT_Amp_refpoints: str = "SD_FFT_Amp_refpoints"

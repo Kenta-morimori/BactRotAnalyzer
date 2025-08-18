@@ -36,7 +36,7 @@ def correct_angular_velocity_outlier(data, idx, day):
     return data_aft
 
 
-def correct_rotation_center(data, idx, day):
+def correct_rotation_center(data, idx, day, xy_label):
     """
     The code replaces abnormal data points with the average of their neighboring values.
     input:
@@ -93,7 +93,7 @@ def correct_rotation_center(data, idx, day):
                 data_aft.append(np.nanmean(neighbors))
             else:
                 # Warning if all neighbors are in complement_index_list
-                print(f"Warning: All neighbors of index {j} are in complement_index_list.")
+                print(f"Warning: All neighbors of index {j} (in No.{idx+1} {xy_label}) are in complement_index_list.")
                 valid_data = [x for index, x in enumerate(data) if index not in complement_index_list]
                 if valid_data:
                     data_aft.append(np.nanmean(valid_data))
