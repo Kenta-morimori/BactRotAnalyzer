@@ -772,7 +772,7 @@ def plot_rot_param_compairison(day_list, df, save_label, plot_labels=None):
 
         axs[row, col].grid(True, linestyle="--", alpha=0.4, axis="y")
         axs[row, col].set_title(plot_col, fontsize=font_size)
-        axs[row, col].set_ylabel("label", fontsize=font_size)
+        axs[row, col].set_ylabel("Value", fontsize=font_size)
         axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
     plt.tight_layout()
     plt.savefig(f"{save_dir}/rot_param_comparison.png")
