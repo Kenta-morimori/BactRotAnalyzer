@@ -19,9 +19,9 @@ def evaluate_switching_averaged(angular_velocity_mean_list, day):
             if angular_velocity_mean_list[i][j] == np.nan:
                 continue
             elif angular_velocity_mean_list[i][j] >= 0:
-                cw_count += 1
-            else:
                 ccw_count += 1
+            else:
+                cw_count += 1
         if ccw_count == 0:
             cw_ratio_list.append(-1)
         else:
