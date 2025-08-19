@@ -537,10 +537,10 @@ def main(day):
     # obtaion r_list
     r_list = []
     for i in range(sample_num):
-        x_arr_i = np.asarray(x_list_bef[i])
-        y_arr_i = np.asarray(y_list_bef[i])
-        center_x_arr_i = center_x_arr[i]
-        center_y_arr_i = center_y_arr[i]
+        x_arr_i = np.asarray(x_list_bef[i], dtype=float)
+        y_arr_i = np.asarray(y_list_bef[i], dtype=float)
+        center_x_arr_i = np.asarray(center_x_arr[i], dtype=float)
+        center_y_arr_i = np.asarray(center_y_arr[i], dtype=float)
         r_list.append(np.sqrt((x_arr_i - center_x_arr_i) ** 2 + (y_arr_i - center_y_arr_i) ** 2))
     r_arr = np.array(r_list, dtype=object)
     make_graph.plot_r(r_arr, day)

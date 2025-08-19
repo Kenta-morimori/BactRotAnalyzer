@@ -677,54 +677,6 @@ def plot_SD_FFT_decline(decrease_list, ref_point_list, day):
     plt.close(fig)
 
 
-# 2つのdayでデータが違う場合の処理を追加
-def plot_compare_SD_FFT_decline(decrease_list1, decrease_list2, ref_point_list1, ref_point_list2, day1, day2):
-    width_time_list = param.SD_window_width_list
-    save_dir = f"{param.save_dir_bef}/compare_SD_FFT_decline/{day1}-{day2}/"
-    os.makedirs(save_dir, exist_ok=True)
-    label_list = [day1, day2]
-
-    fig, axes = plt.subplots(1, 10, figsize=(50, 5))
-    for i in range(2):
-        if i == 0:
-            decrease_list = decrease_list1
-            ref_point_list = ref_point_list1
-            c = "#1f77b4"
-        else:
-            decrease_list = decrease_list2
-            ref_point_list = ref_point_list2
-            c = "#ff7f0e"
-        # 色分けしてplot
-        for j in range(len(decrease_list)):
-            axes[0].plot(width_time_list, decrease_list[j], "-o", color=c, alpha=0.7)
-
-        # 平均値・標準偏差plot
-        mean_arr = np.mean(ref_point_list, axis=0)
-        std_arr = np.std(ref_point_list, axis=0)
-        axes[1].errorbar(width_time_list, mean_arr, std_arr, fmt="o", label=label_list[i], alpha=0.7)
-
-        """
-        # decrease_listの平均/標準偏差
-        mean_arr = np.mean(decrease_list, axis=0)
-        std_arr = np.std(decrease_list, axis=0)
-        # axes[1].errorbar(width_time_list, mean_arr, std_arr)
-        axes[1].errorbar(width_time_list, mean_arr, std_arr, fmt="o", label=label_list[i], alpha=0.7)
-        """
-    axes[0].set_xlabel("Window Width [s]", fontsize=font_size)
-    axes[0].set_ylabel("Amp Decrease", fontsize=font_size)
-    axes[0].tick_params(axis="both", which="major", labelsize=font_size)
-    axes[1].set_xlabel("Window Width [s]", fontsize=font_size)
-    axes[1].set_ylabel("Amp near 0 Hz", fontsize=font_size)
-    axes[1].tick_params(axis="both", which="major", labelsize=font_size)
-    axes[1].legend(label_list, loc="upper left", bbox_to_anchor=(1, 1))
-
-    plt.tight_layout()
-    fig.suptitle("Amp decrease", size=12)
-    plt.subplots_adjust(wspace=0.5, hspace=0.2)
-    plt.savefig(f"{save_dir}/SD_FFT_Amp_decrease.png")
-    plt.close(fig)
-
-
 def plot_rot_param(day):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
@@ -785,6 +737,55 @@ def plot_rot_param(day):
     # plt.subplots_adjust()
     plt.tight_layout()
     plt.savefig(f"{save_dir}/rot_param_relation.png")
+    plt.close(fig)
+
+
+# compare_fluctuation_main
+def plot_rot_param_compairison(day_list, df, save_label, plot_labels=None):
+    save_dir = f"{param.save_dir_bef}/{save_label}"
+    os.makedirs(save_dir, exist_ok=True)
+
+    bef_cols = rot_df_manage.get_cols()
+    plot_cols = [c for c in bef_cols if (c in df.columns) and (c not in IGNORE_PLOT_COLS)]
+
+    cols = 3
+    rows = max(1, math.ceil(len(plot_cols) / cols))
+    fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
+    for i, plot_col in enumerate(plot_cols):
+        row = i // cols
+        col = i % cols
+        df_selected = df[df["day"].isin(day_list)][["day", plot_col]].dropna(subset=[plot_col])
+
+        for d_i, day in enumerate(day_list):
+            plot_df = df_selected[df_selected["day"] == day]
+            x = np.full(len(plot_df), d_i)
+            if plot_labels is None:
+                axs[row, col].scatter(x, plot_df[plot_col], label=day)
+            else:
+                axs[row, col].scatter(x, plot_df[plot_col], label=plot_labels[d_i])
+            # data number
+            for idx, y_val in enumerate(plot_df[plot_col]):
+                axs[row, col].text(
+                    d_i + 0.05,
+                    y_val,
+                    str(idx + 1),
+                    fontsize=font_size * 0.7,
+                    va="center",
+                    ha="left",
+                )
+        xticks = np.arange(len(day_list))
+        axs[row, col].set_xticks(xticks)
+        axs[row, col].set_xticklabels(
+            plot_labels if plot_labels is not None else day_list, fontsize=font_size, rotation=0
+        )
+        axs[row, col].set_xlim(-0.5, len(day_list) - 0.5)
+
+        axs[row, col].grid(True, linestyle="--", alpha=0.4, axis="y")
+        axs[row, col].set_title(plot_col, fontsize=font_size)
+        axs[row, col].set_ylabel("Value", fontsize=font_size)
+        axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/rot_param_comparison.png")
     plt.close(fig)
 
 
