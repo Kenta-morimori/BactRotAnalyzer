@@ -763,6 +763,16 @@ def plot_rot_param_compairison(day_list, df, save_label, plot_labels=None):
                 axs[row, col].scatter(x, plot_df[plot_col], label=day)
             else:
                 axs[row, col].scatter(x, plot_df[plot_col], label=plot_labels[d_i])
+            # data number
+            for idx, y_val in enumerate(plot_df[plot_col]):
+                axs[row, col].text(
+                    d_i + 0.05,
+                    y_val,
+                    str(idx + 1),
+                    fontsize=font_size * 0.7,
+                    va="center",
+                    ha="left",
+                )
         xticks = np.arange(len(day_list))
         axs[row, col].set_xticks(xticks)
         axs[row, col].set_xticklabels(
