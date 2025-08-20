@@ -82,29 +82,38 @@ def evaluate_FFT(sd_freq_list, sd_Amp_list, day):
     width_time_list = param.SD_window_width_list
 
     decrease_list = []
+    ratio_list = []
     ref_point_list: List[List[float]] = [[] for _ in range(sample_num)]
     for i in range(sample_num):
         add_decrease = []
+        add_ratio = []
         for j in range(len(width_time_list)):
             add_ref_point = np.mean(sd_Amp_list[i][j][0:3])
             ref_point_list[i].append(add_ref_point)
 
             indices = [k for k, x in enumerate(sd_freq_list[i][j]) if x >= 80]
             add_decrease.append(add_ref_point - np.mean([sd_Amp_list[i][j][k] for k in indices]))
+            add_ratio.append(add_ref_point / np.mean([sd_Amp_list[i][j][k] for k in indices]))
         decrease_list.append(add_decrease)
+        ratio_list.append(add_ratio)
     # plot
     make_graph.plot_SD_FFT_decline(decrease_list, ref_point_list, day)
+
     # save CSV
-    save2csv.save_SD_FFT_decline(decrease_list, day)
-    save2csv.save_SD_FFT_refpoints(ref_point_list, day)
+    # save2csv.save_SD_FFT_decline(decrease_list, day)
+    # save2csv.save_SD_FFT_refpoints(ref_point_list, day)
+
     # save rot_df
     for j, width in enumerate(width_time_list):
         decrease_list_rot_df = []
+        ratio_list_rot_df = []
         ref_point_list_rot_df = []
         for i in range(sample_num):
             decrease_list_rot_df.append(decrease_list[i][j])
+            ratio_list_rot_df.append(ratio_list[i][j])
             ref_point_list_rot_df.append(ref_point_list[i][j])
         rot_df_manage.update_rot_df(f"{ROTATION_FEATURES.SD_FFT_Amp_decrease}_{width}s", decrease_list_rot_df, day)
+        rot_df_manage.update_rot_df(f"{ROTATION_FEATURES.SD_FFT_Amp_ratio}_{width}s", ratio_list_rot_df, day)
         rot_df_manage.update_rot_df(f"{ROTATION_FEATURES.SD_FFT_Amp_refpoints}_{width}s", ref_point_list_rot_df, day)
 
 
@@ -120,13 +129,21 @@ def main(angular_velocity_list, day):
         sd_list.append(add_sd_list)
         data_num_list.append(add_data_num_list)
 
-    make_graph.dev_plot_sd_data_num(data_num_list, day)  # develop
     # save to rot_df
+    for j, width in enumerate(width_time_list):
+        sd_mean_list = []
+        for i in range(sample_num):
+            sd_mean_list.append(np.mean(sd_list[i][j]))
+        rot_df_manage.update_rot_df(f"{ROTATION_FEATURES.SD_mean}_{width}s", sd_mean_list, day)
+
+    """
+    make_graph.dev_plot_sd_data_num(data_num_list, day)  # develop
     for j, width in enumerate(width_time_list):
         data_num_mean_list = []
         for i in range(sample_num):
             data_num_mean_list.append(np.mean(data_num_list[i][j]))
         rot_df_manage.update_rot_df(f"{ROTATION_FEATURES.SD_window_data_num_mean}_{width}s", data_num_mean_list, day)
+    """
 
     # save
     save2csv.save_sd_time_series(sd_list, day, flag_std=False)

@@ -162,9 +162,12 @@ def get_angular_velocity(x_list, y_list, day):
         make_graph.plot_averaged_angular_velocity(angular_velocity_list, angular_velocity_mean_list, day)
 
         # evaluate switching
-        cw_ratio_list = make_evaluate_switching.evaluate_switching_averaged(angular_velocity_mean_list, day)
+        cw_ratio_list, switching_count_list = make_evaluate_switching.evaluate_switching(
+            angular_velocity_mean_list, day
+        )
     else:
-        cw_ratio_list = make_evaluate_switching.evaluate_switching_averaged(angular_velocity_list, day)
+        cw_ratio_list, switching_count_list = make_evaluate_switching.evaluate_switching(angular_velocity_list, day)
     rot_df_manage.update_rot_df(ROTATION_FEATURES.cw_ratio, cw_ratio_list, day)
+    rot_df_manage.update_rot_df(ROTATION_FEATURES.switching_count, switching_count_list, day)
 
     return angle_list, angular_velocity_list
