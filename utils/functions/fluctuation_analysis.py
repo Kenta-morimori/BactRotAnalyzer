@@ -97,7 +97,7 @@ def evaluate_FFT(sd_freq_list, sd_Amp_list, day):
         decrease_list.append(add_decrease)
         ratio_list.append(add_ratio)
     # plot
-    make_graph.plot_SD_FFT_decline(decrease_list, ref_point_list, day)
+    make_graph.plot_SD_FFT_feats(ratio_list, decrease_list, ref_point_list, day)
 
     # save CSV
     # save2csv.save_SD_FFT_decline(decrease_list, day)
