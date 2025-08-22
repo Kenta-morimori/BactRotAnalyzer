@@ -83,21 +83,27 @@ def evaluate_FFT(sd_freq_list, sd_Amp_list, day):
 
     decrease_list = []
     ratio_list = []
+    ratio_reciprocal_list = []
     ref_point_list: List[List[float]] = [[] for _ in range(sample_num)]
     for i in range(sample_num):
         add_decrease = []
         add_ratio = []
+        add_ratio_reciprocal = []
         for j in range(len(width_time_list)):
             add_ref_point = np.mean(sd_Amp_list[i][j][0:3])
             ref_point_list[i].append(add_ref_point)
 
-            indices = [k for k, x in enumerate(sd_freq_list[i][j]) if x >= 80]
-            add_decrease.append(add_ref_point - np.mean([sd_Amp_list[i][j][k] for k in indices]))
-            add_ratio.append(add_ref_point / np.mean([sd_Amp_list[i][j][k] for k in indices]))
+            high_freq_indices = [k for k, x in enumerate(sd_freq_list[i][j]) if x >= 80]
+            Amp_high_freq_arr = np.mean([sd_Amp_list[i][j][k] for k in high_freq_indices])
+
+            add_decrease.append(add_ref_point - Amp_high_freq_arr)
+            add_ratio.append(add_ref_point / Amp_high_freq_arr)
+            add_ratio_reciprocal.append(Amp_high_freq_arr / add_ref_point)
         decrease_list.append(add_decrease)
         ratio_list.append(add_ratio)
+        ratio_reciprocal_list.append(add_ratio_reciprocal)
     # plot
-    make_graph.plot_SD_FFT_feats(ratio_list, decrease_list, ref_point_list, day)
+    make_graph.plot_SD_FFT_feats(ratio_list, ratio_reciprocal_list, decrease_list, ref_point_list, day)
 
     # save CSV
     # save2csv.save_SD_FFT_decline(decrease_list, day)
@@ -107,13 +113,18 @@ def evaluate_FFT(sd_freq_list, sd_Amp_list, day):
     for j, width in enumerate(width_time_list):
         decrease_list_rot_df = []
         ratio_list_rot_df = []
+        ratio_reciprocal_list_rot_df = []
         ref_point_list_rot_df = []
         for i in range(sample_num):
             decrease_list_rot_df.append(decrease_list[i][j])
             ratio_list_rot_df.append(ratio_list[i][j])
+            ratio_reciprocal_list_rot_df.append(ratio_reciprocal_list[i][j])
             ref_point_list_rot_df.append(ref_point_list[i][j])
         rot_df_manage.update_rot_df(f"{ROTATION_FEATURES.SD_FFT_Amp_decrease}_{width}s", decrease_list_rot_df, day)
         rot_df_manage.update_rot_df(f"{ROTATION_FEATURES.SD_FFT_Amp_ratio}_{width}s", ratio_list_rot_df, day)
+        rot_df_manage.update_rot_df(
+            f"{ROTATION_FEATURES.SD_FFT_Amp_ratio_reciprocal}_{width}s", ratio_reciprocal_list_rot_df, day
+        )
         rot_df_manage.update_rot_df(f"{ROTATION_FEATURES.SD_FFT_Amp_refpoints}_{width}s", ref_point_list_rot_df, day)
 
 

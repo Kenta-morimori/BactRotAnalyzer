@@ -682,7 +682,7 @@ def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
     plt.close(fig)
 
 
-def plot_SD_FFT_feats(ratio_list, decrease_list, ref_point_list, day):
+def plot_SD_FFT_feats(ratio_list, ratio_reciprocal_list, decrease_list, ref_point_list, day):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
     save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/FFT"
@@ -692,7 +692,7 @@ def plot_SD_FFT_feats(ratio_list, decrease_list, ref_point_list, day):
     cols = max_cols
     rows = math.ceil(sample_num / cols)
 
-    for mode in ["ratio", "decrease", "ref_points"]:
+    for mode in ["ratio", "ratio_reciprocal", "decrease", "ref_points"]:
         fig, axes = plt.subplots(rows, cols, figsize=(20, 12), squeeze=False)
         for i in range(sample_num):
             row = i // cols
@@ -701,6 +701,10 @@ def plot_SD_FFT_feats(ratio_list, decrease_list, ref_point_list, day):
             if mode == "ratio":
                 # Amp Ratio
                 axes[row, col].plot(width_time_list, ratio_list[i], "-o")
+                axes[row, col].set_title(f"No.{i+1} Amp Ratio", fontsize=font_size)
+            elif mode == "ratio_reciprocal":
+                # Amp Ratio (reciprocal)
+                axes[row, col].plot(width_time_list, ratio_reciprocal_list[i], "-o")
                 axes[row, col].set_title(f"No.{i+1} Amp Ratio", fontsize=font_size)
             elif mode == "decrease":
                 # Amp Decrease
