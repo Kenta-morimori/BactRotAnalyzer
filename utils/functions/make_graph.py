@@ -732,8 +732,14 @@ def plot_rot_param(day):
     save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis"
     os.makedirs(save_dir, exist_ok=True)
 
-    fig_mag = len(col_list_org) / 2.5
-    fig, axs = plt.subplots(len(col_list_org), len(col_list_org), figsize=(fig_size_x * fig_mag, fig_size_x * fig_mag))
+    plot_cols_num = len(col_list_org)
+    fig_mag = plot_cols_num / 5.0
+    fig, axs = plt.subplots(
+        plot_cols_num,
+        plot_cols_num,
+        figsize=(fig_size_x * fig_mag, fig_size_x * fig_mag),
+        constrained_layout=True,
+    )
     label_list = [f"SD {width}s" for width in width_time_list]
     for i, i_col in enumerate(tqdm(col_list_org)):
         for j, j_col in enumerate(col_list_org):
@@ -770,19 +776,17 @@ def plot_rot_param(day):
             # plot
             if flag_i_width_depend or flag_j_width_depend:
                 for k, width in enumerate(width_time_list):
-                    axs[i][j].plot(data_i_aft[k], data_j_aft[k], "o", label=label_list[k], ms=5 * fig_mag)
+                    axs[i][j].plot(data_i_aft[k], data_j_aft[k], "o", label=label_list[k], ms=3 * fig_mag)
                 axs[i][j].legend(label_list, loc="upper left", bbox_to_anchor=(1, 1))
             else:
                 axs[i][j].plot(data_i_aft[0], data_j_aft[0], "o", ms=5 * fig_mag)
-            # axs[i][j].set_aspect("equal")
+            axs[i][j].set_box_aspect(1)
             axs[i][j].grid(True)
-            axs[i][j].set_title(f"{i_col}\nvs\n{j_col}", fontsize=font_size)
-            axs[i][j].set_xlabel(i_col, fontsize=font_size)
-            axs[i][j].set_ylabel(j_col, fontsize=font_size)
-            axs[i][j].tick_params(axis="both", which="major", labelsize=font_size)
-    # plt.subplots_adjust()
-    plt.tight_layout()
-    plt.savefig(f"{save_dir}/rot_param_relation.png")
+            axs[i][j].set_title(f"{i_col}\nvs\n{j_col}", fontsize=font_size / 2)
+            axs[i][j].set_xlabel(i_col, fontsize=font_size / 2)
+            axs[i][j].set_ylabel(j_col, fontsize=font_size / 2)
+            axs[i][j].tick_params(axis="both", which="major", labelsize=font_size / 2)
+    plt.savefig(f"{save_dir}/rot_param_relation.png", dpi=100, bbox_inches="tight")
     plt.close(fig)
 
 
