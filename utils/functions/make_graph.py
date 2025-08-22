@@ -786,55 +786,6 @@ def plot_rot_param(day):
     plt.close(fig)
 
 
-# compare_fluctuation_main
-def plot_rot_param_compairison(day_list, df, save_label, plot_labels=None):
-    save_dir = f"{param.save_dir_bef}/{save_label}"
-    os.makedirs(save_dir, exist_ok=True)
-
-    bef_cols = rot_df_manage.get_cols()
-    plot_cols = [c for c in bef_cols if (c in df.columns) and (c not in IGNORE_PLOT_COLS)]
-
-    cols = 3
-    rows = max(1, math.ceil(len(plot_cols) / cols))
-    fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
-    for i, plot_col in enumerate(plot_cols):
-        row = i // cols
-        col = i % cols
-        df_selected = df[df["day"].isin(day_list)][["day", plot_col]].dropna(subset=[plot_col])
-
-        for d_i, day in enumerate(day_list):
-            plot_df = df_selected[df_selected["day"] == day]
-            x = np.full(len(plot_df), d_i)
-            if plot_labels is None:
-                axs[row, col].scatter(x, plot_df[plot_col], label=day)
-            else:
-                axs[row, col].scatter(x, plot_df[plot_col], label=plot_labels[d_i])
-            # data number
-            for idx, y_val in enumerate(plot_df[plot_col]):
-                axs[row, col].text(
-                    d_i + 0.05,
-                    y_val,
-                    str(idx + 1),
-                    fontsize=font_size * 0.7,
-                    va="center",
-                    ha="left",
-                )
-        xticks = np.arange(len(day_list))
-        axs[row, col].set_xticks(xticks)
-        axs[row, col].set_xticklabels(
-            plot_labels if plot_labels is not None else day_list, fontsize=font_size, rotation=0
-        )
-        axs[row, col].set_xlim(-0.5, len(day_list) - 0.5)
-
-        axs[row, col].grid(True, linestyle="--", alpha=0.4, axis="y")
-        axs[row, col].set_title(plot_col, fontsize=font_size)
-        axs[row, col].set_ylabel("Value", fontsize=font_size)
-        axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
-    plt.tight_layout()
-    plt.savefig(f"{save_dir}/rot_param_comparison.png")
-    plt.close(fig)
-
-
 def dev_plot_centroid_and_center(x_list, y_list, center_x_list, center_y_list, day):
     sample_num, _, _ = param.get_config(day)
     save_dir = f"{param.save_dir_bef}/{day}/centroid_coordinate/bef_correction"
