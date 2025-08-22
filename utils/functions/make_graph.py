@@ -581,6 +581,38 @@ def plot_SD_list(SD_list, day, flag_std):
     plt.close(fig)
 
 
+def plot_sd_mean(sd_list, day):
+    sample_num, _, _ = param.get_config(day)
+    width_time_list = param.SD_window_width_list
+    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/SD"
+    os.makedirs(save_dir, exist_ok=True)
+
+    cols = 5
+    rows = max(1, math.ceil(sample_num / cols))
+    fig = plt.figure(figsize=(20, 12))
+    gs = gridspec.GridSpec(rows, cols, figure=fig, wspace=0.38, hspace=0.2)
+    for i in range(sample_num):
+        row = i // cols
+        col = i % cols
+        axs = fig.add_subplot(gs[row, col])
+
+        sd_mean_list = []
+        for j in range(len(width_time_list)):
+            sd_arr_i = np.asarray(sd_list[i][j])
+            sd_mean_list.append(np.mean(sd_arr_i))
+
+        axs.plot(width_time_list, sd_mean_list, linewidth=4)
+        axs.grid(True)
+        axs.set_title(f"No.{i+1}", fontsize=font_size)
+        axs.set_xlabel("Width time [s]", fontsize=font_size)
+        axs.set_ylabel("Average of SD", fontsize=font_size)
+        axs.tick_params(axis="both", which="major", labelsize=font_size)
+    fig.suptitle("SD means", size=12)
+    # plt.tight_layout(rect=(0, 0, 1, 0.96))
+    plt.savefig(f"{save_dir}/SD_mean.png")
+    plt.close(fig)
+
+
 def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
@@ -653,37 +685,38 @@ def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
 def plot_SD_FFT_feats(ratio_list, decrease_list, ref_point_list, day):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
-    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series"
+    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/FFT"
     os.makedirs(save_dir, exist_ok=True)
 
     max_cols = 5
     cols = max_cols
-    rows = math.ceil(sample_num / cols)   # サンプルを何段に分けるか
-    fig, axes = plt.subplots(3*rows, cols, figsize=(20, 12), squeeze=False)
+    rows = math.ceil(sample_num / cols)
 
-    for i in range(sample_num):
-        col = i % cols
-        row_block = i // cols
+    for mode in ["ratio", "decrease", "ref_points"]:
+        fig, axes = plt.subplots(rows, cols, figsize=(20, 12), squeeze=False)
+        for i in range(sample_num):
+            row = i // cols
+            col = i % cols
 
-        # Amp Decrease
-        axes[3*row_block + 0, col].plot(width_time_list, decrease_list[i], "-o")
-        axes[3*row_block + 0, col].set_title(f"No.{i+1} Amp Decrease", fontsize=font_size)
+            if mode == "ratio":
+                # Amp Ratio
+                axes[row, col].plot(width_time_list, ratio_list[i], "-o")
+                axes[row, col].set_title(f"No.{i+1} Amp Ratio", fontsize=font_size)
+            elif mode == "decrease":
+                # Amp Decrease
+                axes[row, col].plot(width_time_list, decrease_list[i], "-o")
+                axes[row, col].set_title(f"No.{i+1} Amp Decrease", fontsize=font_size)
+            else:
+                # Reference Points
+                axes[row, col].plot(width_time_list, ref_point_list[i], "-o")
+                axes[row, col].set_title(f"No.{i+1} Ref. Points", fontsize=font_size)
 
-        # Amp Ratio
-        axes[3*row_block + 1, col].plot(width_time_list, ratio_list[i], "-o")
-        axes[3*row_block + 0, col].set_title(f"No.{i+1} Amp Ratio", fontsize=font_size)
-
-        # Ref Points
-        axes[3*row_block + 2, col].plot(width_time_list, ref_point_list[i], "-o")
-        axes[3*row_block + 2, col].set_title(f"No.{i+1} Ref. Points", fontsize=font_size)
-
-        for k in range(3):
-            axes[3*row_block + k, col].set_xlabel("Window Width [s]", fontsize=font_size)
-            axes[3*row_block + k, col].tick_params(axis="both", which="major", labelsize=font_size)
-    fig.suptitle("SD FFT features", size=12)
-    plt.tight_layout(rect=(0, 0, 1, 0.96))
-    plt.savefig(f"{save_dir}/SD_FFT_Amp_decrease.png")
-    plt.close(fig)
+            axes[row, col].set_xlabel("Window Width [s]", fontsize=font_size)
+            axes[row, col].tick_params(axis="both", which="major", labelsize=font_size)
+        fig.suptitle("SD FFT features", size=12)
+        plt.tight_layout(rect=(0, 0, 1, 0.96))
+        plt.savefig(f"{save_dir}/SD_FFT_Amp_{mode}.png")
+        plt.close(fig)
 
 
 def plot_rot_param(day):
@@ -967,7 +1000,7 @@ def dev_plot_av_with_stats(av_list, av_means, av_medians, day):
 def dev_plot_sd_FFT_with_rotation(freq_list, Amp_list, day):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
-    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series"
+    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/SD"
     os.makedirs(save_dir, exist_ok=True)
 
     av_freq_list, av_Amp_list = read_csv.get_angle_FFT(day)

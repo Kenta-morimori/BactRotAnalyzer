@@ -151,6 +151,7 @@ def main(angular_velocity_list, day):
     # plot
     flag_std = False
     make_graph.plot_SD_list(sd_list, day, flag_std)
+    make_graph.plot_sd_mean(sd_list, day)
     # FFT
     # frequency_analysis.fft_sd_list(sd_list, day, flag_std)
 
