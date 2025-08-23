@@ -82,29 +82,49 @@ def evaluate_FFT(sd_freq_list, sd_Amp_list, day):
     width_time_list = param.SD_window_width_list
 
     decrease_list = []
+    ratio_list = []
+    ratio_reciprocal_list = []
     ref_point_list: List[List[float]] = [[] for _ in range(sample_num)]
     for i in range(sample_num):
         add_decrease = []
+        add_ratio = []
+        add_ratio_reciprocal = []
         for j in range(len(width_time_list)):
             add_ref_point = np.mean(sd_Amp_list[i][j][0:3])
             ref_point_list[i].append(add_ref_point)
 
-            indices = [k for k, x in enumerate(sd_freq_list[i][j]) if x >= 80]
-            add_decrease.append(add_ref_point - np.mean([sd_Amp_list[i][j][k] for k in indices]))
+            high_freq_indices = [k for k, x in enumerate(sd_freq_list[i][j]) if x >= 80]
+            Amp_high_freq_arr = np.mean([sd_Amp_list[i][j][k] for k in high_freq_indices])
+
+            add_decrease.append(add_ref_point - Amp_high_freq_arr)
+            add_ratio.append(add_ref_point / Amp_high_freq_arr)
+            add_ratio_reciprocal.append(Amp_high_freq_arr / add_ref_point)
         decrease_list.append(add_decrease)
+        ratio_list.append(add_ratio)
+        ratio_reciprocal_list.append(add_ratio_reciprocal)
     # plot
-    make_graph.plot_SD_FFT_decline(decrease_list, ref_point_list, day)
+    make_graph.plot_SD_FFT_feats(ratio_list, ratio_reciprocal_list, decrease_list, ref_point_list, day)
+
     # save CSV
-    save2csv.save_SD_FFT_decline(decrease_list, day)
-    save2csv.save_SD_FFT_refpoints(ref_point_list, day)
+    # save2csv.save_SD_FFT_decline(decrease_list, day)
+    # save2csv.save_SD_FFT_refpoints(ref_point_list, day)
+
     # save rot_df
     for j, width in enumerate(width_time_list):
         decrease_list_rot_df = []
+        ratio_list_rot_df = []
+        ratio_reciprocal_list_rot_df = []
         ref_point_list_rot_df = []
         for i in range(sample_num):
             decrease_list_rot_df.append(decrease_list[i][j])
+            ratio_list_rot_df.append(ratio_list[i][j])
+            ratio_reciprocal_list_rot_df.append(ratio_reciprocal_list[i][j])
             ref_point_list_rot_df.append(ref_point_list[i][j])
         rot_df_manage.update_rot_df(f"{ROTATION_FEATURES.SD_FFT_Amp_decrease}_{width}s", decrease_list_rot_df, day)
+        rot_df_manage.update_rot_df(f"{ROTATION_FEATURES.SD_FFT_Amp_ratio}_{width}s", ratio_list_rot_df, day)
+        rot_df_manage.update_rot_df(
+            f"{ROTATION_FEATURES.SD_FFT_Amp_ratio_reciprocal}_{width}s", ratio_reciprocal_list_rot_df, day
+        )
         rot_df_manage.update_rot_df(f"{ROTATION_FEATURES.SD_FFT_Amp_refpoints}_{width}s", ref_point_list_rot_df, day)
 
 
@@ -120,13 +140,21 @@ def main(angular_velocity_list, day):
         sd_list.append(add_sd_list)
         data_num_list.append(add_data_num_list)
 
-    make_graph.dev_plot_sd_data_num(data_num_list, day)  # develop
     # save to rot_df
+    for j, width in enumerate(width_time_list):
+        sd_mean_list = []
+        for i in range(sample_num):
+            sd_mean_list.append(np.mean(sd_list[i][j]))
+        rot_df_manage.update_rot_df(f"{ROTATION_FEATURES.SD_mean}_{width}s", sd_mean_list, day)
+
+    """
+    make_graph.dev_plot_sd_data_num(data_num_list, day)  # develop
     for j, width in enumerate(width_time_list):
         data_num_mean_list = []
         for i in range(sample_num):
             data_num_mean_list.append(np.mean(data_num_list[i][j]))
         rot_df_manage.update_rot_df(f"{ROTATION_FEATURES.SD_window_data_num_mean}_{width}s", data_num_mean_list, day)
+    """
 
     # save
     save2csv.save_sd_time_series(sd_list, day, flag_std=False)
@@ -134,6 +162,7 @@ def main(angular_velocity_list, day):
     # plot
     flag_std = False
     make_graph.plot_SD_list(sd_list, day, flag_std)
+    make_graph.plot_sd_mean(sd_list, day)
     # FFT
     # frequency_analysis.fft_sd_list(sd_list, day, flag_std)
 

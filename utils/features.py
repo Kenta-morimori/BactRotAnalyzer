@@ -15,18 +15,25 @@ class ROTATION_FEATURES:
     angular_velosity_mean: str = "angular_velosity_mean"
     angular_velosity_sd: str = "angular_velosity_sd"
     cw_ratio: str = "cw_ratio"
+    switching_count: str = "switching_count"
+    SD_mean: str = "SD_mean"
     SD_FFT_Amp_decrease: str = "SD_FFT_Amp_decrease"
-    SD_window_data_num_mean: str = "SD_window_data_num_mean"
+    SD_FFT_Amp_ratio: str = "SD_FFT_Amp_ratio"
+    SD_FFT_Amp_ratio_reciprocal: str = "SD_FFT_Amp_ratio_reciprocal"
+    # SD_window_data_num_mean: str = "SD_window_data_num_mean"
     SD_FFT_Amp_refpoints: str = "SD_FFT_Amp_refpoints"
 
 
 SD_WIDTH_DEPEND_COLS: Final[List[str]] = [
+    ROTATION_FEATURES.SD_mean,
     ROTATION_FEATURES.SD_FFT_Amp_decrease,
-    ROTATION_FEATURES.SD_window_data_num_mean,
+    ROTATION_FEATURES.SD_FFT_Amp_ratio,
+    ROTATION_FEATURES.SD_FFT_Amp_ratio_reciprocal,
+    # ROTATION_FEATURES.SD_window_data_num_mean,
     ROTATION_FEATURES.SD_FFT_Amp_refpoints,
 ]
 
-
 IGNORE_PLOT_COLS: Final[List[str]] = [
     ROTATION_FEATURES.rot_angular_velosity_th,
+    ROTATION_FEATURES.SD_FFT_Amp_decrease,
 ]

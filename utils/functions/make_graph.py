@@ -515,7 +515,7 @@ def plot_fft(freq_list, Amp_list, save_dir, save_name, day, flag_add_peak=False)
 def plot_SD_list(SD_list, day, flag_std):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
-    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series"
+    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/SD"
     os.makedirs(save_dir, exist_ok=True)
 
     cols = 2
@@ -581,10 +581,42 @@ def plot_SD_list(SD_list, day, flag_std):
     plt.close(fig)
 
 
+def plot_sd_mean(sd_list, day):
+    sample_num, _, _ = param.get_config(day)
+    width_time_list = param.SD_window_width_list
+    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/SD"
+    os.makedirs(save_dir, exist_ok=True)
+
+    cols = 5
+    rows = max(1, math.ceil(sample_num / cols))
+    fig = plt.figure(figsize=(20, 12))
+    gs = gridspec.GridSpec(rows, cols, figure=fig, wspace=0.38, hspace=0.2)
+    for i in range(sample_num):
+        row = i // cols
+        col = i % cols
+        axs = fig.add_subplot(gs[row, col])
+
+        sd_mean_list = []
+        for j in range(len(width_time_list)):
+            sd_arr_i = np.asarray(sd_list[i][j])
+            sd_mean_list.append(np.mean(sd_arr_i))
+
+        axs.plot(width_time_list, sd_mean_list, linewidth=4)
+        axs.grid(True)
+        axs.set_title(f"No.{i+1}", fontsize=font_size)
+        axs.set_xlabel("Width time [s]", fontsize=font_size)
+        axs.set_ylabel("Average of SD", fontsize=font_size)
+        axs.tick_params(axis="both", which="major", labelsize=font_size)
+    fig.suptitle("SD means", size=12)
+    # plt.tight_layout(rect=(0, 0, 1, 0.96))
+    plt.savefig(f"{save_dir}/SD_mean.png")
+    plt.close(fig)
+
+
 def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
-    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series"
+    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/FFT"
     os.makedirs(save_dir, exist_ok=True)
 
     max_x_lim_list = []
@@ -650,31 +682,45 @@ def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
     plt.close(fig)
 
 
-def plot_SD_FFT_decline(decrease_list, ref_point_list, day):
+def plot_SD_FFT_feats(ratio_list, ratio_reciprocal_list, decrease_list, ref_point_list, day):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
-    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series"
+    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/FFT"
     os.makedirs(save_dir, exist_ok=True)
 
-    fig, axes = plt.subplots(1, sample_num + 1, figsize=(50, 5))
-    for i in range(sample_num):
-        # Amp Decreace
-        axes[i].plot(width_time_list, decrease_list[i], "-o")
-        axes[i].set_title(f"No.{i+1}", fontsize=font_size)
-        axes[i].set_xlabel("Window Width [s]", fontsize=font_size)
-        axes[i].set_ylabel("Amp Decrease Ratio", fontsize=font_size)
-        axes[i].tick_params(axis="both", which="major", labelsize=font_size)
-        # Low Amp Reference Points
-    axes[-1].plot(range(len(ref_point_list)), ref_point_list, "o")
-    axes[-1].set_title("Low Amp Reference Points", fontsize=font_size)
-    axes[-1].set_xlabel("Data Number", fontsize=font_size)
-    axes[-1].set_ylabel("Low Amp Reference Points", fontsize=font_size)
-    axes[-1].tick_params(axis="both", which="major", labelsize=font_size)
-    plt.tight_layout()
-    fig.suptitle("SD FFT features", size=12)
-    plt.subplots_adjust(wspace=0.5, hspace=0.2)
-    plt.savefig(f"{save_dir}/SD_FFT_Amp_decrease.png")
-    plt.close(fig)
+    max_cols = 5
+    cols = max_cols
+    rows = math.ceil(sample_num / cols)
+
+    for mode in ["ratio", "ratio_reciprocal", "decrease", "ref_points"]:
+        fig, axes = plt.subplots(rows, cols, figsize=(20, 12), squeeze=False)
+        for i in range(sample_num):
+            row = i // cols
+            col = i % cols
+
+            if mode == "ratio":
+                # Amp Ratio
+                axes[row, col].plot(width_time_list, ratio_list[i], "-o")
+                axes[row, col].set_title(f"No.{i+1} Amp Ratio", fontsize=font_size)
+            elif mode == "ratio_reciprocal":
+                # Amp Ratio (reciprocal)
+                axes[row, col].plot(width_time_list, ratio_reciprocal_list[i], "-o")
+                axes[row, col].set_title(f"No.{i+1} Amp Ratio", fontsize=font_size)
+            elif mode == "decrease":
+                # Amp Decrease
+                axes[row, col].plot(width_time_list, decrease_list[i], "-o")
+                axes[row, col].set_title(f"No.{i+1} Amp Decrease", fontsize=font_size)
+            else:
+                # Reference Points
+                axes[row, col].plot(width_time_list, ref_point_list[i], "-o")
+                axes[row, col].set_title(f"No.{i+1} Ref. Points", fontsize=font_size)
+
+            axes[row, col].set_xlabel("Window Width [s]", fontsize=font_size)
+            axes[row, col].tick_params(axis="both", which="major", labelsize=font_size)
+        fig.suptitle("SD FFT features", size=12)
+        plt.tight_layout(rect=(0, 0, 1, 0.96))
+        plt.savefig(f"{save_dir}/SD_FFT_Amp_{mode}.png")
+        plt.close(fig)
 
 
 def plot_rot_param(day):
@@ -686,8 +732,14 @@ def plot_rot_param(day):
     save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis"
     os.makedirs(save_dir, exist_ok=True)
 
-    fig_mag = len(col_list_org) / 2.5
-    fig, axs = plt.subplots(len(col_list_org), len(col_list_org), figsize=(fig_size_x * fig_mag, fig_size_x * fig_mag))
+    plot_cols_num = len(col_list_org)
+    fig_mag = plot_cols_num / 5.0
+    fig, axs = plt.subplots(
+        plot_cols_num,
+        plot_cols_num,
+        figsize=(fig_size_x * fig_mag, fig_size_x * fig_mag),
+        constrained_layout=True,
+    )
     label_list = [f"SD {width}s" for width in width_time_list]
     for i, i_col in enumerate(tqdm(col_list_org)):
         for j, j_col in enumerate(col_list_org):
@@ -724,68 +776,17 @@ def plot_rot_param(day):
             # plot
             if flag_i_width_depend or flag_j_width_depend:
                 for k, width in enumerate(width_time_list):
-                    axs[i][j].plot(data_i_aft[k], data_j_aft[k], "o", label=label_list[k], ms=5 * fig_mag)
+                    axs[i][j].plot(data_i_aft[k], data_j_aft[k], "o", label=label_list[k], ms=3 * fig_mag)
                 axs[i][j].legend(label_list, loc="upper left", bbox_to_anchor=(1, 1))
             else:
                 axs[i][j].plot(data_i_aft[0], data_j_aft[0], "o", ms=5 * fig_mag)
-            # axs[i][j].set_aspect("equal")
+            axs[i][j].set_box_aspect(1)
             axs[i][j].grid(True)
-            axs[i][j].set_title(f"{i_col}\nvs\n{j_col}", fontsize=font_size)
-            axs[i][j].set_xlabel(i_col, fontsize=font_size)
-            axs[i][j].set_ylabel(j_col, fontsize=font_size)
-            axs[i][j].tick_params(axis="both", which="major", labelsize=font_size)
-    # plt.subplots_adjust()
-    plt.tight_layout()
-    plt.savefig(f"{save_dir}/rot_param_relation.png")
-    plt.close(fig)
-
-
-# compare_fluctuation_main
-def plot_rot_param_compairison(day_list, df, save_label, plot_labels=None):
-    save_dir = f"{param.save_dir_bef}/{save_label}"
-    os.makedirs(save_dir, exist_ok=True)
-
-    bef_cols = rot_df_manage.get_cols()
-    plot_cols = [c for c in bef_cols if (c in df.columns) and (c not in IGNORE_PLOT_COLS)]
-
-    cols = 3
-    rows = max(1, math.ceil(len(plot_cols) / cols))
-    fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
-    for i, plot_col in enumerate(plot_cols):
-        row = i // cols
-        col = i % cols
-        df_selected = df[df["day"].isin(day_list)][["day", plot_col]].dropna(subset=[plot_col])
-
-        for d_i, day in enumerate(day_list):
-            plot_df = df_selected[df_selected["day"] == day]
-            x = np.full(len(plot_df), d_i)
-            if plot_labels is None:
-                axs[row, col].scatter(x, plot_df[plot_col], label=day)
-            else:
-                axs[row, col].scatter(x, plot_df[plot_col], label=plot_labels[d_i])
-            # data number
-            for idx, y_val in enumerate(plot_df[plot_col]):
-                axs[row, col].text(
-                    d_i + 0.05,
-                    y_val,
-                    str(idx + 1),
-                    fontsize=font_size * 0.7,
-                    va="center",
-                    ha="left",
-                )
-        xticks = np.arange(len(day_list))
-        axs[row, col].set_xticks(xticks)
-        axs[row, col].set_xticklabels(
-            plot_labels if plot_labels is not None else day_list, fontsize=font_size, rotation=0
-        )
-        axs[row, col].set_xlim(-0.5, len(day_list) - 0.5)
-
-        axs[row, col].grid(True, linestyle="--", alpha=0.4, axis="y")
-        axs[row, col].set_title(plot_col, fontsize=font_size)
-        axs[row, col].set_ylabel("Value", fontsize=font_size)
-        axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
-    plt.tight_layout()
-    plt.savefig(f"{save_dir}/rot_param_comparison.png")
+            axs[i][j].set_title(f"{i_col}\nvs\n{j_col}", fontsize=font_size / 2)
+            axs[i][j].set_xlabel(i_col, fontsize=font_size / 2)
+            axs[i][j].set_ylabel(j_col, fontsize=font_size / 2)
+            axs[i][j].tick_params(axis="both", which="major", labelsize=font_size / 2)
+    plt.savefig(f"{save_dir}/rot_param_relation.png", dpi=100, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -958,7 +959,7 @@ def dev_plot_av_with_stats(av_list, av_means, av_medians, day):
 def dev_plot_sd_FFT_with_rotation(freq_list, Amp_list, day):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
-    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series"
+    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/SD"
     os.makedirs(save_dir, exist_ok=True)
 
     av_freq_list, av_Amp_list = read_csv.get_angle_FFT(day)

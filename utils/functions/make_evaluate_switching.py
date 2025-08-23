@@ -8,17 +8,18 @@ from utils.features import ROTATION_FEATURES
 from utils.functions import make_graph, make_scale, rot_df_manage
 
 
-def evaluate_switching_averaged(angular_velocity_mean_list, day):
+def evaluate_switching(angular_velocity_list, day):
     sample_num, _, _ = param.get_config(day)
 
     cw_ratio_list: list[Union[int, float]] = []
-    # get ngular_velocity_list average using window function
+    switching_count_list: list[Union[int, float]] = []
     for i in range(sample_num):
+        # count cw and ccw
         cw_count, ccw_count = 0, 0
-        for j in range(len(angular_velocity_mean_list[i])):
-            if angular_velocity_mean_list[i][j] == np.nan:
+        for j in range(len(angular_velocity_list[i])):
+            if angular_velocity_list[i][j] == np.nan:
                 continue
-            elif angular_velocity_mean_list[i][j] >= 0:
+            elif angular_velocity_list[i][j] >= 0:
                 ccw_count += 1
             else:
                 cw_count += 1
@@ -27,7 +28,20 @@ def evaluate_switching_averaged(angular_velocity_mean_list, day):
         else:
             cw_ratio_list.append(round(cw_count / ccw_count, 3))
 
-    return cw_ratio_list
+        # count switching times
+        count = 0
+        prev = None
+        for x in angular_velocity_list[i]:
+            if np.isnan(x):
+                continue
+            if x == 0:
+                continue
+            if prev is not None and x * prev < 0:
+                count += 1
+            prev = x
+        switching_count_list.append(count)
+
+    return cw_ratio_list, switching_count_list
 
 
 def k_means_av(av_list, day):
