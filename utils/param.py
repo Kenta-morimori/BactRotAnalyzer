@@ -125,6 +125,19 @@ flag_eval_switching_with_averaged_av = False
 # SD_window_width_list = [0.1, 0.5, 1.0]
 SD_window_width_list = [0.1, 0.2, 0.5, 1.0, 1.5, 2.0]
 
+# SD time-series fluctuation mode
+mode_evaluate_SD_fluctuation = 1
+"""
+0: SD
+1: SD / Mean
+"""
+
+def get_SD_mode_label():
+    if mode_evaluate_SD_fluctuation == 0:
+        return "SD"
+    elif mode_evaluate_SD_fluctuation == 1:
+        return "SD_per_mean"
+
 
 # evaluate SD FFT low Amp and decline
 flag_evaluate_SD_FFT = True

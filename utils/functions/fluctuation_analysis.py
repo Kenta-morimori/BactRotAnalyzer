@@ -2,6 +2,7 @@ import statistics
 from typing import List
 
 import numpy as np
+import pandas as pd
 
 from utils import param
 from utils.features import ROTATION_FEATURES
@@ -18,43 +19,45 @@ def get_sd_time_series(i, angular_velocity, day):
     _, FrameRate_list, total_time_list = param.get_config(day)
     width_time_list = param.SD_window_width_list
 
-    sd_list = []
-    data_num_list = []  # develop
-    # 時間ベースの取得
+    sd_list: List[List[float]] = []
+    data_num_list: List[List[int]] = []  # develop
+
+    # Obtaining SD time-series
+    # time base
     time_list = read_csv.get_timelist(day)
+    time_arr = np.array(time_list[i])
+
+    time_step = 1 / FrameRate_list[i]
+    total_time = float(total_time_list[i])
+
+    df = pd.DataFrame({
+        "time": time_list[i],
+        "velocity": np.abs(angular_velocity),
+    })
+
     for width_time in width_time_list:
         add_sd = []
+        prev_val = np.nan
         add_data_num = []  # develop
+
         start_time = 0.0
-        while 1:
-            data = []
-            # start_time ~ start_time + width_time のデータ
-            for j in range(len(time_list[i])):
-                if (time_list[i][j] >= start_time) and (time_list[i][j] < start_time + width_time):
-                    # 揺らぎの評価の際は絶対値の角速度を使用
-                    data.append(abs(angular_velocity[j]))
-            if len(data) > 2:  # SDの算出は最低3データ必要
-                add_sd.append(statistics.stdev(data))
+        while start_time + width_time < total_time:
+            mask = (df["time"] >= start_time) & (df["time"] < start_time + width_time)
+            data = df.loc[mask, "velocity"]
+            if len(data) >= 3:  # at least 3 data to calculate SD
+                if param.mode_evaluate_SD_fluctuation == 0:
+                    val = data.std(ddof=1)
+                elif param.mode_evaluate_SD_fluctuation == 1:
+                    mean_val = data.mean()
+                    val = data.std(ddof=1) / mean_val
+                add_sd.append(data.std(ddof=1))
+                prev_val = val
                 add_data_num.append(len(data))
-            start_time += 1 / FrameRate_list[i]
-            # width_timeの幅でSDが算出できない場合break
-            if start_time + width_time >= total_time_list[i]:
-                break
+            else:
+                add_sd.append(prev_val)
+            start_time += time_step
         sd_list.append(add_sd)
         data_num_list.append(add_data_num)  # develop
-    """
-    # indexベースの取得
-    for width_time in width_time_list:
-        add_sd = []
-        width_frame_num = int(width_time * FrameRate_list[i])
-
-        for index_1, time_num in enumerate(np.arange(1 / FrameRate_list[i], float(total_time_list[i] + 1 / FrameRate_list[i]), 1 / FrameRate_list[i])):
-            time_num = round(time_num, 4)
-            if (index_1 + width_frame_num) < FrameRate_list[i] * total_time_list[i]:
-                print(index_1, index_1 + width_frame_num)
-                add_sd.append(statistics.stdev(angular_velocity[index_1 : (index_1 + width_frame_num)]))
-        sd_list.append(add_sd)
-    """
 
     return sd_list, data_num_list
 

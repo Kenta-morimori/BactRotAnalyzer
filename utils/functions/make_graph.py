@@ -515,7 +515,7 @@ def plot_fft(freq_list, Amp_list, save_dir, save_name, day, flag_add_peak=False)
 def plot_SD_list(SD_list, day, flag_std):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
-    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/SD"
+    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/{param.get_SD_mode_label()}"
     os.makedirs(save_dir, exist_ok=True)
 
     cols = 2
@@ -584,7 +584,7 @@ def plot_SD_list(SD_list, day, flag_std):
 def plot_sd_mean(sd_list, day):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
-    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/SD"
+    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/{param.get_SD_mode_label()}"
     os.makedirs(save_dir, exist_ok=True)
 
     cols = 5
@@ -616,7 +616,7 @@ def plot_sd_mean(sd_list, day):
 def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
-    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/FFT"
+    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/{param.get_SD_mode_label()}_FFT"
     os.makedirs(save_dir, exist_ok=True)
 
     max_x_lim_list = []
@@ -685,7 +685,7 @@ def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
 def plot_SD_FFT_feats(ratio_list, ratio_reciprocal_list, decrease_list, ref_point_list, day):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
-    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/FFT"
+    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/{param.get_SD_mode_label()}_FFT"
     os.makedirs(save_dir, exist_ok=True)
 
     max_cols = 5
@@ -924,7 +924,7 @@ def dev_plot_sd_data_num(data_num_list, day):
             axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
     axs[-1][-1].legend(plot_label_list, loc="upper left", bbox_to_anchor=(1, 1))
     plt.tight_layout()
-    plt.savefig(f"{save_dir}/SD_data_num.png")
+    plt.savefig(f"{save_dir}/{param.get_SD_mode_label()}_data_num.png")
     plt.close(fig)
 
 
@@ -959,7 +959,7 @@ def dev_plot_av_with_stats(av_list, av_means, av_medians, day):
 def dev_plot_sd_FFT_with_rotation(freq_list, Amp_list, day):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
-    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/SD"
+    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/{param.get_SD_mode_label()}"
     os.makedirs(save_dir, exist_ok=True)
 
     av_freq_list, av_Amp_list = read_csv.get_angle_FFT(day)
