@@ -132,6 +132,7 @@ mode_evaluate_SD_fluctuation = 1
 1: SD / Mean
 """
 
+
 def get_SD_mode_label():
     if mode_evaluate_SD_fluctuation == 0:
         return "SD"

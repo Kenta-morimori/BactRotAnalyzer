@@ -25,15 +25,16 @@ def get_sd_time_series(i, angular_velocity, day):
     # Obtaining SD time-series
     # time base
     time_list = read_csv.get_timelist(day)
-    time_arr = np.array(time_list[i])
 
     time_step = 1 / FrameRate_list[i]
     total_time = float(total_time_list[i])
 
-    df = pd.DataFrame({
-        "time": time_list[i],
-        "velocity": np.abs(angular_velocity),
-    })
+    df = pd.DataFrame(
+        {
+            "time": time_list[i],
+            "velocity": np.abs(angular_velocity),
+        }
+    )
 
     for width_time in width_time_list:
         add_sd = []
