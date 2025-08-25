@@ -123,7 +123,10 @@ def plot_rot_param_comparison(
         if base_col in SD_WIDTH_DEPEND_COLS:
             # Align y across all widths for the same base feature.
             derived_cols = [f"{base_col}_{w}s" for w in width_time_list]
-            ylim = _compute_ylim_for_columns(df, day_list, derived_cols)
+            if param.flag_share_y_axis_across_width_time:
+                ylim = _compute_ylim_for_columns(df, day_list, derived_cols)
+            else:
+                ylim = None
 
             for derived_col in derived_cols:
                 ax = _get_axis(axs, panel_idx_on_page)
