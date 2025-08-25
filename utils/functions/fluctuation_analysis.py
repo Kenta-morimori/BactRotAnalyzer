@@ -31,7 +31,7 @@ def get_sd_time_series(i, angular_velocity, day):
 
     df = pd.DataFrame(
         {
-            "time": time_list[i][:len(angular_velocity)],
+            "time": time_list[i][: len(angular_velocity)],
             "velocity": np.abs(angular_velocity),
         }
     )

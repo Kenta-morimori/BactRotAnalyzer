@@ -997,6 +997,7 @@ def dev_plot_av_with_mean_sd(av_list, sd_list, mean_list, day):
         plt.savefig(f"{save_dir}/SD_with_mean_sd_{width_time}s.png")
         plt.close(fig)
 
+
 def dev_plot_sd_FFT_with_rotation(freq_list, Amp_list, day):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
