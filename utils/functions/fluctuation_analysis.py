@@ -50,9 +50,8 @@ def get_sd_time_series(i, angular_velocity, day):
                 if param.mode_evaluate_SD_fluctuation == 0:
                     val = data.std(ddof=1)
                 elif param.mode_evaluate_SD_fluctuation == 1:
-                    mean_val = data.mean()
-                    val = data.std(ddof=1) / mean_val
-                add_sd.append(data.std(ddof=1))
+                    val = data.std(ddof=1) / data.mean()
+                add_sd.append(val)
                 add_mean.append(data.mean())  # develop
                 prev_val = val
             else:
@@ -151,7 +150,8 @@ def main(angular_velocity_list, day):
         data_num_list.append(add_data_num_list)
 
     # dev plot
-    make_graph.dev_plot_av_with_mean_sd(angular_velocity_list, sd_list, mean_list, day)
+    if param.mode_evaluate_SD_fluctuation == 0:
+        make_graph.dev_plot_av_with_mean_sd(angular_velocity_list, sd_list, mean_list, day)
     """
     make_graph.dev_plot_sd_data_num(data_num_list, day)  # develop
     for j, width in enumerate(width_time_list):
