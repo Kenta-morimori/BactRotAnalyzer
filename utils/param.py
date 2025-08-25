@@ -142,3 +142,6 @@ def get_SD_mode_label():
 
 # evaluate SD FFT low Amp and decline
 flag_evaluate_SD_FFT = True
+
+# compare fluctuation property
+flag_share_y_axis_across_width_time = False
