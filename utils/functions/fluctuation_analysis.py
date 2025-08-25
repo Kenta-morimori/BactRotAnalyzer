@@ -19,6 +19,7 @@ def get_sd_time_series(i, angular_velocity, day):
     width_time_list = param.SD_window_width_list
 
     sd_list: List[List[float]] = []
+    mean_list: List[List[float]] = []
     data_num_list: List[List[int]] = []  # develop
 
     # Obtaining SD time-series
@@ -30,13 +31,14 @@ def get_sd_time_series(i, angular_velocity, day):
 
     df = pd.DataFrame(
         {
-            "time": time_list[i],
+            "time": time_list[i][:len(angular_velocity)],
             "velocity": np.abs(angular_velocity),
         }
     )
 
     for width_time in width_time_list:
         add_sd = []
+        add_mean = []  # develop
         prev_val = np.nan
         add_data_num = []  # develop
 
@@ -51,15 +53,18 @@ def get_sd_time_series(i, angular_velocity, day):
                     mean_val = data.mean()
                     val = data.std(ddof=1) / mean_val
                 add_sd.append(data.std(ddof=1))
+                add_mean.append(data.mean())  # develop
                 prev_val = val
-                add_data_num.append(len(data))
             else:
+                add_mean.append(prev_val)
                 add_sd.append(prev_val)
+            add_data_num.append(len(data))  # develop
             start_time += time_step
         sd_list.append(add_sd)
+        mean_list.append(add_mean)
         data_num_list.append(add_data_num)  # develop
 
-    return sd_list, data_num_list
+    return sd_list, mean_list, data_num_list
 
 
 def standardize_sd_time_series(sd_list, day):
@@ -135,21 +140,18 @@ def main(angular_velocity_list, day):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
     sd_list = []
+    mean_list = []  # develop
     data_num_list = []  # develop
 
     # get SD time-series
     for i in range(sample_num):
-        add_sd_list, add_data_num_list = get_sd_time_series(i, angular_velocity_list[i], day)
+        add_sd_list, add_mean_list, add_data_num_list = get_sd_time_series(i, angular_velocity_list[i], day)
         sd_list.append(add_sd_list)
+        mean_list.append(add_mean_list)
         data_num_list.append(add_data_num_list)
 
-    # save to rot_df
-    for j, width in enumerate(width_time_list):
-        sd_mean_list = []
-        for i in range(sample_num):
-            sd_mean_list.append(np.mean(sd_list[i][j]))
-        rot_df_manage.update_rot_df(f"{ROTATION_FEATURES.SD_mean}_{width}s", sd_mean_list, day)
-
+    # dev plot
+    make_graph.dev_plot_av_with_mean_sd(angular_velocity_list, sd_list, mean_list, day)
     """
     make_graph.dev_plot_sd_data_num(data_num_list, day)  # develop
     for j, width in enumerate(width_time_list):
@@ -158,6 +160,13 @@ def main(angular_velocity_list, day):
             data_num_mean_list.append(np.mean(data_num_list[i][j]))
         rot_df_manage.update_rot_df(f"{ROTATION_FEATURES.SD_window_data_num_mean}_{width}s", data_num_mean_list, day)
     """
+
+    # save to rot_df
+    for j, width in enumerate(width_time_list):
+        sd_mean_list = []
+        for i in range(sample_num):
+            sd_mean_list.append(np.mean(sd_list[i][j]))
+        rot_df_manage.update_rot_df(f"{ROTATION_FEATURES.SD_mean}_{width}s", sd_mean_list, day)
 
     # save
     save2csv.save_sd_time_series(sd_list, day, flag_std=False)
