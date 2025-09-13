@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Sequence, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -14,21 +14,63 @@ from utils.functions import (
 )
 
 
+def get_weights_gaussian(
+    start_time: float,
+    window_width: float,
+    time_list: Union[Sequence[float], np.ndarray],
+    edge_peak_divisor: float = 2.0,
+) -> np.ndarray:
+    t = np.asarray(time_list, dtype=float)
+
+    if t.size == 0:
+        return np.array([], dtype=float)
+    if window_width <= 0:
+        raise ValueError("window_width must be > 0")
+    if edge_peak_divisor <= 1.0:
+        raise ValueError("edge_peak_divisor must be > 1")
+
+    center_time_sec = start_time + window_width / 2.0
+    sigma_sec = window_width / (2.0 * np.sqrt(2.0 * np.log(edge_peak_divisor)))
+
+    weights = np.exp(-0.5 * ((t - center_time_sec) / sigma_sec) ** 2)
+
+    weight_sum = weights.sum()
+    return (weights / weight_sum) if weight_sum > 0 else np.zeros_like(weights)
+
+
+def get_weighted_stats(
+    data: Union[Sequence[float], np.ndarray],
+    weights: Union[Sequence[float], np.ndarray],
+) -> Tuple[float, float]:
+    values_arr = np.asarray(data, dtype=float)
+    weights_arr = np.asarray(weights, dtype=float)
+
+    if values_arr.size == 0 or weights_arr.size == 0:
+        return np.nan, np.nan
+    if values_arr.shape != weights_arr.shape:
+        raise ValueError("`data` and `weights` must have the same shape.")
+
+    total_weight = float(np.sum(weights_arr))
+    if total_weight <= 0.0:
+        return np.nan, np.nan
+
+    normalized_weights = weights_arr / total_weight
+    weighted_mean = float(np.sum(normalized_weights * values_arr))
+    weighted_variance = float(np.sum(normalized_weights * ((values_arr - weighted_mean) ** 2)))
+    weighted_std = float(np.sqrt(weighted_variance))
+
+    return weighted_std, weighted_mean
+
+
 def get_sd_time_series(i, angular_velocity, day):
     _, FrameRate_list, total_time_list = param.get_config(day)
     width_time_list = param.SD_window_width_list
 
-    sd_list: List[List[float]] = []
-    mean_list: List[List[float]] = []
-    data_num_list: List[List[int]] = []  # develop
-
-    # Obtaining SD time-series
-    # time base
-    time_list = read_csv.get_timelist(day)
-
     time_step = 1 / FrameRate_list[i]
     total_time = float(total_time_list[i])
 
+    # time-based window
+    time_list = read_csv.get_timelist(day)
     df = pd.DataFrame(
         {
             "time": time_list[i][: len(angular_velocity)],
@@ -36,32 +78,52 @@ def get_sd_time_series(i, angular_velocity, day):
         }
     )
 
+    sd_list: List[List[float]] = []
+    mean_list: List[List[float]] = []
+    data_num_list: List[List[int]] = []
+
     for width_time in width_time_list:
         add_sd = []
-        add_mean = []  # develop
-        prev_val = np.nan
-        add_data_num = []  # develop
+        add_mean = []
+        prev_mean = np.nan
+        prev_sd = np.nan
+        add_data_num = []
 
         start_time = 0.0
         while start_time + width_time < total_time:
             mask = (df["time"] >= start_time) & (df["time"] < start_time + width_time)
-            data = df.loc[mask, "velocity"]
+            data = df.loc[mask, "velocity"].to_numpy(dtype=float)
+            times_win = df.loc[mask, "time"].to_numpy(dtype=float)
+
             if len(data) >= 3:  # at least 3 data to calculate SD
-                if param.mode_evaluate_SD_fluctuation == 0:
-                    val = data.std(ddof=1)
-                elif param.mode_evaluate_SD_fluctuation == 1:
-                    val = data.std(ddof=1) / data.mean()
-                add_sd.append(val)
-                add_mean.append(data.mean())  # develop
-                prev_val = val
+                if param.flag_apply_gaussian_window:
+                    weights = get_weights_gaussian(start_time, width_time, times_win)
+                    if weights.size == 0 or np.sum(weights) == 0:
+                        sd_val, mean_val = np.nan, np.nan
+                    else:
+                        sd_val, mean_val = get_weighted_stats(data, weights)
+                else:
+                    mean_val = float(np.mean(data))
+                    sd_val = float(np.std(data, ddof=1))
+
+                # SD/Mean
+                if param.mode_evaluate_SD_fluctuation == 1:
+                    if np.isfinite(mean_val) and mean_val != 0.0:
+                        sd_val = sd_val / mean_val
+                    else:
+                        sd_val = np.nan
+
+                add_sd.append(sd_val)
+                add_mean.append(mean_val)
+                prev_sd, prev_mean = sd_val, mean_val
             else:
-                add_mean.append(prev_val)
-                add_sd.append(prev_val)
-            add_data_num.append(len(data))  # develop
+                add_sd.append(prev_sd)
+                add_mean.append(prev_mean)
+            add_data_num.append(len(data))
             start_time += time_step
         sd_list.append(add_sd)
         mean_list.append(add_mean)
-        data_num_list.append(add_data_num)  # develop
+        data_num_list.append(add_data_num)
 
     return sd_list, mean_list, data_num_list
 
@@ -139,8 +201,8 @@ def main(angular_velocity_list, day):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
     sd_list = []
-    mean_list = []  # develop
-    data_num_list = []  # develop
+    mean_list = []
+    data_num_list = []
 
     # get SD time-series
     for i in range(sample_num):
@@ -153,7 +215,7 @@ def main(angular_velocity_list, day):
     if param.mode_evaluate_SD_fluctuation == 0:
         make_graph.dev_plot_av_with_mean_sd(angular_velocity_list, sd_list, mean_list, day)
     """
-    make_graph.dev_plot_sd_data_num(data_num_list, day)  # develop
+    make_graph.dev_plot_sd_data_num(data_num_list, day)
     for j, width in enumerate(width_time_list):
         data_num_mean_list = []
         for i in range(sample_num):
