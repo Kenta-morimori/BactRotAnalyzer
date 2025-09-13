@@ -145,6 +145,7 @@ flag_apply_gaussian_window = False
 
 # evaluate SD FFT low Amp and decline
 flag_evaluate_SD_FFT = True
+flag_use_std_df_to_FFT = True
 
 # compare fluctuation property
 flag_share_y_axis_across_width_time = False

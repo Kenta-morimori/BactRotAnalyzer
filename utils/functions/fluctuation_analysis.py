@@ -1,3 +1,4 @@
+from collections import defaultdict
 from typing import List, Sequence, Tuple, Union
 
 import numpy as np
@@ -10,7 +11,6 @@ from utils.functions import (
     make_graph,
     read_csv,
     rot_df_manage,
-    save2csv,
 )
 
 
@@ -78,16 +78,24 @@ def get_sd_time_series(i, angular_velocity, day):
         }
     )
 
-    sd_list: List[List[float]] = []
-    mean_list: List[List[float]] = []
-    data_num_list: List[List[int]] = []
+    df_sd_stats_dict = defaultdict(list)
+    times = [j * time_step for j in range(int(time_list[i][-1] / time_step) + 1)]
+    df_sd_stats_dict[f"No.{i + 1}_time"] = times
+    n_time = len(times)
 
     for width_time in width_time_list:
-        add_sd = []
-        add_mean = []
         prev_mean = np.nan
         prev_sd = np.nan
-        add_data_num = []
+
+        key_sd = f"No.{i + 1}_{width_time}s_sd"
+        key_mean = f"No.{i + 1}_{width_time}s_mean"
+        key_n = f"No.{i + 1}_{width_time}s_data_num"
+
+        # record Nan from start to width_time / 2
+        start_nan_data_num = int((width_time / 2) // time_step)
+        df_sd_stats_dict[key_sd] = [np.nan] * start_nan_data_num
+        df_sd_stats_dict[key_mean] = [np.nan] * start_nan_data_num
+        df_sd_stats_dict[key_n] = [np.nan] * start_nan_data_num
 
         start_time = 0.0
         while start_time + width_time < total_time:
@@ -111,39 +119,46 @@ def get_sd_time_series(i, angular_velocity, day):
                     if np.isfinite(mean_val) and mean_val != 0.0:
                         sd_val = sd_val / mean_val
                     else:
+                        print(f"[Warning] No.{i + 1}: mean is zero or NaN, cannot compute SD/Mean.")
                         sd_val = np.nan
 
-                add_sd.append(sd_val)
-                add_mean.append(mean_val)
+                df_sd_stats_dict[key_sd].append(sd_val)
+                df_sd_stats_dict[key_mean].append(mean_val)
                 prev_sd, prev_mean = sd_val, mean_val
             else:
-                add_sd.append(prev_sd)
-                add_mean.append(prev_mean)
-            add_data_num.append(len(data))
+                df_sd_stats_dict[key_sd].append(prev_sd)
+                df_sd_stats_dict[key_mean].append(prev_mean)
+            df_sd_stats_dict[key_n].append(len(data))
             start_time += time_step
-        sd_list.append(add_sd)
-        mean_list.append(add_mean)
-        data_num_list.append(add_data_num)
 
-    return sd_list, mean_list, data_num_list
+        # record Nan until the end time
+        cur_len = len(df_sd_stats_dict[key_sd])
+        if cur_len < n_time:
+            pad = n_time - cur_len
+            df_sd_stats_dict[key_sd].extend([np.nan] * pad)
+            df_sd_stats_dict[key_mean].extend([np.nan] * pad)
+            df_sd_stats_dict[key_n].extend([np.nan] * pad)
+
+    df_sd_stats = pd.DataFrame(df_sd_stats_dict)
+
+    return df_sd_stats
 
 
-def standardize_sd_time_series(sd_list, day):
+def add_standardize_sd_to_df(df, day):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
 
-    std_sd_list = []
     for i in range(sample_num):
-        add_std_sd_list = []
-        for j in range(len(width_time_list)):
-            sd = np.array(sd_list[i][j])
-            mean = np.mean(sd)
-            std = np.std(sd, axis=0)
+        for width_time in width_time_list:
+            key_sd = f"No.{i + 1}_{width_time}s_sd"
+            sd = np.array(df[key_sd])
+            mean = np.nanmean(sd)
+            std = np.nanstd(sd, axis=0)
             adt_sd = (sd - mean) / std
-            add_std_sd_list.append(adt_sd.tolist())
-        std_sd_list.append(add_std_sd_list)
+            key_std_sd = f"No.{i + 1}_{width_time}s_sd_std"
+            df[key_std_sd] = adt_sd
 
-    return std_sd_list
+    return df
 
 
 def evaluate_FFT(sd_freq_list, sd_Amp_list, day):
@@ -174,10 +189,6 @@ def evaluate_FFT(sd_freq_list, sd_Amp_list, day):
     # plot
     make_graph.plot_SD_FFT_feats(ratio_list, ratio_reciprocal_list, decrease_list, ref_point_list, day)
 
-    # save CSV
-    # save2csv.save_SD_FFT_decline(decrease_list, day)
-    # save2csv.save_SD_FFT_refpoints(ref_point_list, day)
-
     # save rot_df
     for j, width in enumerate(width_time_list):
         decrease_list_rot_df = []
@@ -200,53 +211,41 @@ def evaluate_FFT(sd_freq_list, sd_Amp_list, day):
 def main(angular_velocity_list, day):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
-    sd_list = []
-    mean_list = []
-    data_num_list = []
 
+    df_list = []
     # get SD time-series
     for i in range(sample_num):
-        add_sd_list, add_mean_list, add_data_num_list = get_sd_time_series(i, angular_velocity_list[i], day)
-        sd_list.append(add_sd_list)
-        mean_list.append(add_mean_list)
-        data_num_list.append(add_data_num_list)
+        add_df = get_sd_time_series(i, angular_velocity_list[i], day)
+        df_list.append(add_df)
+    df_all = pd.concat(df_list, axis=1)
 
     # dev plot
     if param.mode_evaluate_SD_fluctuation == 0:
-        make_graph.dev_plot_av_with_mean_sd(angular_velocity_list, sd_list, mean_list, day)
-    """
-    make_graph.dev_plot_sd_data_num(data_num_list, day)
-    for j, width in enumerate(width_time_list):
-        data_num_mean_list = []
-        for i in range(sample_num):
-            data_num_mean_list.append(np.mean(data_num_list[i][j]))
-        rot_df_manage.update_rot_df(f"{ROTATION_FEATURES.SD_window_data_num_mean}_{width}s", data_num_mean_list, day)
-    """
+        make_graph.dev_plot_av_with_mean_sd(angular_velocity_list, df_all, day)
 
     # save to rot_df
-    for j, width in enumerate(width_time_list):
+    for width in width_time_list:
         sd_mean_list = []
         for i in range(sample_num):
-            sd_mean_list.append(np.mean(sd_list[i][j]))
+            sd_mean_list.append(np.nanmean(df_all[f"No.{i + 1}_{width}s_sd"]))
         rot_df_manage.update_rot_df(f"{ROTATION_FEATURES.SD_mean}_{width}s", sd_mean_list, day)
 
-    # save
-    save2csv.save_sd_time_series(sd_list, day, flag_std=False)
-
     # plot
-    flag_std = False
-    make_graph.plot_SD_list(sd_list, day, flag_std)
-    make_graph.plot_sd_mean(sd_list, day)
-    # FFT
-    # frequency_analysis.fft_sd_list(sd_list, day, flag_std)
+    make_graph.plot_SD_list(df_all, day)
+    make_graph.plot_sd_mean(df_all, day)
 
     # get standardized sd time-series
-    flag_std = True
-    std_sd_list = standardize_sd_time_series(sd_list, day)
-    save2csv.save_sd_time_series(std_sd_list, day, flag_std)
+    df_all = add_standardize_sd_to_df(df_all, day)
+    make_graph.plot_SD_list(df_all, day, flag_std=True)
 
-    make_graph.plot_SD_list(std_sd_list, day, flag_std)
-    sd_freq_list, sd_Amp_list = frequency_analysis.fft_sd_list(std_sd_list, day, flag_std)
+    # FFT
+    if param.flag_use_std_df_to_FFT:
+        sd_freq_list, sd_Amp_list = frequency_analysis.fft_sd_list(df_all, day, flag_std=True)
+    else:
+        sd_freq_list, sd_Amp_list = frequency_analysis.fft_sd_list(df_all, day, flag_std=True)
+
+    # save
+    df_all.to_csv(f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/SD_time_series.csv", index=False)
 
     if param.flag_evaluate_SD_FFT:
         evaluate_FFT(sd_freq_list, sd_Amp_list, day)

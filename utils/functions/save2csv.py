@@ -41,26 +41,6 @@ def save_angle_angular_velocity(angle_list, angular_velocity_list, day):
             csvwriter.writerow(row)
 
 
-def save_sd_time_series(sd_list, day, flag_std=False):
-    save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series"
-    os.makedirs(save_dir, exist_ok=True)
-    if flag_std:
-        csv_save_dir = f"{save_dir}/SD-time-series_std.csv"
-    else:
-        csv_save_dir = f"{save_dir}/SD-time-series.csv"
-
-    width_list = param.SD_window_width_list
-    data = {}
-    for i in range(len(sd_list)):
-        for j, width in enumerate(width_list):
-            key = f"No.{i+1}_{width}s"
-            data[key] = sd_list[i][j]
-
-    max_len = max(len(v) for v in data.values())
-    df = pd.DataFrame({k: v + [None] * (max_len - len(v)) for k, v in data.items()})
-    df.to_csv(csv_save_dir, index=False)
-
-
 def save_fft(save_dir, save_name, freq_list, Amp_list):
     csv_save_dir = f"{save_dir}/{save_name}.csv"
 
