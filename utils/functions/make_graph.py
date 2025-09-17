@@ -512,7 +512,7 @@ def plot_fft(freq_list, Amp_list, save_dir, save_name, day, flag_add_peak=False)
         rot_df_manage.update_rot_df(ROTATION_FEATURES.angle_FFT_peak, peak_list, day)
 
 
-def plot_SD_list(SD_list, day, flag_std):
+def plot_SD_list(df, day, flag_std=False):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
     save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/{param.get_SD_mode_label()}"
@@ -522,23 +522,26 @@ def plot_SD_list(SD_list, day, flag_std):
     rows = max(1, math.ceil(sample_num / cols))
     # sepalate save
     for i, width_time in enumerate(width_time_list):
-        time_list = read_csv.get_timelist(day)
-
         fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
         for j in range(sample_num):
             row = j // cols
             col = j % cols
-            axs[row, col].plot(time_list[j][: len(SD_list[j][i])], SD_list[j][i])
-            axs[row, col].grid(True)
+
+            time = df[f"No.{j + 1}_time"].dropna().tolist()
             if flag_std:
+                sd_list = df[f"No.{j + 1}_{width_time}s_sd_std"].tolist()
                 axs[row, col].set_title(f"Standardized SD Time-series No.{j+1}", fontsize=font_size)
                 axs[row, col].set_ylabel("Standardized SD", fontsize=font_size)
             else:
+                sd_list = df[f"No.{j + 1}_{width_time}s_sd"].tolist()
                 axs[row, col].set_title(f"SD Time-series No.{j+1}", fontsize=font_size)
                 axs[row, col].set_ylabel("SD", fontsize=font_size)
+
+            axs[row, col].plot(time, sd_list[: len(time)])
+            axs[row, col].grid(True)
             axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
             axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
-            axs[row, col].set_xlim(0, time_list[j][len(SD_list[j][i])])
+            axs[row, col].set_xlim(0, time[-1])
         plt.tight_layout()
         if flag_std:
             plt.savefig(f"{save_dir}/SD-time-series_{width_time}s_standardized.png")
@@ -554,24 +557,25 @@ def plot_SD_list(SD_list, day, flag_std):
 
     fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
     for i, width_time in enumerate(width_time_list):
-        time_list = read_csv.get_timelist(day)
-
         for j in range(sample_num):
             row = j // cols
             col = j % cols
-            axs[row, col].plot(
-                time_list[j][: len(SD_list[j][i])], SD_list[j][i], label=f"SD {width_time}s", c=color_list[i], alpha=0.7
-            )
-            axs[row, col].grid(True)
+
+            time = df[f"No.{j + 1}_time"].dropna().tolist()
             if flag_std:
+                sd_list = df[f"No.{j + 1}_{width_time}s_sd_std"].tolist()
                 axs[row, col].set_title(f"Standardized SD Time-series No.{j+1}", fontsize=font_size)
                 axs[row, col].set_ylabel("Standardized SD", fontsize=font_size)
             else:
+                sd_list = df[f"No.{j + 1}_{width_time}s_sd"].tolist()
                 axs[row, col].set_title(f"SD time-series No.{j+1}", fontsize=font_size)
                 axs[row, col].set_ylabel("SD", fontsize=font_size)
+
+            axs[row, col].plot(time, sd_list[: len(time)], label=f"SD {width_time}s", c=color_list[i], alpha=0.7)
+            axs[row, col].grid(True)
             axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
             axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
-            axs[row, col].set_xlim(0, time_list[j][len(SD_list[j][i])])
+            axs[row, col].set_xlim(0, time[-1])
     axs[-1][-1].legend(plot_label_list, loc="upper left", bbox_to_anchor=(1, 1))
     plt.tight_layout()
     if flag_std:
@@ -581,7 +585,7 @@ def plot_SD_list(SD_list, day, flag_std):
     plt.close(fig)
 
 
-def plot_sd_mean(sd_list, day):
+def plot_sd_mean(df, day):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
     save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/{param.get_SD_mode_label()}"
@@ -597,8 +601,8 @@ def plot_sd_mean(sd_list, day):
         axs = fig.add_subplot(gs[row, col])
 
         sd_mean_list = []
-        for j in range(len(width_time_list)):
-            sd_arr_i = np.asarray(sd_list[i][j])
+        for width_time in width_time_list:
+            sd_arr_i = np.asarray(df[f"No.{i + 1}_{width_time}s_sd"].dropna().tolist())
             sd_mean_list.append(np.mean(sd_arr_i))
 
         axs.plot(width_time_list, sd_mean_list, linewidth=4)
@@ -956,7 +960,7 @@ def dev_plot_av_with_stats(av_list, av_means, av_medians, day):
     plt.close(fig)
 
 
-def dev_plot_av_with_mean_sd(av_list, sd_list, mean_list, day):
+def dev_plot_av_with_mean_sd(av_list, df_sd, day):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
     save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/{param.get_SD_mode_label()}/av_with_sd"
@@ -965,30 +969,34 @@ def dev_plot_av_with_mean_sd(av_list, sd_list, mean_list, day):
     cols = 2
     rows = max(1, math.ceil(sample_num / cols))
     # sepalate save
-    for i, width_time in enumerate(width_time_list):
+    for width_time in width_time_list:
         time_list = read_csv.get_timelist(day)
 
         fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
-        for j in range(sample_num):
-            row = j // cols
-            col = j % cols
+        for i in range(sample_num):
+            row = i // cols
+            col = i % cols
 
-            time_arr = np.array(time_list[j])
-            av_arr = np.abs(np.array(av_list[j]))
-            sd_arr = np.array(sd_list[j][i])
-            mean_arr = np.array(mean_list[j][i])
+            # plot angular velocity
+            time_arr = np.array(time_list[i])
+            av_arr = np.abs(np.array(av_list[i]))
             axs[row, col].plot(time_arr[: len(av_arr)], av_arr, c="black", alpha=0.6)
+
+            # plot mean and sd
+            time_arr2 = df_sd[f"No.{i + 1}_time"]
+            sd_arr = df_sd[f"No.{i + 1}_{width_time}s_sd"]
+            mean_arr = df_sd[f"No.{i + 1}_{width_time}s_mean"]
             axs[row, col].fill_between(
-                time_arr[: len(sd_arr)],
+                time_arr2,
                 mean_arr - sd_arr,
                 mean_arr + sd_arr,
                 color="red",
                 alpha=0.4,
             )
-            axs[row, col].plot(time_arr[: len(mean_arr)], mean_arr, alpha=0.6)
+            axs[row, col].plot(time_arr2, mean_arr, alpha=0.6)
 
             axs[row, col].grid(True)
-            axs[row, col].set_title(f"SD Time-series No.{j+1}", fontsize=font_size)
+            axs[row, col].set_title(f"SD Time-series No.{i+1}", fontsize=font_size)
             axs[row, col].set_ylabel("SD", fontsize=font_size)
             axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
             axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)

@@ -55,7 +55,7 @@ def fft_angular_velocity(angular_velocity_list, day):
     save2csv.save_fft(save_dir, save_name, freq_list, Amp_list)
 
 
-def fft_sd_list(sd_list, day, flag_std):
+def fft_sd_list(df, day, flag_std=False):
     sample_num, FrameRate_list, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
     freq_list, Amp_list = [], []
@@ -63,7 +63,11 @@ def fft_sd_list(sd_list, day, flag_std):
     for i in range(sample_num):
         add_freq_list, add_Amp_list = [], []
         for j in range(len(width_time_list)):
-            freq, Amp = fft(sd_list[i][j], 1 / FrameRate_list[i])
+            if flag_std:
+                sd_list = df[f"No.{i + 1}_{width_time_list[j]}s_sd_std"].dropna().tolist()
+            else:
+                sd_list = df[f"No.{i + 1}_{width_time_list[j]}s_sd"].dropna().tolist()
+            freq, Amp = fft(sd_list, 1 / FrameRate_list[i])
             add_freq_list.append(freq.tolist())
             add_Amp_list.append(Amp.tolist())
         freq_list.append(add_freq_list)

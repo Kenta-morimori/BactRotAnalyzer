@@ -140,8 +140,13 @@ def get_SD_mode_label():
         return "SD_per_mean"
 
 
+# Obtain SD with gaussian window
+flag_apply_gaussian_window = True
+edge_peak_divisor = 10.0
+
 # evaluate SD FFT low Amp and decline
 flag_evaluate_SD_FFT = True
+flag_use_std_df_to_FFT = True
 
 # compare fluctuation property
 flag_share_y_axis_across_width_time = False

@@ -38,11 +38,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--day", type=str, default="test_data")
-    parser.add_argument("--fluctuation-analysis", action="store_true", help="fluctuation analysis")
+    parser.add_argument("--fluc", action="store_true", help="fluctuation analysis")
 
     args = parser.parse_args()
     day = args.day
-    flag_fluctuation_analysis = args.fluctuation_analysis
+    flag_fluctuation_analysis = args.fluc
 
     main(
         day=day,
