@@ -126,7 +126,7 @@ flag_eval_switching_with_averaged_av = False
 SD_window_width_list = [0.1, 0.2, 0.5, 1.0, 1.5, 2.0]
 
 # SD time-series fluctuation mode
-mode_evaluate_SD_fluctuation = 0
+mode_evaluate_SD_fluctuation = 1
 """
 0: SD
 1: SD / Mean
@@ -141,7 +141,8 @@ def get_SD_mode_label():
 
 
 # Obtain SD with gaussian window
-flag_apply_gaussian_window = False
+flag_apply_gaussian_window = True
+edge_peak_divisor = 10.0
 
 # evaluate SD FFT low Amp and decline
 flag_evaluate_SD_FFT = True

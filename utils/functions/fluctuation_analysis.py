@@ -18,8 +18,8 @@ def get_weights_gaussian(
     start_time: float,
     window_width: float,
     time_list: Union[Sequence[float], np.ndarray],
-    edge_peak_divisor: float = 2.0,
 ) -> np.ndarray:
+    edge_peak_divisor = param.edge_peak_divisor
     t = np.asarray(time_list, dtype=float)
 
     if t.size == 0:
