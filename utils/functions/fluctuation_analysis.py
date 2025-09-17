@@ -54,9 +54,13 @@ def get_weighted_stats(
     if total_weight <= 0.0:
         return np.nan, np.nan
 
+    # Normalize weights: Σ w_i = 1
     normalized_weights = weights_arr / total_weight
+    # Weighted mean: μ = Σ (w_i * x_i) / Σ w_i
     weighted_mean = float(np.sum(normalized_weights * values_arr))
+    # Weighted variance: σ² = Σ (w_i * (x_i - μ)²) / Σ w_i
     weighted_variance = float(np.sum(normalized_weights * ((values_arr - weighted_mean) ** 2)))
+    # Weighted standard deviation: σ = sqrt(σ²)
     weighted_std = float(np.sqrt(weighted_variance))
 
     return weighted_std, weighted_mean
