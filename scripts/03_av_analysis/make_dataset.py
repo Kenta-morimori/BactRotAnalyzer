@@ -59,7 +59,7 @@ def plot_distibustion(df: pd.DataFrame, out_dir: Path) -> None:
             axes = axs[i]
 
             data = df_selected[df_selected["No"] == No_i]["av"]
-            axes.hist(data, bins=50)
+            axes.hist(data, bins=20)
             axes.grid(True)
             axes.set_title(f"No.{i+1}")
             axes.set_xlabel("Angular Velocity")
@@ -70,6 +70,46 @@ def plot_distibustion(df: pd.DataFrame, out_dir: Path) -> None:
         plt.tight_layout()
         plt.savefig(f"{out_dir}/{save_i + 1}_{data_key}_av_distribution.png")
         plt.close(fig)
+
+
+def plot_stats(df_stats: pd.DataFrame, out_dir: Path) -> None:
+    """絶対値角速度データの平均値・中央値
+
+    Args:
+        - df (pd.DataFrame): 時系列角速度データセット
+        - out_dir (str): 保存先のディレクトリ
+
+    Returns:
+
+    """
+
+    out_dir = out_dir / "av_stats"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    fig, axs = plt.subplots(1, 2, figsize=(8, 4))
+    axs = np.array(axs).ravel()
+
+    for save_i, data_key in enumerate(DATA_KEYS):
+        df_selected = df_stats[df_stats["label"] == data_key]
+        data_len = len(df_selected)
+
+        # Mean
+        axs[0].scatter([save_i] * data_len, df_selected["av_abs_mean"])
+
+        # Median
+        axs[1].scatter([save_i] * data_len, df_selected["av_abs_median"])
+
+    x_positions = np.arange(len(DATA_KEYS))
+    for ax in axs:
+        ax.set_xticks(x_positions)
+        ax.set_xticklabels(DATA_KEYS, rotation=45, ha="right")
+    axs[0].set_ylabel("Mean of angular velocity")
+    axs[0].set_title("Mean of angular velocity")
+    axs[1].set_ylabel("Median of angular velocity")
+    axs[1].set_title("Median of angular velocity")
+    plt.tight_layout()
+    plt.savefig(f"{out_dir}/av_stats.png")
+    plt.close(fig)
 
 
 def main():
@@ -85,7 +125,7 @@ def main():
         cols = df_av.columns.tolist()
 
         # make dataset
-        for col in cols:
+        for col in cols:  # No
             data_len = len(df_av[col])
             # data param
             df_dict["label"].extend([data_key] * data_len)
@@ -100,7 +140,24 @@ def main():
     # Data analysis
     ############
     out_dir = Path(param.save_dir_bef) / "03_av_analysis"
+
+    # 1. Angular Velocity Discribution
     plot_distibustion(df, out_dir)
+
+    # 2. Mean and Median analysis
+    stats_dict = defaultdict(list)
+    df["av_abs"] = np.abs(df["av"])
+    for data_key in DATA_KEYS:
+        for col in cols:  # No
+            df_selected = df[(df["label"] == data_key) & (df["No"] == col)]
+            stats_dict["label"].append(data_key)
+            stats_dict["No"].append(col)
+            # record stats(mean, median)
+            stats_dict["av_abs_mean"].append(df_selected["av_abs"].mean())
+            stats_dict["av_abs_median"].append(df_selected["av_abs"].median())
+    df_stats = pd.DataFrame(stats_dict)
+    # plot
+    plot_stats(df_stats, out_dir)
 
 
 if __name__ == "__main__":
