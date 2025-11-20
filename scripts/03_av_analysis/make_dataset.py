@@ -7,6 +7,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from scipy.optimize import curve_fit
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 from utils import param
@@ -59,7 +60,8 @@ def plot_distibustion(df: pd.DataFrame, out_dir: Path) -> None:
             axes = axs[i]
 
             data = df_selected[df_selected["No"] == No_i]["av"]
-            axes.hist(data, bins=20)
+            axes.hist(data, bins=40)
+            axes.axvline(0, color="red", linewidth=2)
             axes.grid(True)
             axes.set_title(f"No.{i+1}")
             axes.set_xlabel("Angular Velocity")
@@ -112,6 +114,111 @@ def plot_stats(df_stats: pd.DataFrame, out_dir: Path) -> None:
     plt.close(fig)
 
 
+def gaussian(x: np.ndarray, amplitude: float, mean: float, std: float) -> np.ndarray:
+    """1D Gaussian function."""
+    return amplitude * np.exp(-((x - mean) ** 2) / (2 * std**2))
+
+
+def _format_param(value: float) -> str:
+    """Format parameter values for table display."""
+    return f"{value:.2f}" if np.isfinite(value) else "NaN"
+
+
+def plot_gaussian_fit(df: pd.DataFrame, out_dir: Path) -> None:
+    """正の角速度データに対するガウスフィット"""
+
+    out_dir = out_dir / "av_gaussian_fit"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    gauss_param_list = []
+
+    for save_i, data_key in enumerate(DATA_KEYS):
+        df_selected = df[df["label"] == data_key]
+        No_list = df_selected["No"].unique().tolist()
+        No_num = len(No_list)
+
+        if No_num == 0:
+            continue
+
+        cols = 2
+        rows = max(1, math.ceil(No_num / cols))
+        fig, axs = plt.subplots(rows, cols, figsize=(15, 3 * rows))
+        axs = np.array(axs).ravel()
+
+        for i, No_i in enumerate(No_list):
+            axes = axs[i]
+            data = df_selected[(df_selected["No"] == No_i) & (df_selected["av"] > 0)]["av"].dropna()
+            if len(data) > 0:
+                axes.hist(data, bins=40, alpha=0.6, color="tab:blue")
+            axes.axvline(0, color="red", linewidth=2)
+            axes.grid(True)
+            axes.set_title(f"No.{i+1}")
+            axes.set_xlabel("Angular Velocity")
+            axes.set_ylabel("Counts")
+
+            fit_params = {"amplitude": np.nan, "mean": np.nan, "std": np.nan}
+
+            if len(data) < 5:
+                axes.text(0.5, 0.5, "Insufficient data", transform=axes.transAxes, ha="center", va="center")
+            else:
+                hist, bin_edges = np.histogram(data, bins=40)
+                bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+                if np.all(hist == 0):
+                    axes.text(0.5, 0.5, "No counts", transform=axes.transAxes, ha="center", va="center")
+                else:
+                    std_guess = data.std()
+                    if std_guess == 0:
+                        std_guess = 1e-3
+                    initial_guess = (hist.max(), data.mean(), std_guess)
+                    try:
+                        popt, _ = curve_fit(gaussian, bin_centers, hist, p0=initial_guess, maxfev=5000)
+                        x_fit = np.linspace(bin_edges[0], bin_edges[-1], 200)
+                        axes.plot(x_fit, gaussian(x_fit, *popt), color="orange", linewidth=2)
+                        fit_params = {"amplitude": popt[0], "mean": popt[1], "std": abs(popt[2])}
+                    except (RuntimeError, ValueError):
+                        axes.text(
+                            0.5,
+                            0.5,
+                            "Fit failed",
+                            transform=axes.transAxes,
+                            ha="center",
+                            va="center",
+                            color="red",
+                        )
+
+            gauss_param_list.append(
+                {
+                    "label": data_key,
+                    "No": No_i,
+                    "positive_count": len(data),
+                    "amplitude": fit_params["amplitude"],
+                    "mean": fit_params["mean"],
+                    "std": fit_params["std"],
+                }
+            )
+
+            table_data = [
+                ["amplitude", _format_param(fit_params["amplitude"])],
+                ["mean", _format_param(fit_params["mean"])],
+                ["std", _format_param(fit_params["std"])],
+            ]
+            table = axes.table(cellText=table_data, colWidths=[0.45, 0.35], loc="upper right")
+            table.scale(0.8, 0.8)
+            table.auto_set_font_size(False)
+            table.set_fontsize(8)
+
+        for j in range(No_num, rows * cols):
+            fig.delaxes(axs[j])
+        fig.suptitle(f"{data_key} Gaussian Fit (Positive AV)")
+        plt.tight_layout()
+        plt.savefig(f"{out_dir}/{save_i + 1}_{data_key}_gaussian_fit.png")
+        plt.close(fig)
+
+    if gauss_param_list:
+        df_gauss = pd.DataFrame(gauss_param_list)
+        df_gauss.to_csv(out_dir / "gaussian_fit_parameters.csv", index=False)
+
+
 def main():
     ############
     # Load Data
@@ -158,6 +265,9 @@ def main():
     df_stats = pd.DataFrame(stats_dict)
     # plot
     plot_stats(df_stats, out_dir)
+
+    # 3. Gaussian Fit
+    plot_gaussian_fit(df, out_dir)
 
 
 if __name__ == "__main__":
