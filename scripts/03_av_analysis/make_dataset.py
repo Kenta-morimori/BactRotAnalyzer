@@ -178,11 +178,7 @@ def generate_sliding_window_animation(
         No_list = df_label["No"].unique().tolist()
 
         for No_i in No_list:
-            df_no = (
-                df_label[df_label["No"] == No_i]
-                .dropna(subset=["time", "av"])
-                .sort_values("time")
-            )
+            df_no = df_label[df_label["No"] == No_i].dropna(subset=["time", "av"]).sort_values("time")
 
             if len(df_no) < 2:
                 print(f"[SlidingWindow] Skip {data_key}-{No_i}: insufficient data points")
@@ -252,10 +248,7 @@ def generate_sliding_window_animation(
                 ax_ts.axvspan(start_time, end_time, color="orange", alpha=0.3)
                 ax_ts.set_xlim(time_min, time_max)
                 ax_ts.set_ylim(y_min, y_max)
-                ax_ts.set_title(
-                    f"{data_key} {No_i} ({window_seconds:.1f}s window) "
-                    f"{frame_idx + 1}/{total_frames}"
-                )
+                ax_ts.set_title(f"{data_key} {No_i} ({window_seconds:.1f}s window) " f"{frame_idx + 1}/{total_frames}")
                 ax_ts.set_xlabel("Time [s]")
                 ax_ts.set_ylabel("Angular velocity")
                 ax_ts.grid(True)
@@ -280,9 +273,7 @@ def generate_sliding_window_animation(
                 plt.close(fig)
                 frame_paths.append(frame_path)
 
-                print(
-                    f"[SlidingWindow] {data_key}-{No_i}: frame {frame_idx + 1}/{total_frames}"
-                )
+                print(f"[SlidingWindow] {data_key}-{No_i}: frame {frame_idx + 1}/{total_frames}")
 
             if not frame_paths:
                 continue
