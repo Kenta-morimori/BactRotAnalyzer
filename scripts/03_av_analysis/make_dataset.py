@@ -10,6 +10,14 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import curve_fit
 
+try:
+    from cv2 import VideoWriter_fourcc as cv2_video_writer_fourcc
+except ImportError:  # pragma: no cover
+
+    def cv2_video_writer_fourcc(*_args: str) -> int:
+        raise RuntimeError("OpenCV VideoWriter_fourcc is unavailable")
+
+
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 from utils import param
 
@@ -284,7 +292,7 @@ def generate_sliding_window_animation(
                 continue
 
             height, width, _ = first_image.shape
-            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            fourcc = cv2_video_writer_fourcc(*"mp4v")
             video_path = slide_dir / f"{data_key}_{No_i}.mov"
             writer = cv2.VideoWriter(str(video_path), fourcc, video_fps, (width, height))
 
