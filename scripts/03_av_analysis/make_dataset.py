@@ -3,13 +3,13 @@ import os
 import sys
 from collections import defaultdict
 from pathlib import Path
+from typing import Callable
 
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy.optimize import curve_fit
-from typing import Callable
 
 if hasattr(cv2, "VideoWriter_fourcc"):
     _cv2_fourcc: Callable[..., int] = getattr(cv2, "VideoWriter_fourcc")
