@@ -9,10 +9,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy.optimize import curve_fit
+from typing import Callable
 
-try:
-    from cv2 import VideoWriter_fourcc as cv2_video_writer_fourcc
-except ImportError:  # pragma: no cover
+if hasattr(cv2, "VideoWriter_fourcc"):
+    _cv2_fourcc: Callable[..., int] = getattr(cv2, "VideoWriter_fourcc")
+
+    def cv2_video_writer_fourcc(*args: str) -> int:
+        return _cv2_fourcc(*args)
+
+else:  # pragma: no cover
 
     def cv2_video_writer_fourcc(*_args: str) -> int:
         raise RuntimeError("OpenCV VideoWriter_fourcc is unavailable")
