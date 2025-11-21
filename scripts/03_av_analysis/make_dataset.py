@@ -43,7 +43,7 @@ TIME_DIR_DICT = {
 }
 
 
-def plot_distibustion(df: pd.DataFrame, out_dir: Path) -> None:
+def plot_distribution(df: pd.DataFrame, out_dir: Path) -> None:
     """時系列角速度データの分布チェック
 
     Args:
@@ -429,13 +429,14 @@ def main():
     ############
     out_dir = Path(param.save_dir_bef) / "03_av_analysis"
 
-    # 1. Angular Velocity Discribution
-    plot_distibustion(df, out_dir)
+    # 1. Angular Velocity Distribution
+    plot_distribution(df, out_dir)
 
     # 2. Mean and Median analysis
     stats_dict = defaultdict(list)
     df["av_abs"] = np.abs(df["av"])
     for data_key in DATA_KEYS:
+        cols = pd.read_csv(AV_DIR_DICT[data_key]).columns.tolist()
         for col in cols:  # No
             df_selected = df[(df["label"] == data_key) & (df["No"] == col)]
             stats_dict["label"].append(data_key)
