@@ -31,6 +31,7 @@ DATA_KEYS = [
     "SJW46_23",
     "SJW46_30",
 ]
+DEFAULT_HIST_BINS = 40
 AV_DIR_DICT = {  # Angular velocity
     "SJW46_10": "outputs/SJW46_temp=10/angular_velocity/angular-velocity_time-series.csv",
     "SJW46_23": "outputs/SJW46_temp=23/angular_velocity/angular-velocity_time-series.csv",  # SJW46 23°C
@@ -44,17 +45,28 @@ TIME_DIR_DICT = {
 
 
 def plot_distribution(df: pd.DataFrame, out_dir: Path) -> None:
-    """時系列角速度データの分布チェック
+    """Plot angular-velocity histograms per strain/No with shared binning and save the grids.
 
     Args:
-        - df (pd.DataFrame): 時系列角速度データセット
-        - out_dir (str): 保存先のディレクトリ
+        df (pd.DataFrame): Time-series angular velocity dataframe with columns ['label', 'No', 'av'].
+        out_dir (Path): Directory where distribution figures are written.
 
     Returns:
-
+        None
     """
     out_dir = out_dir / "av_distribution"
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    av_values = df["av"].to_numpy(dtype=float)
+    av_values = av_values[np.isfinite(av_values)]
+    if av_values.size > 0:
+        global_min, global_max = av_values.min(), av_values.max()
+        if global_min == global_max:
+            global_min -= 0.5
+            global_max += 0.5
+        bin_edges = np.linspace(global_min, global_max, DEFAULT_HIST_BINS + 1)
+    else:
+        bin_edges = np.linspace(-1, 1, DEFAULT_HIST_BINS + 1)
 
     for save_i, data_key in enumerate(DATA_KEYS):
         df_selected = df[df["label"] == data_key]
@@ -74,7 +86,7 @@ def plot_distribution(df: pd.DataFrame, out_dir: Path) -> None:
             axes = axs[i]
 
             data = df_selected[df_selected["No"] == No_i]["av"]
-            axes.hist(data, bins=40)
+            axes.hist(data, bins=bin_edges)
             axes.axvline(0, color="red", linewidth=2)
             axes.grid(True)
             axes.set_title(f"No.{i+1}")
@@ -89,14 +101,14 @@ def plot_distribution(df: pd.DataFrame, out_dir: Path) -> None:
 
 
 def plot_stats(df_stats: pd.DataFrame, out_dir: Path) -> None:
-    """絶対値角速度データの平均値・中央値
+    """Scatter the mean and median of absolute angular velocity across strains.
 
     Args:
-        - df (pd.DataFrame): 時系列角速度データセット
-        - out_dir (str): 保存先のディレクトリ
+        df_stats (pd.DataFrame): Summary dataframe containing 'label', 'No', 'av_abs_mean', and 'av_abs_median'.
+        out_dir (Path): Directory where summary plots are written.
 
     Returns:
-
+        None
     """
 
     out_dir = out_dir / "av_stats"
@@ -129,7 +141,15 @@ def plot_stats(df_stats: pd.DataFrame, out_dir: Path) -> None:
 
 
 def plot_gaussian_stats(df_gauss: pd.DataFrame, out_dir: Path) -> None:
-    """Gフィッティングから得られた平均値・標準偏差の分布"""
+    """Visualize Gaussian fit mean/std distributions and their mean-vs-std relationship.
+
+    Args:
+        df_gauss (pd.DataFrame): Gaussian fit results with columns such as 'label', 'mean', and 'std'.
+        out_dir (Path): Directory where Gaussian summary plots are written.
+
+    Returns:
+        None
+    """
 
     fig, axs = plt.subplots(1, 3, figsize=(12, 4))
     axs = np.array(axs).ravel()
@@ -163,12 +183,29 @@ def plot_gaussian_stats(df_gauss: pd.DataFrame, out_dir: Path) -> None:
 
 
 def gaussian(x: np.ndarray, amplitude: float, mean: float, std: float) -> np.ndarray:
-    """1D Gaussian function."""
+    """Evaluate a 1D Gaussian at x for given amplitude, mean, and std.
+
+    Args:
+        x (np.ndarray): Sample positions.
+        amplitude (float): Peak height of the Gaussian.
+        mean (float): Center of the Gaussian.
+        std (float): Standard deviation of the Gaussian.
+
+    Returns:
+        np.ndarray: Gaussian values at x.
+    """
     return amplitude * np.exp(-((x - mean) ** 2) / (2 * std**2))
 
 
 def _format_param(value: float) -> str:
-    """Format parameter values for table display."""
+    """Format numeric parameter for display (2 decimals, 'NaN' if non-finite).
+
+    Args:
+        value (float): Numeric value to format.
+
+    Returns:
+        str: Formatted string.
+    """
     return f"{value:.2f}" if np.isfinite(value) else "NaN"
 
 
@@ -181,7 +218,20 @@ def generate_sliding_window_animation(
     video_fps: int = 6,
     fix_hist_ylim: bool = True,
 ) -> None:
-    """5秒のマスクをスライドさせながら分布変化を可視化し、動画へ出力"""
+    """Slide a fixed window over time series to show distribution dynamics and export as a video.
+
+    Args:
+        df (pd.DataFrame): Time-series angular velocity dataframe with ['label', 'No', 'time', 'av'].
+        out_dir (Path): Directory where frames and videos are written.
+        window_seconds (float): Width of the sliding window in seconds.
+        step_seconds (float): Step size between windows in seconds.
+        hist_bins (int): Number of histogram bins.
+        video_fps (int): Frames per second for the output video.
+        fix_hist_ylim (bool): Whether to fix histogram y-limits to the global max across frames.
+
+    Returns:
+        None
+    """
 
     slide_dir = out_dir / "av_sliding_window"
     slide_dir.mkdir(parents=True, exist_ok=True)
@@ -310,8 +360,17 @@ def generate_sliding_window_animation(
             print(f"[SlidingWindow] Saved video: {video_path}")
 
 
-def plot_gaussian_fit(df: pd.DataFrame, out_dir: Path) -> None:
-    """正の角速度データに対するガウスフィット"""
+def plot_gaussian_fit(df: pd.DataFrame, out_dir: Path, hist_bins: int = DEFAULT_HIST_BINS) -> None:
+    """Fit Gaussians to positive angular velocities, plot histogram+fit+residual panels, and save parameters.
+
+    Args:
+        df (pd.DataFrame): Time-series angular velocity dataframe with ['label', 'No', 'av'].
+        out_dir (Path): Directory where Gaussian fit figures and CSV outputs are written.
+        hist_bins (int): Number of histogram bins to use for fitting and plotting.
+
+    Returns:
+        None
+    """
 
     out_dir = out_dir / "av_gaussian_fit"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -326,46 +385,110 @@ def plot_gaussian_fit(df: pd.DataFrame, out_dir: Path) -> None:
         if No_num == 0:
             continue
 
+        positive_values = df_selected[df_selected["av"] > 0]["av"].dropna().to_numpy(dtype=float)
+        if positive_values.size > 0:
+            global_min, global_max = positive_values.min(), positive_values.max()
+            if global_min == global_max:
+                global_min -= 0.5
+                global_max += 0.5
+            bin_edges = np.linspace(global_min, global_max, hist_bins + 1)
+        else:
+            bin_edges = np.linspace(0, 1, hist_bins + 1)
+        bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+
         cols = 2
         rows = max(1, math.ceil(No_num / cols))
-        fig, axs = plt.subplots(rows, cols, figsize=(15, 3 * rows))
-        axs = np.array(axs).ravel()
+        height_ratios = []
+        for _ in range(rows):
+            height_ratios.extend([3, 1])
+        fig = plt.figure(figsize=(15, 4 * rows))
+        gs = fig.add_gridspec(nrows=rows * 2, ncols=cols, height_ratios=height_ratios)
+        axs_main = []
+        axs_resid = []
+        for idx in range(rows * cols):
+            row = idx // cols
+            col = idx % cols
+            axs_main.append(fig.add_subplot(gs[row * 2, col]))
+            axs_resid.append(fig.add_subplot(gs[row * 2 + 1, col]))
 
         for i, No_i in enumerate(No_list):
-            axes = axs[i]
+            axes = axs_main[i]
+            resid_ax = axs_resid[i]
             data = df_selected[(df_selected["No"] == No_i) & (df_selected["av"] > 0)]["av"].dropna()
-            if len(data) > 0:
-                axes.hist(data, bins=40, alpha=0.6, color="tab:blue")
             axes.axvline(0, color="red", linewidth=2)
             axes.grid(True)
-            axes.set_xlabel("Angular Velocity")
+            resid_ax.grid(True)
             axes.set_ylabel("Counts")
+            resid_ax.set_ylabel("Residual")
+            resid_ax.set_xlabel("Angular Velocity")
+            axes.set_xlim(bin_edges[0], bin_edges[-1])
+            resid_ax.set_xlim(bin_edges[0], bin_edges[-1])
+            resid_ax.axhline(0, color="black", linewidth=1)
 
             fit_params = {"amplitude": np.nan, "mean": np.nan, "std": np.nan}
+            hist_counts = np.array([])
 
-            if len(data) < 5:
-                axes.text(0.5, 0.5, "Insufficient data", transform=axes.transAxes, ha="center", va="center")
+            if len(data) == 0:
+                axes.text(0.5, 0.5, "No data", transform=axes.transAxes, ha="center", va="center")
+                resid_ax.text(0.5, 0.5, "No data", transform=resid_ax.transAxes, ha="center", va="center")
             else:
-                hist, bin_edges = np.histogram(data, bins=40)
-                bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
-                if np.all(hist == 0):
+                hist_counts, _ = np.histogram(data, bins=bin_edges)
+                axes.bar(
+                    bin_centers,
+                    hist_counts,
+                    width=np.diff(bin_edges),
+                    alpha=0.6,
+                    color="tab:blue",
+                    align="center",
+                )
+
+                if len(data) < 5:
+                    axes.text(0.5, 0.5, "Insufficient data", transform=axes.transAxes, ha="center", va="center")
+                    resid_ax.text(0.5, 0.5, "Insufficient data", transform=resid_ax.transAxes, ha="center", va="center")
+                elif np.all(hist_counts == 0):
                     axes.text(0.5, 0.5, "No counts", transform=axes.transAxes, ha="center", va="center")
+                    resid_ax.text(0.5, 0.5, "No counts", transform=resid_ax.transAxes, ha="center", va="center")
                 else:
                     std_guess = data.std()
                     if std_guess == 0:
                         std_guess = 1e-3
-                    initial_guess = (hist.max(), data.mean(), std_guess)
+                    initial_guess = (hist_counts.max(), data.mean(), std_guess)
                     try:
-                        popt, _ = curve_fit(gaussian, bin_centers, hist, p0=initial_guess, maxfev=5000)
+                        popt, _ = curve_fit(gaussian, bin_centers, hist_counts, p0=initial_guess, maxfev=5000)
                         x_fit = np.linspace(bin_edges[0], bin_edges[-1], 200)
                         axes.plot(x_fit, gaussian(x_fit, *popt), color="orange", linewidth=2)
                         fit_params = {"amplitude": popt[0], "mean": popt[1], "std": abs(popt[2])}
+                        expected_counts = gaussian(bin_centers, *popt)
+                        residuals = hist_counts - expected_counts
+                        resid_ax.bar(
+                            bin_centers,
+                            residuals,
+                            width=np.diff(bin_edges),
+                            align="center",
+                            color="tab:gray",
+                        )
+                        resid_max = np.max(np.abs(residuals)) if residuals.size else 0
+                        if resid_max == 0:
+                            resid_max = 1
+                        resid_ax.set_ylim(-resid_max * 1.1, resid_max * 1.1)
+                        resid_ax.set_title("Data - Gaussian", fontsize=9)
+                        if np.isfinite(fit_params["mean"]):
+                            resid_ax.axvline(fit_params["mean"], color="red", linewidth=1)
                     except (RuntimeError, ValueError):
                         axes.text(
                             0.5,
                             0.5,
                             "Fit failed",
                             transform=axes.transAxes,
+                            ha="center",
+                            va="center",
+                            color="red",
+                        )
+                        resid_ax.text(
+                            0.5,
+                            0.5,
+                            "Fit failed",
+                            transform=resid_ax.transAxes,
                             ha="center",
                             va="center",
                             color="red",
@@ -388,9 +511,10 @@ def plot_gaussian_fit(df: pd.DataFrame, out_dir: Path) -> None:
             )
 
         for j in range(No_num, rows * cols):
-            fig.delaxes(axs[j])
+            axs_main[j].remove()
+            axs_resid[j].remove()
         fig.suptitle(f"{data_key} Gaussian Fit (Positive AV)")
-        plt.tight_layout()
+        plt.tight_layout(rect=(0, 0, 1, 0.96))
         plt.savefig(f"{out_dir}/{save_i + 1}_{data_key}_gaussian_fit.png")
         plt.close(fig)
 
