@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy.optimize import curve_fit
+from scipy.stats import kurtosis, skew
 
 if hasattr(cv2, "VideoWriter_fourcc"):
     _cv2_fourcc: Callable[..., int] = getattr(cv2, "VideoWriter_fourcc")
@@ -524,6 +525,81 @@ def plot_gaussian_fit(df: pd.DataFrame, out_dir: Path, hist_bins: int = DEFAULT_
         plot_gaussian_stats(df_gauss, out_dir)
 
 
+def plot_skew_kurtosis(df: pd.DataFrame, out_dir: Path) -> None:
+    """Plot skewness and kurtosis of angular velocity per strain/No and mark Gaussian theoretical values.
+
+    Args:
+        df (pd.DataFrame): Time-series angular velocity dataframe with ['label', 'No', 'av'].
+        out_dir (Path): Directory where skewness and kurtosis figures are written.
+
+    Returns:
+        None
+    """
+
+    out_dir = out_dir / "av_skew_kurtosis"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    fig, axs = plt.subplots(1, 2, figsize=(12, 4))
+    axs = np.array(axs).ravel()
+
+    gauss_skew_line_added = False
+    gauss_kurt_line_added = False
+    skew_kurt_records = []
+
+    for save_i, data_key in enumerate(DATA_KEYS):
+        df_selected = df[df["label"] == data_key]
+        No_list = df_selected["No"].unique().tolist()
+        data_len = len(No_list)
+        if data_len == 0:
+            continue
+
+        for No_i in No_list:
+            av_values = df_selected[df_selected["No"] == No_i]["av"].dropna().to_numpy(dtype=float)
+            if av_values.size == 0:
+                continue
+            skew_val = skew(av_values, bias=True, nan_policy="omit")
+            kurt_val = kurtosis(av_values, fisher=False, bias=True, nan_policy="omit")
+
+            axs[0].scatter(save_i, skew_val, color="tab:blue")
+            axs[1].scatter(save_i, kurt_val, color="tab:orange")
+            skew_kurt_records.append(
+                {
+                    "label": data_key,
+                    "No": No_i,
+                    "count": av_values.size,
+                    "skewness": skew_val,
+                    "kurtosis": kurt_val,
+                }
+            )
+
+    x_positions = np.arange(len(DATA_KEYS))
+    for ax, ylabel in zip(axs, ["Skewness", "Kurtosis"]):
+        ax.set_xticks(x_positions)
+        ax.set_xticklabels(DATA_KEYS, rotation=45, ha="right")
+        ax.set_ylabel(ylabel)
+        ax.grid(True)
+
+    if not gauss_skew_line_added:
+        axs[0].axhline(0, color="red", linestyle="--", label="Gaussian skew = 0")
+        gauss_skew_line_added = True
+    if not gauss_kurt_line_added:
+        axs[1].axhline(3, color="red", linestyle="--", label="Gaussian kurtosis = 3")
+        gauss_kurt_line_added = True
+
+    axs[0].legend()
+    axs[1].legend()
+    axs[0].set_title("Skewness of Angular Velocity")
+    axs[1].set_title("Kurtosis of Angular Velocity")
+
+    plt.tight_layout()
+    plt.savefig(out_dir / "skew_kurtosis.png")
+    plt.close(fig)
+
+    if skew_kurt_records:
+        df_sk = pd.DataFrame(skew_kurt_records)
+        df_sk.to_csv(out_dir / "skew_kurtosis.csv", index=False)
+
+
 def main():
     ############
     # Load Data
@@ -575,7 +651,10 @@ def main():
     # 3. Gaussian Fit
     plot_gaussian_fit(df, out_dir)
     # 4. Sliding window animation
-    generate_sliding_window_animation(df, out_dir)
+    # generate_sliding_window_animation(df, out_dir)
+
+    # 5. Analysis of Skewness and Kurtosis
+    plot_skew_kurtosis(df, out_dir)
 
 
 if __name__ == "__main__":
