@@ -6,12 +6,7 @@ import pandas as pd
 
 from utils import param
 from utils.features import ROTATION_FEATURES
-from utils.functions import (
-    frequency_analysis,
-    make_graph,
-    read_csv,
-    rot_df_manage,
-)
+from utils.functions import frequency_analysis, make_graph, read_csv, rot_df_manage
 
 
 def get_weights_gaussian(
