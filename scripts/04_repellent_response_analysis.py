@@ -3,12 +3,16 @@ import os
 import subprocess
 import sys
 
+os.environ.setdefault("MPLBACKEND", "Agg")
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
+
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from utils.functions import (  # noqa
     get_angular_velocity,
     input_data,
     make_graph,
     repellent_response,
+    rot_df_manage,
     save2csv,
 )
 from utils import param  # noqa
@@ -27,13 +31,23 @@ def main(
 
     # Keep time-list generation aligned with existing implementation.
     time_list = repellent_response.ensure_time_list(day)
+    rot_df_manage.create_rot_df(day)
 
     # Reuse existing centroid / angular-velocity pipeline.
     centroid_csv = f"{param.save_dir_bef}/{day}/centroid_coordinate.csv"
     if not os.path.isfile(centroid_csv):
-        subprocess.run(["python3", "utils/functions/get_centroid_coordinate.py", day], check=True)
+        try:
+            subprocess.run(["python3", "utils/functions/get_centroid_coordinate.py", day], check=True)
+        except subprocess.CalledProcessError:
+            repellent_response.generate_centroid_coordinate_simple(day)
     x_list, y_list = input_data.input_centroid_coordinate(day)
-    _, angular_velocity_list = get_angular_velocity.get_angular_velocity(x_list, y_list, day)
+    x_list, y_list = repellent_response.align_coordinate_series_to_time(x_list, y_list, time_list)
+    motion_time_list = [time_list[i][: len(x_list[i])] for i in range(min(len(time_list), len(x_list), len(y_list)))]
+    try:
+        save2csv.save_time_list(motion_time_list, day)
+        _, angular_velocity_list = get_angular_velocity.get_angular_velocity(x_list, y_list, day)
+    finally:
+        save2csv.save_time_list(time_list, day)
 
     # Phase 1: background intensity and rise-point detection.
     background_list = repellent_response.get_background_intensity_time_series(day)

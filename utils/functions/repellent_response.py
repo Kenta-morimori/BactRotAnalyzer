@@ -1,11 +1,14 @@
 import configparser
+import glob
 import math
 import os
+import re
 import shutil
 import tempfile
 from datetime import datetime
 from typing import Dict, List, Sequence, Tuple
 
+import cv2
 import numpy as np
 import pandas as pd
 from PIL import Image
@@ -297,6 +300,17 @@ def _write_temp_config(config_path: str, sample_num: int) -> None:
         cfg.write(fp)
 
 
+def _write_dummy_angle_fft(day: str, sample_num: int) -> None:
+    save_dir = f"{param.save_dir_bef}/{day}/angular_velocity"
+    os.makedirs(save_dir, exist_ok=True)
+
+    data = {}
+    for i in range(sample_num):
+        data[f"No.{i + 1}_freq"] = pd.Series([0.0], dtype="float64")
+        data[f"No.{i + 1}_Amp"] = pd.Series([1.0], dtype="float64")
+    pd.DataFrame(data).to_csv(f"{save_dir}/angle_FFT.csv", index=False)
+
+
 def _get_valid_pre_rise_indices(
     pre_time_list: Sequence[Sequence[float]],
     pre_angular_velocity_list: Sequence[Sequence[float]],
@@ -346,6 +360,7 @@ def run_pre_rise_fluctuation(
 
             save2csv.save_time_list(selected_time_list, tmp_day)
             rot_df_manage.create_rot_df(tmp_day)
+            _write_dummy_angle_fft(tmp_day, len(valid_indices))
             fluctuation_analysis.main(selected_av_list, tmp_day)
             make_graph.plot_rot_param(tmp_day)
         finally:
@@ -422,3 +437,90 @@ def ensure_time_list(day: str) -> List[List[float]]:
 
         save2csv.save_time_list(time_list_all, day)
         return time_list_all
+
+
+def _extract_centroid_from_frame(frame) -> Tuple[float, float]:
+    img_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    _, img_binary = cv2.threshold(img_gray, 120, 255, cv2.THRESH_BINARY)
+    contours, _ = cv2.findContours(img_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if len(contours) == 0:
+        return np.nan, np.nan
+    max_contour = max(contours, key=cv2.contourArea)
+    if max_contour is None or max_contour.size == 0:
+        return np.nan, np.nan
+    mean_x = np.mean(max_contour[:, 0, 0].astype(float))
+    mean_y = np.mean(max_contour[:, 0, 1].astype(float))
+    return float(mean_x), float(mean_y)
+
+
+def _sort_avi_paths(avi_paths: Sequence[str]) -> List[str]:
+    def _key(path: str) -> int:
+        numbers = re.findall(r"\d+", os.path.basename(path))
+        if not numbers:
+            return math.inf
+        return int(numbers[-1])
+
+    return sorted(avi_paths, key=_key)
+
+
+def generate_centroid_coordinate_simple(day: str) -> str:
+    input_dir = f"{param.input_dir_bef}/{day}"
+    save_path = f"{param.save_dir_bef}/{day}/centroid_coordinate.csv"
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+
+    avi_paths = _sort_avi_paths(glob.glob(f"{input_dir}/*.avi"))
+    if len(avi_paths) == 0:
+        raise FileNotFoundError(f"No .avi file found in {input_dir}")
+
+    try:
+        px2um_x, px2um_y = param.get_px2um_config(day)
+    except Exception:
+        px2um_x, px2um_y = 1.0, 1.0
+
+    x_list: List[List[float]] = []
+    y_list: List[List[float]] = []
+    for avi_path in avi_paths:
+        cap = cv2.VideoCapture(avi_path)
+        sample_x: List[float] = []
+        sample_y: List[float] = []
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            x, y = _extract_centroid_from_frame(frame)
+            if np.isfinite(x):
+                sample_x.append(float(x) * px2um_x)
+            else:
+                sample_x.append(np.nan)
+            if np.isfinite(y):
+                sample_y.append(float(y) * px2um_y)
+            else:
+                sample_y.append(np.nan)
+        cap.release()
+        x_list.append(sample_x)
+        y_list.append(sample_y)
+
+    data = {}
+    for i in range(len(x_list)):
+        data[f"x_{i+1}"] = pd.Series(x_list[i], dtype="float64")
+        data[f"y_{i+1}"] = pd.Series(y_list[i], dtype="float64")
+    pd.DataFrame(data).to_csv(save_path, index=False)
+    return save_path
+
+
+def align_coordinate_series_to_time(
+    x_list: Sequence[Sequence[float]],
+    y_list: Sequence[Sequence[float]],
+    time_list: Sequence[Sequence[float]],
+) -> Tuple[List[List[float]], List[List[float]]]:
+    n = min(len(x_list), len(y_list), len(time_list))
+    x_aligned: List[List[float]] = []
+    y_aligned: List[List[float]] = []
+    for i in range(n):
+        x_arr = np.asarray(x_list[i], dtype=float)
+        y_arr = np.asarray(y_list[i], dtype=float)
+        t_arr = np.asarray(time_list[i], dtype=float)
+        m = min(len(x_arr), len(y_arr), len(t_arr))
+        x_aligned.append(x_arr[:m].tolist())
+        y_aligned.append(y_arr[:m].tolist())
+    return x_aligned, y_aligned
