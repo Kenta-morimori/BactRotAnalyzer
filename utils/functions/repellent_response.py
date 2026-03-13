@@ -42,6 +42,45 @@ def get_tiff_sample_names(day: str) -> List[str]:
     return sorted([name for name in os.listdir(tiff_root) if os.path.isdir(os.path.join(tiff_root, name))])
 
 
+def ensure_repellent_config(day: str, default_frame_rate: float = 200.0, default_px2um: float = 1.0) -> str:
+    config_path = f"{param.input_dir_bef}/{day}/config.ini"
+
+    cfg = configparser.ConfigParser()
+    if os.path.isfile(config_path):
+        cfg.read(config_path)
+        if cfg.has_section("Settings") and cfg.has_section("Tiff_info"):
+            return config_path
+
+    input_dir = f"{param.input_dir_bef}/{day}"
+    avi_names = sorted([name for name in os.listdir(input_dir) if name.lower().endswith(".avi")])
+    sample_num = len(avi_names)
+    if sample_num == 0:
+        raise FileNotFoundError(f"No .avi file found in {input_dir}")
+
+    tiff_names = get_tiff_sample_names(day)
+    if len(tiff_names) == 0:
+        raise FileNotFoundError(f"No tiff sample directory found in {input_dir}/tiff_data")
+
+    if len(tiff_names) < sample_num:
+        tiff_names = tiff_names + [tiff_names[-1]] * (sample_num - len(tiff_names))
+    else:
+        tiff_names = tiff_names[:sample_num]
+
+    cfg = configparser.ConfigParser()
+    cfg["Settings"] = {
+        "sample_num": str(sample_num),
+        "FrameRate": str(default_frame_rate),
+        "total_time": "1",
+        "flag_use_tiff_log": "True",
+        "px2um_x": str(default_px2um),
+        "px2um_y": str(default_px2um),
+    }
+    cfg["Tiff_info"] = {"tiff_data": ", ".join(tiff_names)}
+    with open(config_path, "w", encoding="utf-8") as fp:
+        cfg.write(fp)
+    return config_path
+
+
 def get_background_intensity_time_series(day: str, roi_size: int = 10) -> List[List[float]]:
     tiff_root = f"{param.input_dir_bef}/{day}/tiff_data"
     sample_names = get_tiff_sample_names(day)

@@ -22,6 +22,9 @@ def main(
 ):
     os.makedirs(f"{param.save_dir_bef}/{day}/repellent_response", exist_ok=True)
 
+    # Default repellent dataset may not have config.ini; create a minimal one when missing.
+    repellent_response.ensure_repellent_config(day)
+
     # Keep time-list generation aligned with existing implementation.
     time_list = repellent_response.ensure_time_list(day)
 
