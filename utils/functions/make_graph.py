@@ -1115,3 +1115,85 @@ def dev_plot_max_dist_stat(max_dists, max_dists_all, day):
     plt.tight_layout()
     plt.savefig(f"{save_dir}/max_dist_validation.png")
     plt.close(fig)
+
+
+def plot_repellent_background_intensity(time_list, background_list, rise_indices, day):
+    sample_num = min(len(time_list), len(background_list), len(rise_indices))
+    save_dir = f"{param.save_dir_bef}/{day}/repellent_response"
+    os.makedirs(save_dir, exist_ok=True)
+
+    cols = 2
+    rows = max(1, math.ceil(sample_num / cols))
+    fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
+    axs = np.atleast_2d(axs)
+
+    for i in range(rows * cols):
+        row = i // cols
+        col = i % cols
+        ax = axs[row, col]
+        if i >= sample_num:
+            ax.axis("off")
+            continue
+
+        time_arr = np.asarray(time_list[i], dtype=float)
+        bg_arr = np.asarray(background_list[i], dtype=float)
+        n = min(time_arr.size, bg_arr.size)
+        time_arr = time_arr[:n]
+        bg_arr = bg_arr[:n]
+        ax.plot(time_arr, bg_arr, linewidth=2)
+
+        rise_idx = rise_indices[i]
+        if np.isfinite(rise_idx):
+            rise_idx = int(rise_idx)
+            if 0 <= rise_idx < n:
+                ax.axvline(time_arr[rise_idx], color="red", linestyle="--", alpha=0.8)
+
+        ax.grid(True)
+        ax.set_title(f"Background Intensity No.{i+1}", fontsize=font_size)
+        ax.set_xlabel("Time [s]", fontsize=font_size)
+        ax.set_ylabel("Intensity", fontsize=font_size)
+        ax.tick_params(axis="both", which="major", labelsize=font_size)
+
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/background_intensity_time_series.png")
+    plt.close(fig)
+
+
+def plot_repellent_post_rise_centroid(time_list, x_list, y_list, day):
+    sample_num = min(len(time_list), len(x_list), len(y_list))
+    save_dir = f"{param.save_dir_bef}/{day}/repellent_response"
+    os.makedirs(save_dir, exist_ok=True)
+
+    cols = 2
+    rows = max(1, math.ceil(sample_num / cols))
+    fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
+    axs = np.atleast_2d(axs)
+
+    for i in range(rows * cols):
+        row = i // cols
+        col = i % cols
+        ax = axs[row, col]
+        if i >= sample_num:
+            ax.axis("off")
+            continue
+
+        time_arr = np.asarray(time_list[i], dtype=float)
+        x_arr = np.asarray(x_list[i], dtype=float)
+        y_arr = np.asarray(y_list[i], dtype=float)
+        n = min(time_arr.size, x_arr.size, y_arr.size)
+        time_arr = time_arr[:n]
+        x_arr = x_arr[:n]
+        y_arr = y_arr[:n]
+
+        ax.plot(time_arr, x_arr, linewidth=2, label="x")
+        ax.plot(time_arr, y_arr, linewidth=2, label="y")
+        ax.grid(True)
+        ax.set_title(f"Post-rise Centroid No.{i+1}", fontsize=font_size)
+        ax.set_xlabel("Time [s]", fontsize=font_size)
+        ax.set_ylabel(r"Coordinate [$\mu$m]", fontsize=font_size)
+        ax.tick_params(axis="both", which="major", labelsize=font_size)
+        ax.legend(loc="best", fontsize=font_size - 6)
+
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/post_rise_centroid_time_series.png")
+    plt.close(fig)
