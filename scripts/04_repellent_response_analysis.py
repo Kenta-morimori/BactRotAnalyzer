@@ -81,7 +81,7 @@ def main(
         rise_indices=rise_indices,
     )
     save2csv.save_repellent_post_rise_centroid(post_time_list, post_x_list, post_y_list, day)
-    make_graph.plot_repellent_post_rise_centroid(post_time_list, post_x_list, post_y_list, day)
+    make_graph.plot_repellent_center_coordinate(post_time_list, post_x_list, post_y_list, day)
 
 
 if __name__ == "__main__":

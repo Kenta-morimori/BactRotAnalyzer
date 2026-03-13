@@ -131,11 +131,8 @@ def detect_rise_index(
             "threshold": np.nan,
         }
 
-    baseline_len = max(min_consecutive, int(arr.size * baseline_ratio))
-    baseline_len = min(arr.size, baseline_len)
-    baseline = arr[:baseline_len]
-    baseline = baseline[np.isfinite(baseline)]
-    if baseline.size == 0:
+    finite_mask = np.isfinite(arr)
+    if not finite_mask.any():
         return {
             "rise_index": np.nan,
             "baseline_mean": np.nan,
@@ -143,29 +140,76 @@ def detect_rise_index(
             "threshold": np.nan,
         }
 
-    baseline_mean = float(np.mean(baseline))
-    baseline_std = float(np.std(baseline))
-    threshold = baseline_mean + sigma_threshold * baseline_std
+    # Interpolate NaN to avoid breaking whole-series change-point evaluation.
+    arr_work = arr.copy()
+    if not np.all(finite_mask):
+        idx = np.arange(arr_work.size)
+        arr_work[~finite_mask] = np.interp(idx[~finite_mask], idx[finite_mask], arr_work[finite_mask])
 
-    above = np.isfinite(arr) & (arr > threshold)
-    run_length = 0
-    for i, flag in enumerate(above):
-        if flag:
-            run_length += 1
-            if run_length >= min_consecutive:
-                return {
-                    "rise_index": float(i - min_consecutive + 1),
-                    "baseline_mean": baseline_mean,
-                    "baseline_std": baseline_std,
-                    "threshold": threshold,
-                }
-        else:
-            run_length = 0
+    n = arr_work.size
+    min_segment_ratio = max(0.05, min(0.25, baseline_ratio / 2.0))
+    min_segment = max(min_consecutive, int(n * min_segment_ratio))
+    min_segment = min(min_segment, max(1, n // 2))
+
+    if n < 2 * min_segment + 1:
+        min_segment = max(1, n // 4)
+    if n < 3 or min_segment < 1 or (n - min_segment) <= min_segment:
+        baseline = arr_work[np.isfinite(arr_work)]
+        baseline_mean = float(np.mean(baseline)) if baseline.size else np.nan
+        baseline_std = float(np.std(baseline)) if baseline.size else np.nan
+        return {
+            "rise_index": np.nan,
+            "baseline_mean": baseline_mean,
+            "baseline_std": baseline_std,
+            "threshold": np.nan,
+        }
+
+    candidate_indices = range(min_segment, n - min_segment + 1)
+    scores = []
+    for k in candidate_indices:
+        before = arr_work[:k]
+        after = arr_work[k:]
+        scores.append(float(np.mean(after) - np.mean(before)))
+
+    scores_arr = np.asarray(scores, dtype=float)
+    best_local_idx = int(np.argmax(scores_arr))
+    best_k = min_segment + best_local_idx
+    best_score = float(scores_arr[best_local_idx])
+
+    if not np.isfinite(best_score) or best_score <= 0:
+        baseline = arr_work[:best_k]
+        baseline_mean = float(np.mean(baseline)) if baseline.size else np.nan
+        baseline_std = float(np.std(baseline)) if baseline.size else np.nan
+        return {
+            "rise_index": np.nan,
+            "baseline_mean": baseline_mean,
+            "baseline_std": baseline_std,
+            "threshold": np.nan,
+        }
+
+    # Refine to the local strongest positive slope near the best change point.
+    smooth_window = min(11, n if n % 2 == 1 else n - 1)
+    smooth_window = max(3, smooth_window)
+    kernel = np.ones(smooth_window, dtype=float) / float(smooth_window)
+    smooth = np.convolve(arr_work, kernel, mode="same")
+    diff = np.diff(smooth)
+    search_half_width = max(3, smooth_window)
+    left = max(0, best_k - search_half_width)
+    right = min(diff.size, best_k + search_half_width)
+    if right > left and np.nanmax(diff[left:right]) > 0:
+        rise_index = int(left + np.nanargmax(diff[left:right]))
+    else:
+        rise_index = int(best_k)
+
+    baseline = arr_work[:best_k]
+    baseline_mean = float(np.mean(baseline)) if baseline.size else np.nan
+    baseline_std = float(np.std(baseline)) if baseline.size else np.nan
+    threshold = baseline_mean + (best_score / max(1.0, sigma_threshold))
     return {
-        "rise_index": np.nan,
+        "rise_index": float(rise_index),
         "baseline_mean": baseline_mean,
         "baseline_std": baseline_std,
-        "threshold": threshold,
+        "threshold": float(threshold),
     }
 
 

@@ -1197,3 +1197,88 @@ def plot_repellent_post_rise_centroid(time_list, x_list, y_list, day):
     plt.tight_layout()
     plt.savefig(f"{save_dir}/post_rise_centroid_time_series.png")
     plt.close(fig)
+
+
+def plot_repellent_center_coordinate(time_list, x_list, y_list, day):
+    sample_num = min(len(time_list), len(x_list), len(y_list))
+    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/center_coordinate"
+    os.makedirs(save_dir, exist_ok=True)
+
+    cols = 2
+    rows = max(1, math.ceil(sample_num / cols))
+
+    # xy trajectory
+    fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
+    axs = np.atleast_2d(axs)
+    for i in range(rows * cols):
+        row = i // cols
+        col = i % cols
+        ax = axs[row, col]
+        if i >= sample_num:
+            ax.axis("off")
+            continue
+        x_arr = np.asarray(x_list[i], dtype=float)
+        y_arr = np.asarray(y_list[i], dtype=float)
+        n = min(x_arr.size, y_arr.size)
+        x_arr = x_arr[:n]
+        y_arr = y_arr[:n]
+        ax.plot(x_arr, y_arr)
+        ax.grid(True)
+        ax.set_aspect("equal", "box")
+        ax.set_title(f"Center Trajectory No.{i+1}", fontsize=font_size)
+        ax.set_xlabel(r"x [$\mu$m]", fontsize=font_size)
+        ax.set_ylabel(r"y [$\mu$m]", fontsize=font_size)
+        ax.tick_params(axis="both", which="major", labelsize=font_size)
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/trajectory.png")
+    plt.close(fig)
+
+    # x time-series
+    fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
+    axs = np.atleast_2d(axs)
+    for i in range(rows * cols):
+        row = i // cols
+        col = i % cols
+        ax = axs[row, col]
+        if i >= sample_num:
+            ax.axis("off")
+            continue
+        t_arr = np.asarray(time_list[i], dtype=float)
+        x_arr = np.asarray(x_list[i], dtype=float)
+        n = min(t_arr.size, x_arr.size)
+        t_arr = t_arr[:n]
+        x_arr = x_arr[:n]
+        ax.plot(t_arr, x_arr)
+        ax.grid(True)
+        ax.set_title(f"Center X No.{i+1}", fontsize=font_size)
+        ax.set_xlabel("Time [s]", fontsize=font_size)
+        ax.set_ylabel(r"x [$\mu$m]", fontsize=font_size)
+        ax.tick_params(axis="both", which="major", labelsize=font_size)
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/x_coordinate.png")
+    plt.close(fig)
+
+    # y time-series
+    fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
+    axs = np.atleast_2d(axs)
+    for i in range(rows * cols):
+        row = i // cols
+        col = i % cols
+        ax = axs[row, col]
+        if i >= sample_num:
+            ax.axis("off")
+            continue
+        t_arr = np.asarray(time_list[i], dtype=float)
+        y_arr = np.asarray(y_list[i], dtype=float)
+        n = min(t_arr.size, y_arr.size)
+        t_arr = t_arr[:n]
+        y_arr = y_arr[:n]
+        ax.plot(t_arr, y_arr)
+        ax.grid(True)
+        ax.set_title(f"Center Y No.{i+1}", fontsize=font_size)
+        ax.set_xlabel("Time [s]", fontsize=font_size)
+        ax.set_ylabel(r"y [$\mu$m]", fontsize=font_size)
+        ax.tick_params(axis="both", which="major", labelsize=font_size)
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/y_coordinate.png")
+    plt.close(fig)
