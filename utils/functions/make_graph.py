@@ -714,12 +714,12 @@ def plot_SD_FFT_feats(ratio_list, ratio_reciprocal_list, decrease_list, ref_poin
                 # Amp Decrease
                 axes[row, col].plot(width_time_list, decrease_list[i], "-o")
                 axes[row, col].set_title(f"No.{i+1} Amp Decrease", fontsize=font_size)
-                axes[row, col].set_ylim(0,)
+                axes[row, col].set_ylim(0)
             else:
                 # Reference Points
                 axes[row, col].plot(width_time_list, ref_point_list[i], "-o")
                 axes[row, col].set_title(f"No.{i+1} Ref. Points", fontsize=font_size)
-                axes[row, col].set_ylim(0,)
+                axes[row, col].set_ylim(0)
 
             axes[row, col].set_xlabel("Window Width [s]", fontsize=font_size)
             axes[row, col].tick_params(axis="both", which="major", labelsize=font_size)
