@@ -24,7 +24,12 @@ def main(
     sigma_threshold: float,
     min_consecutive: int,
 ):
-    os.makedirs(f"{param.save_dir_bef}/{day}/repellent_response", exist_ok=True)
+    repellent_root = f"{param.save_dir_bef}/{day}/repellent_response"
+    os.makedirs(f"{repellent_root}/00_time_list", exist_ok=True)
+    os.makedirs(f"{repellent_root}/01_brightness_change", exist_ok=True)
+    os.makedirs(f"{repellent_root}/02_pre_rise_fluctuation", exist_ok=True)
+    os.makedirs(f"{repellent_root}/03_post_rise_analysis/centroid_coordinate", exist_ok=True)
+    repellent_response.cleanup_legacy_repellent_outputs(day)
 
     # Default repellent dataset may not have config.ini; create a minimal one when missing.
     repellent_response.ensure_repellent_config(day)
@@ -32,6 +37,8 @@ def main(
     # Keep time-list generation aligned with existing implementation.
     time_list = repellent_response.ensure_time_list(day)
     rot_df_manage.create_rot_df(day)
+    save2csv.save_repellent_time_list(time_list, day)
+    make_graph.plot_repellent_time_list(time_list, day)
 
     # Reuse existing centroid / angular-velocity pipeline.
     centroid_csv = f"{param.save_dir_bef}/{day}/centroid_coordinate.csv"
@@ -73,15 +80,40 @@ def main(
     repellent_response.run_pre_rise_fluctuation(pre_time_list, pre_av_list, day)
 
     # Phase 2-b: post-rise centroid time series.
-    x_raw_list, y_raw_list = repellent_response.load_centroid_coordinate_with_nan(day)
+    x_corrected_list, y_corrected_list = repellent_response.load_centroid_coordinate_with_nan(day)
     post_time_list, post_x_list, post_y_list = repellent_response.build_post_rise_centroid_series(
         time_list=time_list,
-        x_list=x_raw_list,
-        y_list=y_raw_list,
+        x_list=x_corrected_list,
+        y_list=y_corrected_list,
         rise_indices=rise_indices,
     )
     save2csv.save_repellent_post_rise_centroid(post_time_list, post_x_list, post_y_list, day)
-    make_graph.plot_repellent_center_coordinate(post_time_list, post_x_list, post_y_list, day)
+
+    # Plot three modes as panel figures (x-y, x-t, y-t): before, center, corrected.
+    (
+        comp_time_list,
+        x_before_list,
+        y_before_list,
+        x_center_list,
+        y_center_list,
+        x_corr_list,
+        y_corr_list,
+    ) = repellent_response.build_post_rise_coordinate_components(
+        day=day,
+        time_list=time_list,
+        corrected_x_list=x_corrected_list,
+        corrected_y_list=y_corrected_list,
+        rise_indices=rise_indices,
+    )
+    make_graph.plot_repellent_component_panels(
+        comp_time_list, x_before_list, y_before_list, day, "Centroid Before Correction", "centroid_before.png"
+    )
+    make_graph.plot_repellent_component_panels(
+        comp_time_list, x_center_list, y_center_list, day, "Rotation Center", "rotation_center.png"
+    )
+    make_graph.plot_repellent_component_panels(
+        comp_time_list, x_corr_list, y_corr_list, day, "Centroid Corrected", "centroid_corrected.png"
+    )
 
 
 if __name__ == "__main__":

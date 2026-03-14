@@ -187,24 +187,73 @@ def detect_rise_index(
             "threshold": np.nan,
         }
 
-    # Refine to the local strongest positive slope near the best change point.
+    # Find the strongest rising region, then backtrack to its onset.
     smooth_window = min(11, n if n % 2 == 1 else n - 1)
     smooth_window = max(3, smooth_window)
     kernel = np.ones(smooth_window, dtype=float) / float(smooth_window)
     smooth = np.convolve(arr_work, kernel, mode="same")
     diff = np.diff(smooth)
-    search_half_width = max(3, smooth_window)
+
+    search_half_width = max(5, smooth_window * 2)
     left = max(0, best_k - search_half_width)
     right = min(diff.size, best_k + search_half_width)
     if right > left and np.nanmax(diff[left:right]) > 0:
-        rise_index = int(left + np.nanargmax(diff[left:right]))
+        peak_slope_idx = int(left + np.nanargmax(diff[left:right]))
     else:
-        rise_index = int(best_k)
+        peak_slope_idx = int(max(0, best_k - 1))
 
-    baseline = arr_work[:best_k]
+    baseline_diff_end = max(min_segment, peak_slope_idx // 2)
+    baseline_diff = diff[:baseline_diff_end]
+    baseline_diff = baseline_diff[np.isfinite(baseline_diff)]
+    if baseline_diff.size == 0:
+        diff_threshold = float(np.nanpercentile(diff, 60))
+    else:
+        diff_threshold = float(np.mean(baseline_diff) + 0.5 * sigma_threshold * np.std(baseline_diff))
+        diff_threshold = max(diff_threshold, float(np.nanpercentile(diff, 60)))
+
+    backtrack_width = max(min_segment * 4, smooth_window * 3)
+    start_search = max(0, peak_slope_idx - backtrack_width)
+    local_diff = diff[start_search : peak_slope_idx + 1]
+
+    rise_index = peak_slope_idx
+    if local_diff.size > 0 and np.isfinite(np.nanmax(local_diff)):
+        active_threshold = max(diff_threshold, 0.35 * float(np.nanmax(local_diff)))
+        active_mask = local_diff > active_threshold
+
+        runs = []
+        run_start = None
+        for idx, flag in enumerate(active_mask):
+            if flag and run_start is None:
+                run_start = idx
+            elif not flag and run_start is not None:
+                runs.append((run_start, idx - 1))
+                run_start = None
+        if run_start is not None:
+            runs.append((run_start, len(active_mask) - 1))
+
+        if runs:
+            # Prefer the rising block closest to the peak slope.
+            selected_run = max(runs, key=lambda x: x[1])
+            if (selected_run[1] - selected_run[0] + 1) < min_consecutive:
+                selected_run = max(runs, key=lambda x: np.nanmax(local_diff[x[0] : x[1] + 1]))
+            rise_index = int(start_search + selected_run[0])
+
+    # Fallback to first intensity crossing before the slope peak.
+    if rise_index >= peak_slope_idx:
+        rough_baseline = arr_work[: max(1, peak_slope_idx // 2)]
+        rough_baseline = rough_baseline[np.isfinite(rough_baseline)]
+        if rough_baseline.size > 0:
+            base_mean = float(np.mean(rough_baseline))
+            base_std = float(np.std(rough_baseline))
+            intensity_threshold = base_mean + max(base_std, best_score / max(4.0, sigma_threshold))
+            crossings = np.where(smooth[start_search : peak_slope_idx + 1] > intensity_threshold)[0]
+            if crossings.size > 0:
+                rise_index = int(start_search + crossings[0])
+
+    baseline = arr_work[: max(1, rise_index)]
     baseline_mean = float(np.mean(baseline)) if baseline.size else np.nan
     baseline_std = float(np.std(baseline)) if baseline.size else np.nan
-    threshold = baseline_mean + (best_score / max(1.0, sigma_threshold))
+    threshold = baseline_mean + sigma_threshold * baseline_std
     return {
         "rise_index": float(rise_index),
         "baseline_mean": baseline_mean,
@@ -293,6 +342,33 @@ def load_centroid_coordinate_with_nan(day: str) -> Tuple[List[List[float]], List
     return x_list, y_list
 
 
+def load_rotation_center_with_nan(day: str) -> Tuple[List[List[float]], List[List[float]]]:
+    candidate_paths = [
+        f"{param.save_dir_bef}/{day}/center_coordinate/center_coordinate.csv",
+        f"{param.save_dir_bef}/{day}/center_coordinate/bef_correction/center_coordinate.csv",
+        f"{param.save_dir_bef}/{day}/center_coordinate/bef_correction/center_coordinate_bef_correct.csv",
+    ]
+
+    csv_path = ""
+    for path in candidate_paths:
+        if os.path.isfile(path):
+            csv_path = path
+            break
+    if csv_path == "":
+        return [], []
+
+    df = pd.read_csv(csv_path)
+    x_list: List[List[float]] = []
+    y_list: List[List[float]] = []
+    for col_name in df.columns.tolist():
+        col_arr = pd.to_numeric(df[col_name], errors="coerce").to_numpy(dtype=float)
+        if col_name.endswith("_x"):
+            x_list.append(col_arr.tolist())
+        elif col_name.endswith("_y"):
+            y_list.append(col_arr.tolist())
+    return x_list, y_list
+
+
 def build_post_rise_centroid_series(
     time_list: Sequence[Sequence[float]],
     x_list: Sequence[Sequence[float]],
@@ -326,6 +402,155 @@ def build_post_rise_centroid_series(
         post_y_list.append(y_arr[rise_idx:].tolist())
 
     return post_time_list, post_x_list, post_y_list
+
+
+def build_post_rise_x_components(
+    day: str,
+    time_list: Sequence[Sequence[float]],
+    corrected_x_list: Sequence[Sequence[float]],
+    rise_indices: Sequence[float],
+) -> Tuple[List[List[float]], List[List[float]], List[List[float]], List[List[float]]]:
+    center_x_list, _ = load_rotation_center_with_nan(day)
+    flag_has_center = len(center_x_list) > 0
+
+    n = min(len(time_list), len(corrected_x_list), len(rise_indices))
+    post_time_list: List[List[float]] = []
+    post_x_raw_list: List[List[float]] = []
+    post_x_center_list: List[List[float]] = []
+    post_x_corr_list: List[List[float]] = []
+
+    for i in range(n):
+        time_arr = np.asarray(time_list[i], dtype=float)
+        x_corr_arr = np.asarray(corrected_x_list[i], dtype=float)
+
+        if flag_has_center and i < len(center_x_list):
+            x_center_arr = np.asarray(center_x_list[i], dtype=float)
+            m = min(len(time_arr), len(x_corr_arr), len(x_center_arr))
+            time_arr = time_arr[:m]
+            x_corr_arr = x_corr_arr[:m]
+            x_center_arr = x_center_arr[:m]
+            x_raw_arr = x_corr_arr + x_center_arr
+        else:
+            m = min(len(time_arr), len(x_corr_arr))
+            time_arr = time_arr[:m]
+            x_corr_arr = x_corr_arr[:m]
+            x_center_arr = np.zeros(m, dtype=float)
+            x_raw_arr = x_corr_arr.copy()
+
+        if m <= 0:
+            post_time_list.append([])
+            post_x_raw_list.append([])
+            post_x_center_list.append([])
+            post_x_corr_list.append([])
+            continue
+
+        rise_idx = _normalize_rise_index(float(rise_indices[i]), m)
+        post_time_list.append(time_arr[rise_idx:].tolist())
+        post_x_raw_list.append(x_raw_arr[rise_idx:].tolist())
+        post_x_center_list.append(x_center_arr[rise_idx:].tolist())
+        post_x_corr_list.append(x_corr_arr[rise_idx:].tolist())
+
+    return post_time_list, post_x_raw_list, post_x_center_list, post_x_corr_list
+
+
+def build_post_rise_coordinate_components(
+    day: str,
+    time_list: Sequence[Sequence[float]],
+    corrected_x_list: Sequence[Sequence[float]],
+    corrected_y_list: Sequence[Sequence[float]],
+    rise_indices: Sequence[float],
+) -> Tuple[
+    List[List[float]],
+    List[List[float]],
+    List[List[float]],
+    List[List[float]],
+    List[List[float]],
+    List[List[float]],
+    List[List[float]],
+]:
+    center_x_list, center_y_list = load_rotation_center_with_nan(day)
+    flag_has_center = (len(center_x_list) > 0) and (len(center_y_list) > 0)
+
+    n = min(len(time_list), len(corrected_x_list), len(corrected_y_list), len(rise_indices))
+    post_time_list: List[List[float]] = []
+    post_x_before_list: List[List[float]] = []
+    post_y_before_list: List[List[float]] = []
+    post_x_center_list: List[List[float]] = []
+    post_y_center_list: List[List[float]] = []
+    post_x_corr_list: List[List[float]] = []
+    post_y_corr_list: List[List[float]] = []
+
+    for i in range(n):
+        time_arr = np.asarray(time_list[i], dtype=float)
+        x_corr_arr = np.asarray(corrected_x_list[i], dtype=float)
+        y_corr_arr = np.asarray(corrected_y_list[i], dtype=float)
+
+        if flag_has_center and (i < len(center_x_list)) and (i < len(center_y_list)):
+            x_center_arr = np.asarray(center_x_list[i], dtype=float)
+            y_center_arr = np.asarray(center_y_list[i], dtype=float)
+            m = min(len(time_arr), len(x_corr_arr), len(y_corr_arr), len(x_center_arr), len(y_center_arr))
+            time_arr = time_arr[:m]
+            x_corr_arr = x_corr_arr[:m]
+            y_corr_arr = y_corr_arr[:m]
+            x_center_arr = x_center_arr[:m]
+            y_center_arr = y_center_arr[:m]
+            if np.isfinite(x_center_arr).any():
+                x_center_mean = float(np.nanmean(x_center_arr))
+            elif np.isfinite(x_corr_arr).any():
+                x_center_mean = float(np.nanmean(x_corr_arr))
+            else:
+                x_center_mean = 0.0
+            if np.isfinite(y_center_arr).any():
+                y_center_mean = float(np.nanmean(y_center_arr))
+            elif np.isfinite(y_corr_arr).any():
+                y_center_mean = float(np.nanmean(y_corr_arr))
+            else:
+                y_center_mean = 0.0
+        else:
+            m = min(len(time_arr), len(x_corr_arr), len(y_corr_arr))
+            time_arr = time_arr[:m]
+            x_corr_arr = x_corr_arr[:m]
+            y_corr_arr = y_corr_arr[:m]
+
+            # Temporary fallback requested by user: use sample-wide constant center.
+            x_center_mean = float(np.nanmean(x_corr_arr)) if np.isfinite(x_corr_arr).any() else 0.0
+            y_center_mean = float(np.nanmean(y_corr_arr)) if np.isfinite(y_corr_arr).any() else 0.0
+
+        # Temporary behavior: always embed rotation center as a constant series.
+        x_center_arr = np.full(m, x_center_mean, dtype=float)
+        y_center_arr = np.full(m, y_center_mean, dtype=float)
+
+        if m <= 0:
+            post_time_list.append([])
+            post_x_before_list.append([])
+            post_y_before_list.append([])
+            post_x_center_list.append([])
+            post_y_center_list.append([])
+            post_x_corr_list.append([])
+            post_y_corr_list.append([])
+            continue
+
+        x_before_arr = x_corr_arr + x_center_arr
+        y_before_arr = y_corr_arr + y_center_arr
+        rise_idx = _normalize_rise_index(float(rise_indices[i]), m)
+
+        post_time_list.append(time_arr[rise_idx:].tolist())
+        post_x_before_list.append(x_before_arr[rise_idx:].tolist())
+        post_y_before_list.append(y_before_arr[rise_idx:].tolist())
+        post_x_center_list.append(x_center_arr[rise_idx:].tolist())
+        post_y_center_list.append(y_center_arr[rise_idx:].tolist())
+        post_x_corr_list.append(x_corr_arr[rise_idx:].tolist())
+        post_y_corr_list.append(y_corr_arr[rise_idx:].tolist())
+
+    return (
+        post_time_list,
+        post_x_before_list,
+        post_y_before_list,
+        post_x_center_list,
+        post_y_center_list,
+        post_x_corr_list,
+        post_y_corr_list,
+    )
 
 
 def _write_temp_config(config_path: str, sample_num: int) -> None:
@@ -374,7 +599,7 @@ def run_pre_rise_fluctuation(
     pre_angular_velocity_list: Sequence[Sequence[float]],
     day: str,
 ) -> List[int]:
-    target_dir = f"{param.save_dir_bef}/{day}/repellent_response/pre_rise_fluctuation"
+    target_dir = f"{param.save_dir_bef}/{day}/repellent_response/02_pre_rise_fluctuation"
     os.makedirs(target_dir, exist_ok=True)
 
     valid_indices = _get_valid_pre_rise_indices(pre_time_list, pre_angular_velocity_list)
@@ -412,9 +637,10 @@ def run_pre_rise_fluctuation(
             param.save_dir_bef = orig_output_root
 
         src_dir = f"{tmp_output_root}/{tmp_day}/fluctuation_analysis"
-        if os.path.isdir(target_dir):
-            shutil.rmtree(target_dir)
-        shutil.copytree(src_dir, target_dir)
+        target_fluc_dir = f"{target_dir}/fluctuation_analysis"
+        if os.path.isdir(target_fluc_dir):
+            shutil.rmtree(target_fluc_dir)
+        shutil.copytree(src_dir, target_fluc_dir)
 
     map_df = pd.DataFrame(
         {
@@ -568,3 +794,31 @@ def align_coordinate_series_to_time(
         x_aligned.append(x_arr[:m].tolist())
         y_aligned.append(y_arr[:m].tolist())
     return x_aligned, y_aligned
+
+
+def cleanup_legacy_repellent_outputs(day: str) -> None:
+    root = f"{param.save_dir_bef}/{day}/repellent_response"
+    legacy_files = [
+        f"{root}/background_intensity_time_series.csv",
+        f"{root}/background_intensity_time_series.png",
+        f"{root}/post_rise_centroid_time_series.csv",
+        f"{root}/rise_summary.csv",
+        f"{root}/03_post_rise_analysis/centroid_coordinate/trajectory.png",
+        f"{root}/03_post_rise_analysis/centroid_coordinate/x_coordinate.png",
+        f"{root}/03_post_rise_analysis/centroid_coordinate/y_coordinate.png",
+        f"{root}/03_post_rise_analysis/centroid_coordinate/x_centroid_before.png",
+        f"{root}/03_post_rise_analysis/centroid_coordinate/x_rotation_center.png",
+        f"{root}/03_post_rise_analysis/centroid_coordinate/x_centroid_corrected.png",
+        f"{root}/03_post_rise_analysis/centroid_coordinate/x_components.png",
+    ]
+    legacy_dirs = [
+        f"{root}/center_coordinate",
+        f"{root}/pre_rise_fluctuation",
+    ]
+
+    for path in legacy_files:
+        if os.path.isfile(path):
+            os.remove(path)
+    for path in legacy_dirs:
+        if os.path.isdir(path):
+            shutil.rmtree(path)

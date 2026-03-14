@@ -1119,8 +1119,11 @@ def dev_plot_max_dist_stat(max_dists, max_dists_all, day):
 
 def plot_repellent_background_intensity(time_list, background_list, rise_indices, day):
     sample_num = min(len(time_list), len(background_list), len(rise_indices))
-    save_dir = f"{param.save_dir_bef}/{day}/repellent_response"
+    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/01_brightness_change"
     os.makedirs(save_dir, exist_ok=True)
+    title_fs = font_size + 6
+    label_fs = font_size + 4
+    tick_fs = font_size + 2
 
     cols = 2
     rows = max(1, math.ceil(sample_num / cols))
@@ -1149,10 +1152,10 @@ def plot_repellent_background_intensity(time_list, background_list, rise_indices
                 ax.axvline(time_arr[rise_idx], color="red", linestyle="--", alpha=0.8)
 
         ax.grid(True)
-        ax.set_title(f"Background Intensity No.{i+1}", fontsize=font_size)
-        ax.set_xlabel("Time [s]", fontsize=font_size)
-        ax.set_ylabel("Intensity", fontsize=font_size)
-        ax.tick_params(axis="both", which="major", labelsize=font_size)
+        ax.set_title(f"Background Intensity No.{i+1}", fontsize=title_fs)
+        ax.set_xlabel("Time [s]", fontsize=label_fs)
+        ax.set_ylabel("Intensity", fontsize=label_fs)
+        ax.tick_params(axis="both", which="major", labelsize=tick_fs)
 
     plt.tight_layout()
     plt.savefig(f"{save_dir}/background_intensity_time_series.png")
@@ -1161,7 +1164,7 @@ def plot_repellent_background_intensity(time_list, background_list, rise_indices
 
 def plot_repellent_post_rise_centroid(time_list, x_list, y_list, day):
     sample_num = min(len(time_list), len(x_list), len(y_list))
-    save_dir = f"{param.save_dir_bef}/{day}/repellent_response"
+    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/03_post_rise_analysis/centroid_coordinate"
     os.makedirs(save_dir, exist_ok=True)
 
     cols = 2
@@ -1201,8 +1204,11 @@ def plot_repellent_post_rise_centroid(time_list, x_list, y_list, day):
 
 def plot_repellent_center_coordinate(time_list, x_list, y_list, day):
     sample_num = min(len(time_list), len(x_list), len(y_list))
-    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/center_coordinate"
+    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/03_post_rise_analysis/centroid_coordinate"
     os.makedirs(save_dir, exist_ok=True)
+    title_fs = font_size + 6
+    label_fs = font_size + 4
+    tick_fs = font_size + 2
 
     cols = 2
     rows = max(1, math.ceil(sample_num / cols))
@@ -1225,10 +1231,10 @@ def plot_repellent_center_coordinate(time_list, x_list, y_list, day):
         ax.plot(x_arr, y_arr)
         ax.grid(True)
         ax.set_aspect("equal", "box")
-        ax.set_title(f"Center Trajectory No.{i+1}", fontsize=font_size)
-        ax.set_xlabel(r"x [$\mu$m]", fontsize=font_size)
-        ax.set_ylabel(r"y [$\mu$m]", fontsize=font_size)
-        ax.tick_params(axis="both", which="major", labelsize=font_size)
+        ax.set_title(f"Center Trajectory No.{i+1}", fontsize=title_fs)
+        ax.set_xlabel(r"x [$\mu$m]", fontsize=label_fs)
+        ax.set_ylabel(r"y [$\mu$m]", fontsize=label_fs)
+        ax.tick_params(axis="both", which="major", labelsize=tick_fs)
     plt.tight_layout()
     plt.savefig(f"{save_dir}/trajectory.png")
     plt.close(fig)
@@ -1250,10 +1256,10 @@ def plot_repellent_center_coordinate(time_list, x_list, y_list, day):
         x_arr = x_arr[:n]
         ax.plot(t_arr, x_arr)
         ax.grid(True)
-        ax.set_title(f"Center X No.{i+1}", fontsize=font_size)
-        ax.set_xlabel("Time [s]", fontsize=font_size)
-        ax.set_ylabel(r"x [$\mu$m]", fontsize=font_size)
-        ax.tick_params(axis="both", which="major", labelsize=font_size)
+        ax.set_title(f"Center X No.{i+1}", fontsize=title_fs)
+        ax.set_xlabel("Time [s]", fontsize=label_fs)
+        ax.set_ylabel(r"x [$\mu$m]", fontsize=label_fs)
+        ax.tick_params(axis="both", which="major", labelsize=tick_fs)
     plt.tight_layout()
     plt.savefig(f"{save_dir}/x_coordinate.png")
     plt.close(fig)
@@ -1275,10 +1281,145 @@ def plot_repellent_center_coordinate(time_list, x_list, y_list, day):
         y_arr = y_arr[:n]
         ax.plot(t_arr, y_arr)
         ax.grid(True)
-        ax.set_title(f"Center Y No.{i+1}", fontsize=font_size)
-        ax.set_xlabel("Time [s]", fontsize=font_size)
-        ax.set_ylabel(r"y [$\mu$m]", fontsize=font_size)
-        ax.tick_params(axis="both", which="major", labelsize=font_size)
+        ax.set_title(f"Center Y No.{i+1}", fontsize=title_fs)
+        ax.set_xlabel("Time [s]", fontsize=label_fs)
+        ax.set_ylabel(r"y [$\mu$m]", fontsize=label_fs)
+        ax.tick_params(axis="both", which="major", labelsize=tick_fs)
     plt.tight_layout()
     plt.savefig(f"{save_dir}/y_coordinate.png")
+    plt.close(fig)
+
+
+def plot_repellent_center_x_components(time_list, x_raw_list, x_center_list, x_corrected_list, day):
+    sample_num = min(len(time_list), len(x_raw_list), len(x_center_list), len(x_corrected_list))
+    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/03_post_rise_analysis/centroid_coordinate"
+    os.makedirs(save_dir, exist_ok=True)
+    title_fs = font_size + 6
+    label_fs = font_size + 4
+    tick_fs = font_size + 2
+
+    cols = 2
+    rows = max(1, math.ceil(sample_num / cols))
+    plot_defs = [
+        ("x_centroid_before.png", x_raw_list, "Centroid Before Correction X"),
+        ("x_rotation_center.png", x_center_list, "Rotation Center X"),
+        ("x_centroid_corrected.png", x_corrected_list, "Centroid Corrected X"),
+    ]
+
+    for save_name, x_series_list, title_prefix in plot_defs:
+        fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
+        axs = np.atleast_2d(axs)
+        for i in range(rows * cols):
+            row = i // cols
+            col = i % cols
+            ax = axs[row, col]
+            if i >= sample_num:
+                ax.axis("off")
+                continue
+
+            t_arr = np.asarray(time_list[i], dtype=float)
+            x_arr = np.asarray(x_series_list[i], dtype=float)
+            n = min(t_arr.size, x_arr.size)
+            t_arr = t_arr[:n]
+            x_arr = x_arr[:n]
+
+            ax.plot(t_arr, x_arr, alpha=0.85)
+            ax.grid(True)
+            ax.set_title(f"{title_prefix} No.{i+1}", fontsize=title_fs)
+            ax.set_xlabel("Time [s]", fontsize=label_fs)
+            ax.set_ylabel(r"x [$\mu$m]", fontsize=label_fs)
+            ax.tick_params(axis="both", which="major", labelsize=tick_fs)
+
+        plt.tight_layout()
+        plt.savefig(f"{save_dir}/{save_name}")
+        plt.close(fig)
+
+
+def plot_repellent_component_panels(time_list, x_list, y_list, day, mode_label, save_name):
+    sample_num = min(len(time_list), len(x_list), len(y_list))
+    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/03_post_rise_analysis/centroid_coordinate"
+    os.makedirs(save_dir, exist_ok=True)
+    title_fs = font_size + 6
+    label_fs = font_size + 4
+    tick_fs = font_size + 2
+
+    rows = max(1, sample_num)
+    cols = 3  # x-y, x-t, y-t
+    fig, axs = plt.subplots(rows, cols, figsize=(3 * fig_size_x / 2, max(6, rows * 4)))
+    if rows == 1:
+        axs = np.array([axs])
+
+    for i in range(rows):
+        x_arr = np.asarray(x_list[i], dtype=float)
+        y_arr = np.asarray(y_list[i], dtype=float)
+        t_arr = np.asarray(time_list[i], dtype=float)
+        n = min(x_arr.size, y_arr.size, t_arr.size)
+        x_arr = x_arr[:n]
+        y_arr = y_arr[:n]
+        t_arr = t_arr[:n]
+
+        # x-y
+        ax = axs[i, 0]
+        ax.plot(x_arr, y_arr, linewidth=1.8)
+        ax.grid(True)
+        ax.set_aspect("equal", "box")
+        ax.set_title(f"{mode_label} No.{i+1} | x-y", fontsize=title_fs)
+        ax.set_xlabel(r"x [$\mu$m]", fontsize=label_fs)
+        ax.set_ylabel(r"y [$\mu$m]", fontsize=label_fs)
+        ax.tick_params(axis="both", which="major", labelsize=tick_fs)
+
+        # x-t
+        ax = axs[i, 1]
+        ax.plot(t_arr, x_arr, linewidth=1.8)
+        ax.grid(True)
+        ax.set_title(f"{mode_label} No.{i+1} | x-t", fontsize=title_fs)
+        ax.set_xlabel("Time [s]", fontsize=label_fs)
+        ax.set_ylabel(r"x [$\mu$m]", fontsize=label_fs)
+        ax.tick_params(axis="both", which="major", labelsize=tick_fs)
+
+        # y-t
+        ax = axs[i, 2]
+        ax.plot(t_arr, y_arr, linewidth=1.8)
+        ax.grid(True)
+        ax.set_title(f"{mode_label} No.{i+1} | y-t", fontsize=title_fs)
+        ax.set_xlabel("Time [s]", fontsize=label_fs)
+        ax.set_ylabel(r"y [$\mu$m]", fontsize=label_fs)
+        ax.tick_params(axis="both", which="major", labelsize=tick_fs)
+
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/{save_name}")
+    plt.close(fig)
+
+
+def plot_repellent_time_list(time_list, day):
+    sample_num = len(time_list)
+    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/00_time_list"
+    os.makedirs(save_dir, exist_ok=True)
+    title_fs = font_size + 6
+    label_fs = font_size + 4
+    tick_fs = font_size + 2
+
+    cols = 2
+    rows = max(1, math.ceil(sample_num / cols))
+    fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
+    axs = np.atleast_2d(axs)
+    for i in range(rows * cols):
+        row = i // cols
+        col = i % cols
+        ax = axs[row, col]
+        if i >= sample_num:
+            ax.axis("off")
+            continue
+        t_arr = np.asarray(time_list[i], dtype=float)
+        if t_arr.size == 0:
+            ax.axis("off")
+            continue
+        ax.plot(np.arange(t_arr.size), t_arr, linewidth=2)
+        ax.grid(True)
+        ax.set_title(f"Time List No.{i+1}", fontsize=title_fs)
+        ax.set_xlabel("Frame", fontsize=label_fs)
+        ax.set_ylabel("Time [s]", fontsize=label_fs)
+        ax.tick_params(axis="both", which="major", labelsize=tick_fs)
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/time_list.png")
     plt.close(fig)
