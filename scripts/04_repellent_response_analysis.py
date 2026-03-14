@@ -58,28 +58,63 @@ def main(
     save2csv.save_repellent_rise_summary(rise_results, day)
     make_graph.plot_repellent_background_intensity(time_list, background_list, rise_indices, day)
 
+    # Build all-time centroid components once, then split into pre/post later.
+    post_rise_center_mode = repellent_response.get_post_rise_center_mode(day)
+    all_comp_time_list, all_x_before_list, all_y_before_list = repellent_response.build_all_time_raw_centroid_series(
+        day=day,
+        time_list=time_list,
+        corrected_x_list=x_list,
+        corrected_y_list=y_list,
+    )
+    all_center_x_standard_list, all_center_y_standard_list = repellent_response.estimate_rotation_center_like_standard(
+        time_list=all_comp_time_list,
+        x_raw_list=all_x_before_list,
+        y_raw_list=all_y_before_list,
+    )
+    all_x_center_list, all_y_center_list = repellent_response.apply_post_rise_center_strategy(
+        time_list=all_comp_time_list,
+        x_raw_list=all_x_before_list,
+        y_raw_list=all_y_before_list,
+        center_x_standard_list=all_center_x_standard_list,
+        center_y_standard_list=all_center_y_standard_list,
+        rise_indices=rise_indices,
+        post_rise_center_mode=post_rise_center_mode,
+    )
+    all_x_corr_list, all_y_corr_list = repellent_response.subtract_center_from_raw(
+        x_raw_list=all_x_before_list,
+        y_raw_list=all_y_before_list,
+        center_x_list=all_x_center_list,
+        center_y_list=all_y_center_list,
+    )
+
     # Segment 0: all-time rotational analysis.
     repellent_response.save_repellent_segment_centroid_series(
-        time_list=time_list,
-        x_list=x_list,
-        y_list=y_list,
+        time_list=all_comp_time_list,
+        x_list=all_x_corr_list,
+        y_list=all_y_corr_list,
         day=day,
         segment_subdir="00_all_rotational_analysis",
+    )
+    repellent_response.save_segment_center_coordinate(
+        day=day,
+        segment_subdir="00_all_rotational_analysis",
+        center_x_list=all_x_center_list,
+        center_y_list=all_y_center_list,
     )
     all_rot = repellent_response.run_segment_rotational_analysis(
         day=day,
         segment_subdir="00_all_rotational_analysis",
-        time_list=time_list,
-        x_list=x_list,
-        y_list=y_list,
+        time_list=all_comp_time_list,
+        x_list=all_x_corr_list,
+        y_list=all_y_corr_list,
         run_fluctuation=False,
     )
-    all_rise_time_list = []
+    all_rise_time_for_av = []
     for idx in all_rot["valid_indices"]:
         if idx < len(rise_results):
-            all_rise_time_list.append(rise_results[idx].get("rise_time", float("nan")))
+            all_rise_time_for_av.append(rise_results[idx].get("rise_time", float("nan")))
         else:
-            all_rise_time_list.append(float("nan"))
+            all_rise_time_for_av.append(float("nan"))
     repellent_response.save_segment_angular_velocity_outputs(
         day=day,
         segment_subdir="00_all_rotational_analysis",
@@ -87,24 +122,9 @@ def main(
         angle_list=all_rot["angle_list"],
         angular_velocity_list=all_rot["angular_velocity_list"],
         original_sample_indices=all_rot["valid_indices"],
-        rise_time_list=all_rise_time_list,
+        rise_time_list=all_rise_time_for_av,
     )
-    repellent_response.copy_center_coordinate_to_segment(day, "00_all_rotational_analysis")
-    (
-        all_comp_time_list,
-        all_x_before_list,
-        all_y_before_list,
-        all_x_center_list,
-        all_y_center_list,
-        all_x_corr_list,
-        all_y_corr_list,
-    ) = repellent_response.build_post_rise_coordinate_components(
-        day=day,
-        time_list=time_list,
-        corrected_x_list=x_list,
-        corrected_y_list=y_list,
-        rise_indices=[0.0] * len(time_list),
-    )
+    all_rise_time_for_centroid = [result.get("rise_time", float("nan")) for result in rise_results]
     make_graph.plot_repellent_component_panels(
         all_comp_time_list,
         all_x_before_list,
@@ -113,7 +133,7 @@ def main(
         "All-time Centroid Before Correction",
         "centroid_before.png",
         save_subdir="00_all_rotational_analysis/centroid_coordinate",
-        rise_time_list=all_rise_time_list,
+        rise_time_list=all_rise_time_for_centroid,
     )
     make_graph.plot_repellent_component_panels(
         all_comp_time_list,
@@ -123,7 +143,7 @@ def main(
         "All-time Rotation Center",
         "rotation_center.png",
         save_subdir="00_all_rotational_analysis/centroid_coordinate",
-        rise_time_list=all_rise_time_list,
+        rise_time_list=all_rise_time_for_centroid,
     )
     make_graph.plot_repellent_component_panels(
         all_comp_time_list,
@@ -133,33 +153,34 @@ def main(
         "All-time Centroid Corrected",
         "centroid_corrected.png",
         save_subdir="00_all_rotational_analysis/centroid_coordinate",
-        rise_time_list=all_rise_time_list,
+        rise_time_list=all_rise_time_for_centroid,
     )
 
     # Segment 1: pre-rise rotational + fluctuation analyses.
-    pre_time_list, pre_x_raw_list, pre_y_raw_list = repellent_response.build_pre_rise_raw_centroid_series(
-        day=day,
-        time_list=time_list,
-        corrected_x_list=x_list,
-        corrected_y_list=y_list,
+    (
+        pre_time_list,
+        pre_x_raw_list,
+        pre_y_raw_list,
+        pre_center_x_list,
+        pre_center_y_list,
+        pre_x_corr_list,
+        pre_y_corr_list,
+    ) = repellent_response.split_coordinate_components_by_rise(
+        time_list=all_comp_time_list,
+        x_before_list=all_x_before_list,
+        y_before_list=all_y_before_list,
+        x_center_list=all_x_center_list,
+        y_center_list=all_y_center_list,
+        x_corr_list=all_x_corr_list,
+        y_corr_list=all_y_corr_list,
         rise_indices=rise_indices,
-    )
-    pre_center_x_list, pre_center_y_list = repellent_response.estimate_rotation_center_like_standard(
-        time_list=pre_time_list,
-        x_raw_list=pre_x_raw_list,
-        y_raw_list=pre_y_raw_list,
-    )
-    pre_x_list, pre_y_list = repellent_response.subtract_center_from_raw(
-        x_raw_list=pre_x_raw_list,
-        y_raw_list=pre_y_raw_list,
-        center_x_list=pre_center_x_list,
-        center_y_list=pre_center_y_list,
+        mode="pre",
     )
 
     repellent_response.save_repellent_segment_centroid_series(
         time_list=pre_time_list,
-        x_list=pre_x_list,
-        y_list=pre_y_list,
+        x_list=pre_x_corr_list,
+        y_list=pre_y_corr_list,
         day=day,
         segment_subdir="02_pre_rise_fluctuation",
     )
@@ -212,8 +233,8 @@ def main(
     )
     make_graph.plot_repellent_component_panels(
         pre_time_list,
-        pre_x_list,
-        pre_y_list,
+        pre_x_corr_list,
+        pre_y_corr_list,
         day,
         "Pre-rise Centroid Corrected",
         "centroid_corrected.png",
@@ -221,22 +242,40 @@ def main(
     )
 
     # Segment 2: post-rise rotational analysis.
-    x_corrected_list, y_corrected_list = repellent_response.load_centroid_coordinate_with_nan(day)
-    post_time_list, post_x_list, post_y_list = repellent_response.build_post_rise_centroid_series(
-        time_list=time_list,
-        x_list=x_corrected_list,
-        y_list=y_corrected_list,
+    (
+        post_time_list,
+        post_x_raw_list,
+        post_y_raw_list,
+        post_center_x_list,
+        post_center_y_list,
+        post_x_corr_list,
+        post_y_corr_list,
+    ) = repellent_response.split_coordinate_components_by_rise(
+        time_list=all_comp_time_list,
+        x_before_list=all_x_before_list,
+        y_before_list=all_y_before_list,
+        x_center_list=all_x_center_list,
+        y_center_list=all_y_center_list,
+        x_corr_list=all_x_corr_list,
+        y_corr_list=all_y_corr_list,
         rise_indices=rise_indices,
+        mode="post",
     )
     repellent_response.save_repellent_segment_centroid_series(
         time_list=post_time_list,
-        x_list=post_x_list,
-        y_list=post_y_list,
+        x_list=post_x_corr_list,
+        y_list=post_y_corr_list,
         day=day,
         segment_subdir="03_post_rise_analysis",
         csv_name="post_rise_centroid_time_series.csv",
     )
-    save2csv.save_repellent_post_rise_centroid(post_time_list, post_x_list, post_y_list, day)
+    repellent_response.save_segment_center_coordinate(
+        day=day,
+        segment_subdir="03_post_rise_analysis",
+        center_x_list=post_center_x_list,
+        center_y_list=post_center_y_list,
+    )
+    save2csv.save_repellent_post_rise_centroid(post_time_list, post_x_corr_list, post_y_corr_list, day)
     post_av_time_list, post_angle_list, post_av_list = repellent_response.split_rotational_series_by_rise(
         time_list=all_rot["time_list"],
         angle_list=all_rot["angle_list"],
@@ -255,29 +294,31 @@ def main(
     )
 
     # Plot three modes as panel figures (x-y, x-t, y-t): before, center, corrected.
-    (
-        comp_time_list,
-        x_before_list,
-        y_before_list,
-        x_center_list,
-        y_center_list,
-        x_corr_list,
-        y_corr_list,
-    ) = repellent_response.build_post_rise_coordinate_components(
-        day=day,
-        time_list=time_list,
-        corrected_x_list=x_corrected_list,
-        corrected_y_list=y_corrected_list,
-        rise_indices=rise_indices,
+    make_graph.plot_repellent_component_panels(
+        post_time_list,
+        post_x_raw_list,
+        post_y_raw_list,
+        day,
+        "Centroid Before Correction",
+        "centroid_before.png",
+        overlay_x_list=post_center_x_list,
+        overlay_y_list=post_center_y_list,
     )
     make_graph.plot_repellent_component_panels(
-        comp_time_list, x_before_list, y_before_list, day, "Centroid Before Correction", "centroid_before.png"
+        post_time_list,
+        post_center_x_list,
+        post_center_y_list,
+        day,
+        "Rotation Center",
+        "rotation_center.png",
     )
     make_graph.plot_repellent_component_panels(
-        comp_time_list, x_center_list, y_center_list, day, "Rotation Center", "rotation_center.png"
-    )
-    make_graph.plot_repellent_component_panels(
-        comp_time_list, x_corr_list, y_corr_list, day, "Centroid Corrected", "centroid_corrected.png"
+        post_time_list,
+        post_x_corr_list,
+        post_y_corr_list,
+        day,
+        "Centroid Corrected",
+        "centroid_corrected.png",
     )
 
 

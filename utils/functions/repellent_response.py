@@ -6,7 +6,7 @@ import re
 import shutil
 import tempfile
 from datetime import datetime
-from typing import Dict, List, Optional, Sequence, Tuple, TypedDict
+from typing import Dict, List, Literal, Optional, Sequence, Tuple, TypedDict
 
 import cv2
 import numpy as np
@@ -89,9 +89,41 @@ def ensure_repellent_config(day: str, default_frame_rate: float = 200.0, default
         "px2um_y": str(default_px2um),
     }
     cfg["Tiff_info"] = {"tiff_data": ", ".join(tiff_names)}
+    cfg["RepellentResponse"] = {"post_rise_center_mode": "2"}
     with open(config_path, "w", encoding="utf-8") as fp:
         cfg.write(fp)
     return config_path
+
+
+def get_post_rise_center_mode(day: str, default_mode: int = 2) -> int:
+    config_path = f"{param.input_dir_bef}/{day}/config.ini"
+    cfg = configparser.ConfigParser()
+    cfg.read(config_path)
+
+    section = "RepellentResponse"
+    changed = False
+    if not cfg.has_section(section):
+        cfg.add_section(section)
+        changed = True
+    if not cfg.has_option(section, "post_rise_center_mode"):
+        cfg.set(section, "post_rise_center_mode", str(default_mode))
+        changed = True
+
+    raw_mode = cfg.get(section, "post_rise_center_mode", fallback=str(default_mode))
+    try:
+        mode = int(raw_mode)
+    except (ValueError, TypeError):
+        mode = int(default_mode)
+    if mode not in (1, 2, 3):
+        mode = int(default_mode)
+    if cfg.get(section, "post_rise_center_mode", fallback="") != str(mode):
+        cfg.set(section, "post_rise_center_mode", str(mode))
+        changed = True
+
+    if changed:
+        with open(config_path, "w", encoding="utf-8") as fp:
+            cfg.write(fp)
+    return mode
 
 
 def get_background_intensity_time_series(day: str, roi_size: int = 10) -> List[List[float]]:
@@ -154,9 +186,7 @@ def detect_rise_index(
     arr_work = arr.copy()
     if not np.all(finite_mask):
         interp_idx = np.arange(arr_work.size)
-        arr_work[~finite_mask] = np.interp(
-            interp_idx[~finite_mask], interp_idx[finite_mask], arr_work[finite_mask]
-        )
+        arr_work[~finite_mask] = np.interp(interp_idx[~finite_mask], interp_idx[finite_mask], arr_work[finite_mask])
 
     n = arr_work.size
     min_segment_ratio = max(0.05, min(0.25, baseline_ratio / 2.0))
@@ -414,6 +444,62 @@ def load_rotation_center_with_nan(day: str) -> Tuple[List[List[float]], List[Lis
         elif col_name.endswith("_y"):
             y_list.append(col_arr.tolist())
     return x_list, y_list
+
+
+def _fill_center_nan_with_previous(values: Sequence[float]) -> np.ndarray:
+    arr = np.asarray(values, dtype=float).copy()
+    if arr.size == 0:
+        return arr
+    if np.isnan(arr).all():
+        return np.zeros(arr.size, dtype=float)
+
+    valid = np.where(np.isfinite(arr))[0]
+    first_valid = int(valid[0])
+    arr[:first_valid] = arr[first_valid]
+    for i in range(first_valid + 1, arr.size):
+        if not np.isfinite(arr[i]):
+            arr[i] = arr[i - 1]
+    return arr
+
+
+def build_all_time_raw_centroid_series(
+    day: str,
+    time_list: Sequence[Sequence[float]],
+    corrected_x_list: Sequence[Sequence[float]],
+    corrected_y_list: Sequence[Sequence[float]],
+) -> Tuple[List[List[float]], List[List[float]], List[List[float]]]:
+    center_x_list, center_y_list = load_rotation_center_with_nan(day)
+    n = min(len(time_list), len(corrected_x_list), len(corrected_y_list))
+
+    out_time_list: List[List[float]] = []
+    out_x_raw_list: List[List[float]] = []
+    out_y_raw_list: List[List[float]] = []
+
+    for i in range(n):
+        t = np.asarray(time_list[i], dtype=float)
+        x_corr = np.asarray(corrected_x_list[i], dtype=float)
+        y_corr = np.asarray(corrected_y_list[i], dtype=float)
+
+        if i < len(center_x_list) and i < len(center_y_list):
+            cx = _fill_center_nan_with_previous(center_x_list[i])
+            cy = _fill_center_nan_with_previous(center_y_list[i])
+            m = min(len(t), len(x_corr), len(y_corr), len(cx), len(cy))
+            cx = cx[:m]
+            cy = cy[:m]
+        else:
+            m = min(len(t), len(x_corr), len(y_corr))
+            cx = np.zeros(m, dtype=float)
+            cy = np.zeros(m, dtype=float)
+
+        t = t[:m]
+        x_corr = x_corr[:m]
+        y_corr = y_corr[:m]
+
+        out_time_list.append(t.tolist())
+        out_x_raw_list.append((x_corr + cx).tolist())
+        out_y_raw_list.append((y_corr + cy).tolist())
+
+    return out_time_list, out_x_raw_list, out_y_raw_list
 
 
 def build_post_rise_centroid_series(
@@ -959,6 +1045,130 @@ def estimate_rotation_center_like_standard(
     return center_x_all, center_y_all
 
 
+def _estimate_window_frames_from_fft(time_arr: np.ndarray, x_arr: np.ndarray, y_arr: np.ndarray) -> int:
+    finite_time = np.isfinite(time_arr)
+    finite_xy = np.isfinite(x_arr) & np.isfinite(y_arr)
+    valid_mask = finite_time & finite_xy
+    if np.count_nonzero(valid_mask) < max(3, param.min_ref_centroid_num):
+        base = min(len(time_arr), len(x_arr), len(y_arr))
+        return max(3, min(base if base % 2 == 1 else max(3, base - 1), 301))
+
+    t = time_arr[valid_mask]
+    x = x_arr[valid_mask]
+    y = y_arr[valid_mask]
+    total_duration = float(t[-1] - t[0]) if len(t) > 1 else 0.0
+    if total_duration <= 0:
+        return 3
+
+    frame_rate = max(1e-6, float(len(t)) / total_duration)
+    x_freq, x_amp = frequency_analysis.fft(x, 1.0 / frame_rate)
+    y_freq, y_amp = frequency_analysis.fft(y, 1.0 / frame_rate)
+    freq_th = 5.0
+    x_mask = np.asarray(x_freq) > freq_th
+    y_mask = np.asarray(y_freq) > freq_th
+    x_freq = np.asarray(x_freq)[x_mask]
+    x_amp = np.asarray(x_amp)[x_mask]
+    y_freq = np.asarray(y_freq)[y_mask]
+    y_amp = np.asarray(y_amp)[y_mask]
+
+    peak_candidates = []
+    if x_freq.size > 0 and x_amp.size > 0 and np.isfinite(x_amp).any():
+        peak_candidates.append(float(x_freq[int(np.nanargmax(x_amp))]))
+    if y_freq.size > 0 and y_amp.size > 0 and np.isfinite(y_amp).any():
+        peak_candidates.append(float(y_freq[int(np.nanargmax(y_amp))]))
+    if peak_candidates:
+        peak_freq = max(peak_candidates)
+    else:
+        peak_freq = max(0.1, 1.0 / max(total_duration, 1e-6))
+
+    width_time = param.n_rotations / max(peak_freq, 1e-6)
+    width_time = min(max(width_time, 1.0 / frame_rate), total_duration)
+    frames = max(3, int(round(width_time * frame_rate)))
+    if frames % 2 == 0:
+        frames += 1
+    max_valid = max(3, int(np.count_nonzero(valid_mask)))
+    frames = min(frames, max_valid if max_valid % 2 == 1 else max(3, max_valid - 1))
+    return max(3, frames)
+
+
+def _rolling_stat(arr: np.ndarray, window: int, stat: Literal["mean", "median"]) -> np.ndarray:
+    s = pd.Series(arr, dtype="float64")
+    if stat == "mean":
+        out = s.rolling(window=window, center=True, min_periods=1).mean()
+    else:
+        out = s.rolling(window=window, center=True, min_periods=1).median()
+    return out.to_numpy(dtype=float)
+
+
+def apply_post_rise_center_strategy(
+    time_list: Sequence[Sequence[float]],
+    x_raw_list: Sequence[Sequence[float]],
+    y_raw_list: Sequence[Sequence[float]],
+    center_x_standard_list: Sequence[Sequence[float]],
+    center_y_standard_list: Sequence[Sequence[float]],
+    rise_indices: Sequence[float],
+    post_rise_center_mode: int = 2,
+) -> Tuple[List[List[float]], List[List[float]]]:
+    n = min(
+        len(time_list),
+        len(x_raw_list),
+        len(y_raw_list),
+        len(center_x_standard_list),
+        len(center_y_standard_list),
+        len(rise_indices),
+    )
+    out_center_x_list: List[List[float]] = []
+    out_center_y_list: List[List[float]] = []
+
+    for i in range(n):
+        t = np.asarray(time_list[i], dtype=float)
+        x_raw = np.asarray(x_raw_list[i], dtype=float)
+        y_raw = np.asarray(y_raw_list[i], dtype=float)
+        cx_std = np.asarray(center_x_standard_list[i], dtype=float)
+        cy_std = np.asarray(center_y_standard_list[i], dtype=float)
+        m = min(len(t), len(x_raw), len(y_raw), len(cx_std), len(cy_std))
+        if m <= 0:
+            out_center_x_list.append([])
+            out_center_y_list.append([])
+            continue
+
+        t = t[:m]
+        x_raw = x_raw[:m]
+        y_raw = y_raw[:m]
+        cx_std = _fill_center_nan_with_previous(cx_std[:m].tolist())
+        cy_std = _fill_center_nan_with_previous(cy_std[:m].tolist())
+        rise_idx = _normalize_rise_index(float(rise_indices[i]), m)
+
+        cx_final = cx_std.copy()
+        cy_final = cy_std.copy()
+        if rise_idx < m:
+            if post_rise_center_mode == 3:
+                x_post = x_raw[rise_idx:]
+                y_post = y_raw[rise_idx:]
+                cx_post = float(np.nanmean(x_post)) if np.isfinite(x_post).any() else float(np.nanmean(x_raw))
+                cy_post = float(np.nanmean(y_post)) if np.isfinite(y_post).any() else float(np.nanmean(y_raw))
+                if not np.isfinite(cx_post):
+                    cx_post = 0.0
+                if not np.isfinite(cy_post):
+                    cy_post = 0.0
+                cx_final[rise_idx:] = cx_post
+                cy_final[rise_idx:] = cy_post
+            else:
+                window = _estimate_window_frames_from_fft(t, x_raw, y_raw)
+                stat_mode: Literal["mean", "median"] = "mean" if post_rise_center_mode == 1 else "median"
+                cx_slide = _rolling_stat(x_raw, window=window, stat=stat_mode)
+                cy_slide = _rolling_stat(y_raw, window=window, stat=stat_mode)
+                cx_slide = _fill_center_nan_with_previous(cx_slide.tolist())
+                cy_slide = _fill_center_nan_with_previous(cy_slide.tolist())
+                cx_final[rise_idx:] = cx_slide[rise_idx:]
+                cy_final[rise_idx:] = cy_slide[rise_idx:]
+
+        out_center_x_list.append(cx_final.tolist())
+        out_center_y_list.append(cy_final.tolist())
+
+    return out_center_x_list, out_center_y_list
+
+
 def save_segment_center_coordinate(
     day: str,
     segment_subdir: str,
@@ -1035,6 +1245,89 @@ def subtract_center_from_raw(
         x_corr_list.append((xr[:m] - cx[:m]).tolist())
         y_corr_list.append((yr[:m] - cy[:m]).tolist())
     return x_corr_list, y_corr_list
+
+
+def split_coordinate_components_by_rise(
+    time_list: Sequence[Sequence[float]],
+    x_before_list: Sequence[Sequence[float]],
+    y_before_list: Sequence[Sequence[float]],
+    x_center_list: Sequence[Sequence[float]],
+    y_center_list: Sequence[Sequence[float]],
+    x_corr_list: Sequence[Sequence[float]],
+    y_corr_list: Sequence[Sequence[float]],
+    rise_indices: Sequence[float],
+    mode: str,
+) -> Tuple[
+    List[List[float]],
+    List[List[float]],
+    List[List[float]],
+    List[List[float]],
+    List[List[float]],
+    List[List[float]],
+    List[List[float]],
+]:
+    n = min(
+        len(time_list),
+        len(x_before_list),
+        len(y_before_list),
+        len(x_center_list),
+        len(y_center_list),
+        len(x_corr_list),
+        len(y_corr_list),
+        len(rise_indices),
+    )
+    out_t: List[List[float]] = []
+    out_x_before: List[List[float]] = []
+    out_y_before: List[List[float]] = []
+    out_x_center: List[List[float]] = []
+    out_y_center: List[List[float]] = []
+    out_x_corr: List[List[float]] = []
+    out_y_corr: List[List[float]] = []
+
+    for i in range(n):
+        t = np.asarray(time_list[i], dtype=float)
+        xb = np.asarray(x_before_list[i], dtype=float)
+        yb = np.asarray(y_before_list[i], dtype=float)
+        xc = np.asarray(x_center_list[i], dtype=float)
+        yc = np.asarray(y_center_list[i], dtype=float)
+        xg = np.asarray(x_corr_list[i], dtype=float)
+        yg = np.asarray(y_corr_list[i], dtype=float)
+        m = min(len(t), len(xb), len(yb), len(xc), len(yc), len(xg), len(yg))
+        if m <= 0:
+            out_t.append([])
+            out_x_before.append([])
+            out_y_before.append([])
+            out_x_center.append([])
+            out_y_center.append([])
+            out_x_corr.append([])
+            out_y_corr.append([])
+            continue
+
+        t = t[:m]
+        xb = xb[:m]
+        yb = yb[:m]
+        xc = xc[:m]
+        yc = yc[:m]
+        xg = xg[:m]
+        yg = yg[:m]
+        rise_idx = _normalize_rise_index(float(rise_indices[i]), m)
+
+        if mode == "pre":
+            sl = slice(0, rise_idx)
+        elif mode == "post":
+            sl = slice(rise_idx, m)
+        else:
+            raise ValueError(f"Unknown mode: {mode}")
+
+        out_t.append(t[sl].tolist())
+        out_x_before.append(xb[sl].tolist())
+        out_y_before.append(yb[sl].tolist())
+        out_x_center.append(xc[sl].tolist())
+        out_y_center.append(yc[sl].tolist())
+        out_x_corr.append(xg[sl].tolist())
+        out_y_corr.append(yg[sl].tolist())
+
+    return out_t, out_x_before, out_y_before, out_x_center, out_y_center, out_x_corr, out_y_corr
 
 
 def split_rotational_series_by_rise(

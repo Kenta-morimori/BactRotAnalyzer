@@ -1359,6 +1359,8 @@ def plot_repellent_component_panels(
     save_name,
     save_subdir="03_post_rise_analysis/centroid_coordinate",
     rise_time_list=None,
+    overlay_x_list=None,
+    overlay_y_list=None,
 ):
     sample_num = min(len(time_list), len(x_list), len(y_list))
     save_dir = f"{param.save_dir_bef}/{day}/repellent_response/{save_subdir}"
@@ -1377,17 +1379,36 @@ def plot_repellent_component_panels(
         x_arr = np.asarray(x_list[i], dtype=float)
         y_arr = np.asarray(y_list[i], dtype=float)
         t_arr = np.asarray(time_list[i], dtype=float)
+        x_overlay_arr = np.array([], dtype=float)
+        y_overlay_arr = np.array([], dtype=float)
+        flag_overlay = False
+        if (
+            overlay_x_list is not None
+            and overlay_y_list is not None
+            and i < len(overlay_x_list)
+            and i < len(overlay_y_list)
+        ):
+            x_overlay_arr = np.asarray(overlay_x_list[i], dtype=float)
+            y_overlay_arr = np.asarray(overlay_y_list[i], dtype=float)
+            flag_overlay = True
         rise_time = np.nan
         if rise_time_list is not None and i < len(rise_time_list):
             rise_time = float(rise_time_list[i]) if np.isfinite(rise_time_list[i]) else np.nan
         n = min(x_arr.size, y_arr.size, t_arr.size)
+        if flag_overlay:
+            n = min(n, x_overlay_arr.size, y_overlay_arr.size)
         x_arr = x_arr[:n]
         y_arr = y_arr[:n]
         t_arr = t_arr[:n]
+        if flag_overlay:
+            x_overlay_arr = x_overlay_arr[:n]
+            y_overlay_arr = y_overlay_arr[:n]
 
         # x-y
         ax = axs[i, 0]
         ax.plot(x_arr, y_arr, linewidth=1.8)
+        if flag_overlay:
+            ax.plot(x_overlay_arr, y_overlay_arr, color="orange", linewidth=1.8, alpha=0.9)
         ax.grid(True)
         ax.set_aspect("equal", "box")
         if n > 0 and np.isfinite(x_arr).any() and np.isfinite(y_arr).any():
@@ -1408,6 +1429,8 @@ def plot_repellent_component_panels(
         # x-t
         ax = axs[i, 1]
         ax.plot(t_arr, x_arr, linewidth=1.8)
+        if flag_overlay:
+            ax.plot(t_arr, x_overlay_arr, color="orange", linewidth=1.8, alpha=0.9)
         if np.isfinite(rise_time):
             ax.axvline(rise_time, color="red", linestyle="--", linewidth=1.6, alpha=0.85)
         ax.grid(True)
@@ -1419,6 +1442,8 @@ def plot_repellent_component_panels(
         # y-t
         ax = axs[i, 2]
         ax.plot(t_arr, y_arr, linewidth=1.8)
+        if flag_overlay:
+            ax.plot(t_arr, y_overlay_arr, color="orange", linewidth=1.8, alpha=0.9)
         if np.isfinite(rise_time):
             ax.axvline(rise_time, color="red", linestyle="--", linewidth=1.6, alpha=0.85)
         ax.grid(True)
