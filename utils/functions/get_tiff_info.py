@@ -33,7 +33,7 @@ def get_timelist(day):
                 if file_name.endswith(".tiff") or file_name.endswith(".tif"):
                     with Image.open(file_path) as img:
                         # メタデータの取得
-                        metadata = img.tag_v2
+                        metadata = getattr(img, "tag_v2")
                         # 特定の時間関連情報を表示
                         datetime_tag = 306  # DateTime tag ID
                         time = datetime.strptime(metadata[datetime_tag], "%m/%d/%Y %H:%M:%S.%f")

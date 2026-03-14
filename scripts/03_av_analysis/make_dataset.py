@@ -633,7 +633,7 @@ def main():
     plot_distribution(df, out_dir)
 
     # 2. Mean and Median analysis
-    stats_dict: dict[str, list[Union[str, float]]] = defaultdict(list)
+    stats_dict: defaultdict[str, list[Union[str, float]]] = defaultdict(list)
     df["av_abs"] = np.abs(df["av"])
     for data_key in DATA_KEYS:
         cols = pd.read_csv(AV_DIR_DICT[data_key]).columns.tolist()
