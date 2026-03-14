@@ -1179,6 +1179,82 @@ def plot_repellent_background_intensity(time_list, background_list, rise_indices
     plt.close(fig)
 
 
+def plot_repellent_background_and_av_stacked(
+    time_list,
+    background_list,
+    angular_velocity_list,
+    day,
+    sample_indices=None,
+    rise_time_list=None,
+):
+    sample_num = min(len(time_list), len(background_list), len(angular_velocity_list))
+    if sample_num <= 0:
+        return
+
+    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/01_brightness_change"
+    os.makedirs(save_dir, exist_ok=True)
+    title_fs = font_size + 4
+    label_fs = font_size + 2
+    tick_fs = font_size
+
+    fig, axs = plt.subplots(2 * sample_num, 1, figsize=(24, max(6.0, sample_num * 5.2)))
+    axs = np.atleast_1d(axs)
+
+    for i in range(sample_num):
+        ax_bg = axs[2 * i]
+        ax_av = axs[2 * i + 1]
+
+        t_arr = np.asarray(time_list[i], dtype=float)
+        bg_arr = np.asarray(background_list[i], dtype=float)
+        av_arr = np.asarray(angular_velocity_list[i], dtype=float)
+
+        n_bg = min(t_arr.size, bg_arr.size)
+        n_av = min(t_arr.size, av_arr.size)
+        t_bg = t_arr[:n_bg]
+        y_bg = bg_arr[:n_bg]
+        t_av = t_arr[:n_av]
+        y_av = av_arr[:n_av]
+
+        sample_no = i + 1
+        if sample_indices is not None and i < len(sample_indices):
+            sample_no = int(sample_indices[i])
+
+        ax_bg.plot(t_bg, y_bg, linewidth=1.8)
+        ax_av.plot(t_av, y_av, linewidth=1.8)
+
+        rise_time = np.nan
+        if rise_time_list is not None and i < len(rise_time_list) and np.isfinite(rise_time_list[i]):
+            rise_time = float(rise_time_list[i])
+        if np.isfinite(rise_time):
+            ax_bg.axvline(rise_time, color="red", linestyle="--", linewidth=1.6, alpha=0.85)
+            ax_av.axvline(rise_time, color="red", linestyle="--", linewidth=1.6, alpha=0.85)
+
+        if np.isfinite(t_arr).any():
+            t_min = float(np.nanmin(t_arr))
+            t_max = float(np.nanmax(t_arr))
+            if np.isfinite(t_min) and np.isfinite(t_max) and t_max > t_min:
+                ax_bg.set_xlim(t_min, t_max)
+                ax_av.set_xlim(t_min, t_max)
+
+        ax_bg.grid(True)
+        ax_av.grid(True)
+        ax_bg.set_title(f"No.{sample_no} Background Intensity", fontsize=title_fs)
+        ax_av.set_title(f"No.{sample_no} Angular Velocity", fontsize=title_fs)
+
+        ax_bg.set_ylabel("Intensity", fontsize=label_fs)
+        ax_av.set_ylabel("AV [rad/s]", fontsize=label_fs)
+        ax_av.set_xlabel("Time [s]", fontsize=label_fs)
+
+        # Top panel is for paired viewing only: hide x ticks/labels.
+        ax_bg.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
+        ax_bg.tick_params(axis="y", which="major", labelsize=tick_fs)
+        ax_av.tick_params(axis="both", which="major", labelsize=tick_fs)
+
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/background_intensity_and_angular_velocity_time_series.png")
+    plt.close(fig)
+
+
 def plot_repellent_post_rise_centroid(time_list, x_list, y_list, day):
     sample_num = min(len(time_list), len(x_list), len(y_list))
     save_dir = f"{param.save_dir_bef}/{day}/repellent_response/03_post_rise_analysis/centroid_coordinate"

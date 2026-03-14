@@ -125,6 +125,20 @@ def main(
         original_sample_indices=all_rot["valid_indices"],
         rise_time_list=all_rise_time_for_av,
     )
+    bg_for_av = []
+    for idx in all_rot["valid_indices"]:
+        if idx < len(background_list):
+            bg_for_av.append(background_list[idx])
+        else:
+            bg_for_av.append([])
+    make_graph.plot_repellent_background_and_av_stacked(
+        time_list=all_rot["time_list"],
+        background_list=bg_for_av,
+        angular_velocity_list=all_rot["angular_velocity_list"],
+        day=day,
+        sample_indices=[idx + 1 for idx in all_rot["valid_indices"]],
+        rise_time_list=all_rise_time_for_av,
+    )
     all_rise_time_for_centroid = [result.get("rise_time", float("nan")) for result in rise_results]
     make_graph.plot_repellent_component_panels(
         all_comp_time_list,
