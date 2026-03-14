@@ -6,7 +6,7 @@ import re
 import shutil
 import tempfile
 from datetime import datetime
-from typing import Dict, List, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
@@ -16,6 +16,9 @@ from PIL import Image
 from utils import param
 from utils.functions import (
     fluctuation_analysis,
+    frequency_analysis,
+    get_angular_velocity,
+    get_centroid_coordinate,
     get_tiff_info,
     make_graph,
     read_csv,
@@ -322,6 +325,41 @@ def build_pre_rise_fluctuation_inputs(
     return pre_time_list, pre_angular_velocity_list
 
 
+def build_pre_rise_centroid_series(
+    time_list: Sequence[Sequence[float]],
+    x_list: Sequence[Sequence[float]],
+    y_list: Sequence[Sequence[float]],
+    rise_indices: Sequence[float],
+) -> Tuple[List[List[float]], List[List[float]], List[List[float]]]:
+    n = min(len(time_list), len(x_list), len(y_list), len(rise_indices))
+    pre_time_list: List[List[float]] = []
+    pre_x_list: List[List[float]] = []
+    pre_y_list: List[List[float]] = []
+
+    for i in range(n):
+        time_arr = np.asarray(time_list[i], dtype=float)
+        x_arr = np.asarray(x_list[i], dtype=float)
+        y_arr = np.asarray(y_list[i], dtype=float)
+        max_len = min(time_arr.size, x_arr.size, y_arr.size)
+
+        if max_len <= 0:
+            pre_time_list.append([])
+            pre_x_list.append([])
+            pre_y_list.append([])
+            continue
+
+        time_arr = time_arr[:max_len]
+        x_arr = x_arr[:max_len]
+        y_arr = y_arr[:max_len]
+        rise_idx = _normalize_rise_index(float(rise_indices[i]), max_len)
+
+        pre_time_list.append(time_arr[:rise_idx].tolist())
+        pre_x_list.append(x_arr[:rise_idx].tolist())
+        pre_y_list.append(y_arr[:rise_idx].tolist())
+
+    return pre_time_list, pre_x_list, pre_y_list
+
+
 def load_centroid_coordinate_with_nan(day: str) -> Tuple[List[List[float]], List[List[float]]]:
     csv_path = f"{param.save_dir_bef}/{day}/centroid_coordinate.csv"
     if not os.path.isfile(csv_path):
@@ -580,6 +618,500 @@ def _write_dummy_angle_fft(day: str, sample_num: int) -> None:
     pd.DataFrame(data).to_csv(f"{save_dir}/angle_FFT.csv", index=False)
 
 
+def _copytree_replace(src: str, dst: str) -> None:
+    if os.path.isdir(dst):
+        shutil.rmtree(dst)
+    shutil.copytree(src, dst)
+
+
+def _save_centroid_coordinate_csv(day: str, x_list: Sequence[Sequence[float]], y_list: Sequence[Sequence[float]]) -> None:
+    n = min(len(x_list), len(y_list))
+    save_dir = f"{param.save_dir_bef}/{day}"
+    os.makedirs(save_dir, exist_ok=True)
+    csv_path = f"{save_dir}/centroid_coordinate.csv"
+
+    data = {}
+    for i in range(n):
+        data[f"x_{i + 1}"] = pd.Series(np.asarray(x_list[i], dtype=float))
+        data[f"y_{i + 1}"] = pd.Series(np.asarray(y_list[i], dtype=float))
+    pd.DataFrame(data).to_csv(csv_path, index=False)
+
+
+def _prepare_valid_rotational_inputs(
+    time_list: Sequence[Sequence[float]],
+    x_list: Sequence[Sequence[float]],
+    y_list: Sequence[Sequence[float]],
+) -> Tuple[List[List[float]], List[List[float]], List[List[float]], List[int]]:
+    n = min(len(time_list), len(x_list), len(y_list))
+    selected_time_list: List[List[float]] = []
+    selected_x_list: List[List[float]] = []
+    selected_y_list: List[List[float]] = []
+    valid_indices: List[int] = []
+
+    for i in range(n):
+        time_arr = np.asarray(time_list[i], dtype=float)
+        x_arr = np.asarray(x_list[i], dtype=float)
+        y_arr = np.asarray(y_list[i], dtype=float)
+
+        m = min(time_arr.size, x_arr.size, y_arr.size)
+        if m < 3:
+            continue
+        time_arr = time_arr[:m]
+        x_arr = x_arr[:m]
+        y_arr = y_arr[:m]
+        if not np.isfinite(time_arr[-1]) or not np.isfinite(time_arr[0]) or float(time_arr[-1]) <= float(time_arr[0]):
+            continue
+
+        # Segment-local time axis (start at 0 s) for angular-velocity plots.
+        time_rel = time_arr - time_arr[0]
+        selected_time_list.append(time_rel.tolist())
+        selected_x_list.append(x_arr.tolist())
+        selected_y_list.append(y_arr.tolist())
+        valid_indices.append(i)
+
+    return selected_time_list, selected_x_list, selected_y_list, valid_indices
+
+
+def save_repellent_segment_centroid_series(
+    time_list: Sequence[Sequence[float]],
+    x_list: Sequence[Sequence[float]],
+    y_list: Sequence[Sequence[float]],
+    day: str,
+    segment_subdir: str,
+    csv_name: str = "centroid_time_series.csv",
+) -> None:
+    n = min(len(time_list), len(x_list), len(y_list))
+    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/{segment_subdir}/centroid_coordinate"
+    os.makedirs(save_dir, exist_ok=True)
+    csv_path = f"{save_dir}/{csv_name}"
+
+    data = {}
+    for i in range(n):
+        t_arr = pd.Series(np.asarray(time_list[i], dtype=float), dtype="float64")
+        x_arr = pd.Series(np.asarray(x_list[i], dtype=float), dtype="float64")
+        y_arr = pd.Series(np.asarray(y_list[i], dtype=float), dtype="float64")
+        m = min(len(t_arr), len(x_arr), len(y_arr))
+        data[f"No.{i + 1}_time"] = t_arr.iloc[:m].reset_index(drop=True)
+        data[f"No.{i + 1}_x"] = x_arr.iloc[:m].reset_index(drop=True)
+        data[f"No.{i + 1}_y"] = y_arr.iloc[:m].reset_index(drop=True)
+    pd.DataFrame(data).to_csv(csv_path, index=False)
+
+
+def run_segment_rotational_analysis(
+    day: str,
+    segment_subdir: str,
+    time_list: Sequence[Sequence[float]],
+    x_list: Sequence[Sequence[float]],
+    y_list: Sequence[Sequence[float]],
+    run_fluctuation: bool = False,
+) -> Dict[str, object]:
+    target_dir = f"{param.save_dir_bef}/{day}/repellent_response/{segment_subdir}"
+    os.makedirs(target_dir, exist_ok=True)
+
+    selected_time_list, selected_x_list, selected_y_list, valid_indices = _prepare_valid_rotational_inputs(
+        time_list=time_list,
+        x_list=x_list,
+        y_list=y_list,
+    )
+    if not valid_indices:
+        pd.DataFrame(
+            [{"message": "No sample has enough data for rotational analysis.", "analyzed_samples": 0}]
+        ).to_csv(f"{target_dir}/summary.csv", index=False)
+        return {
+            "valid_indices": [],
+            "time_list": [],
+            "angle_list": [],
+            "angular_velocity_list": [],
+        }
+
+    tmp_day = f"repellent_tmp_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
+    with tempfile.TemporaryDirectory() as tmp_root:
+        tmp_input_root = os.path.join(tmp_root, "data")
+        tmp_output_root = os.path.join(tmp_root, "outputs")
+        os.makedirs(tmp_input_root, exist_ok=True)
+        os.makedirs(tmp_output_root, exist_ok=True)
+        _write_temp_config(f"{tmp_input_root}/{tmp_day}/config.ini", len(valid_indices))
+
+        orig_input_root = param.input_dir_bef
+        orig_output_root = param.save_dir_bef
+        try:
+            param.input_dir_bef = tmp_input_root
+            param.save_dir_bef = tmp_output_root
+
+            save2csv.save_time_list(selected_time_list, tmp_day)
+            _save_centroid_coordinate_csv(tmp_day, selected_x_list, selected_y_list)
+            rot_df_manage.create_rot_df(tmp_day)
+            _write_dummy_angle_fft(tmp_day, len(valid_indices))
+            angle_list, angular_velocity_list = get_angular_velocity.get_angular_velocity(
+                selected_x_list, selected_y_list, tmp_day
+            )
+
+            if run_fluctuation:
+                fluctuation_analysis.main(angular_velocity_list, tmp_day)
+                make_graph.plot_rot_param(tmp_day)
+        finally:
+            param.input_dir_bef = orig_input_root
+            param.save_dir_bef = orig_output_root
+
+        src_base = f"{tmp_output_root}/{tmp_day}"
+        if os.path.isdir(f"{src_base}/angular_velocity"):
+            _copytree_replace(f"{src_base}/angular_velocity", f"{target_dir}/angular_velocity")
+        if run_fluctuation and os.path.isdir(f"{src_base}/fluctuation_analysis"):
+            _copytree_replace(f"{src_base}/fluctuation_analysis", f"{target_dir}/fluctuation_analysis")
+
+    map_df = pd.DataFrame(
+        {
+            "segment_no": [i + 1 for i in range(len(valid_indices))],
+            "original_sample_no": [idx + 1 for idx in valid_indices],
+        }
+    )
+    map_df.to_csv(f"{target_dir}/sample_index_map.csv", index=False)
+
+    time_data = {}
+    for i, t_series in enumerate(selected_time_list):
+        time_data[f"No.{i + 1}"] = pd.Series(np.asarray(t_series, dtype=float), dtype="float64")
+    pd.DataFrame(time_data).to_csv(f"{target_dir}/time_list.csv", index=False)
+    return {
+        "valid_indices": valid_indices,
+        "time_list": selected_time_list,
+        "angle_list": [np.asarray(a, dtype=float).tolist() for a in angle_list],
+        "angular_velocity_list": [np.asarray(v, dtype=float).tolist() for v in angular_velocity_list],
+    }
+
+
+def _correct_center_outlier_like_standard(center_series: Sequence[float]) -> List[float]:
+    data = np.asarray(center_series, dtype=float).copy()
+    if data.size == 0:
+        return []
+
+    complement_index_set = set()
+    if param.mode_correct_center_outlier == 1:
+        mean = float(np.nanmean(data))
+        std = float(np.nanstd(data))
+        lower_th = mean - param.num_std_center * std
+        upper_th = mean + param.num_std_center * std
+        complement_index_set.update(np.where((data < lower_th) | (data > upper_th))[0].tolist())
+    elif param.mode_correct_center_outlier == 2:
+        med = float(np.nanmedian(data))
+        mad = float(np.nanmedian(np.abs(data - med)))
+        eps = np.finfo(float).eps
+        mz = 0.6745 * (data - med) / (mad + eps)
+        complement_index_set.update(np.where(np.abs(mz) > 10.0)[0].tolist())
+
+    if not complement_index_set:
+        return data.tolist()
+
+    data_aft = data.copy()
+    n_neighbors = 2
+    for idx in sorted(complement_index_set):
+        neighbors = []
+        for k in range(1, n_neighbors + 1):
+            left = idx - k
+            right = idx + k
+            if left >= 0 and left not in complement_index_set and np.isfinite(data[left]):
+                neighbors.append(float(data[left]))
+            if right < len(data) and right not in complement_index_set and np.isfinite(data[right]):
+                neighbors.append(float(data[right]))
+        if neighbors:
+            data_aft[idx] = float(np.nanmean(neighbors))
+        else:
+            valid = [float(v) for j, v in enumerate(data) if (j not in complement_index_set) and np.isfinite(v)]
+            data_aft[idx] = float(np.nanmean(valid)) if valid else np.nan
+    return data_aft.tolist()
+
+
+def estimate_rotation_center_like_standard(
+    time_list: Sequence[Sequence[float]],
+    x_raw_list: Sequence[Sequence[float]],
+    y_raw_list: Sequence[Sequence[float]],
+) -> Tuple[List[List[float]], List[List[float]]]:
+    n = min(len(time_list), len(x_raw_list), len(y_raw_list))
+    center_x_all: List[List[float]] = []
+    center_y_all: List[List[float]] = []
+
+    for i in range(n):
+        time_arr = np.asarray(time_list[i], dtype=float)
+        x_arr = np.asarray(x_raw_list[i], dtype=float)
+        y_arr = np.asarray(y_raw_list[i], dtype=float)
+        m = min(len(time_arr), len(x_arr), len(y_arr))
+        time_arr = time_arr[:m]
+        x_arr = x_arr[:m]
+        y_arr = y_arr[:m]
+
+        if m <= 0:
+            center_x_all.append([])
+            center_y_all.append([])
+            continue
+
+        finite_time = np.isfinite(time_arr)
+        finite_xy = np.isfinite(x_arr) & np.isfinite(y_arr)
+        valid_mask = finite_time & finite_xy
+        if np.count_nonzero(valid_mask) < max(3, param.min_ref_centroid_num):
+            center_x_mean = float(np.nanmean(x_arr)) if np.isfinite(x_arr).any() else 0.0
+            center_y_mean = float(np.nanmean(y_arr)) if np.isfinite(y_arr).any() else 0.0
+            center_x_all.append([center_x_mean] * m)
+            center_y_all.append([center_y_mean] * m)
+            continue
+
+        t = time_arr[valid_mask]
+        x = x_arr[valid_mask]
+        y = y_arr[valid_mask]
+        total_duration = float(t[-1] - t[0]) if len(t) > 1 else 0.0
+        if total_duration <= 0:
+            center_x_mean = float(np.nanmean(x)) if np.isfinite(x).any() else 0.0
+            center_y_mean = float(np.nanmean(y)) if np.isfinite(y).any() else 0.0
+            center_x_all.append([center_x_mean] * m)
+            center_y_all.append([center_y_mean] * m)
+            continue
+
+        frame_rate = max(1e-6, float(len(t)) / total_duration)
+        x_freq, x_amp = frequency_analysis.fft(x, 1.0 / frame_rate)
+        y_freq, y_amp = frequency_analysis.fft(y, 1.0 / frame_rate)
+        freq_th = 5.0
+        x_mask = np.asarray(x_freq) > freq_th
+        y_mask = np.asarray(y_freq) > freq_th
+        x_freq = np.asarray(x_freq)[x_mask]
+        x_amp = np.asarray(x_amp)[x_mask]
+        y_freq = np.asarray(y_freq)[y_mask]
+        y_amp = np.asarray(y_amp)[y_mask]
+
+        peak_candidates = []
+        if x_freq.size > 0 and x_amp.size > 0 and np.isfinite(x_amp).any():
+            peak_candidates.append(float(x_freq[int(np.nanargmax(x_amp))]))
+        if y_freq.size > 0 and y_amp.size > 0 and np.isfinite(y_amp).any():
+            peak_candidates.append(float(y_freq[int(np.nanargmax(y_amp))]))
+        if peak_candidates:
+            peak_freq = max(peak_candidates)
+        else:
+            peak_freq = max(0.1, 1.0 / max(total_duration, 1e-6))
+
+        width_time = param.n_rotations / max(peak_freq, 1e-6)
+        width_time = min(max(width_time, 1.0 / frame_rate), total_duration)
+
+        center_x_series: List[float] = []
+        center_y_series: List[float] = []
+        start_time = float(t[0])
+        dt = 1.0 / frame_rate
+        while True:
+            cond = (t >= start_time) & (t < start_time + width_time)
+            x_win = x[cond]
+            y_win = y[cond]
+            if len(x_win) < param.min_ref_centroid_num:
+                center_x = np.nan
+                center_y = np.nan
+            else:
+                center_x, center_y, _, _, _ = get_centroid_coordinate.calculate_ellipse_properties(
+                    x_win.reshape(-1, 1),
+                    y_win.reshape(-1, 1),
+                )
+            center_x_series.append(float(center_x))
+            center_y_series.append(float(center_y))
+
+            start_time += dt
+            if start_time + width_time >= float(t[-1]):
+                rest = len(t) - len(center_x_series)
+                cx_valid = np.asarray(center_x_series, dtype=float)
+                cy_valid = np.asarray(center_y_series, dtype=float)
+                if np.isnan(cx_valid).any():
+                    mean_x = float(np.nanmean(cx_valid)) if np.isfinite(cx_valid).any() else 0.0
+                    cx_valid = np.where(np.isnan(cx_valid), mean_x, cx_valid)
+                if np.isnan(cy_valid).any():
+                    mean_y = float(np.nanmean(cy_valid)) if np.isfinite(cy_valid).any() else 0.0
+                    cy_valid = np.where(np.isnan(cy_valid), mean_y, cy_valid)
+                center_x_series = cx_valid.tolist()
+                center_y_series = cy_valid.tolist()
+                if rest > 0 and center_x_series:
+                    center_x_series.extend([center_x_series[-1]] * rest)
+                    center_y_series.extend([center_y_series[-1]] * rest)
+                break
+
+        if param.flag_correct_center_outlier:
+            center_x_series = _correct_center_outlier_like_standard(center_x_series)
+            center_y_series = _correct_center_outlier_like_standard(center_y_series)
+
+        # Expand back to original length (including invalid points) by nearest previous value.
+        cx_full = np.full(m, np.nan, dtype=float)
+        cy_full = np.full(m, np.nan, dtype=float)
+        cx_full[valid_mask] = np.asarray(center_x_series, dtype=float)[: np.count_nonzero(valid_mask)]
+        cy_full[valid_mask] = np.asarray(center_y_series, dtype=float)[: np.count_nonzero(valid_mask)]
+        for arr in [cx_full, cy_full]:
+            if np.isnan(arr).all():
+                arr[:] = 0.0
+            else:
+                first_valid = np.where(~np.isnan(arr))[0][0]
+                arr[:first_valid] = arr[first_valid]
+                for k in range(first_valid + 1, len(arr)):
+                    if np.isnan(arr[k]):
+                        arr[k] = arr[k - 1]
+
+        center_x_all.append(cx_full.tolist())
+        center_y_all.append(cy_full.tolist())
+
+    return center_x_all, center_y_all
+
+
+def save_segment_center_coordinate(
+    day: str,
+    segment_subdir: str,
+    center_x_list: Sequence[Sequence[float]],
+    center_y_list: Sequence[Sequence[float]],
+) -> None:
+    n = min(len(center_x_list), len(center_y_list))
+    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/{segment_subdir}/center_coordinate"
+    os.makedirs(save_dir, exist_ok=True)
+    data = {}
+    for i in range(n):
+        data[f"No.{i + 1}_x"] = pd.Series(np.asarray(center_x_list[i], dtype=float), dtype="float64")
+        data[f"No.{i + 1}_y"] = pd.Series(np.asarray(center_y_list[i], dtype=float), dtype="float64")
+    pd.DataFrame(data).to_csv(f"{save_dir}/center_coordinate.csv", index=False)
+
+
+def build_pre_rise_raw_centroid_series(
+    day: str,
+    time_list: Sequence[Sequence[float]],
+    corrected_x_list: Sequence[Sequence[float]],
+    corrected_y_list: Sequence[Sequence[float]],
+    rise_indices: Sequence[float],
+) -> Tuple[List[List[float]], List[List[float]], List[List[float]]]:
+    center_x_list, center_y_list = load_rotation_center_with_nan(day)
+    n = min(len(time_list), len(corrected_x_list), len(corrected_y_list), len(rise_indices))
+    pre_time_list: List[List[float]] = []
+    pre_x_raw_list: List[List[float]] = []
+    pre_y_raw_list: List[List[float]] = []
+
+    for i in range(n):
+        t = np.asarray(time_list[i], dtype=float)
+        x_corr = np.asarray(corrected_x_list[i], dtype=float)
+        y_corr = np.asarray(corrected_y_list[i], dtype=float)
+        if i < len(center_x_list) and i < len(center_y_list):
+            cx = np.asarray(center_x_list[i], dtype=float)
+            cy = np.asarray(center_y_list[i], dtype=float)
+            m = min(len(t), len(x_corr), len(y_corr), len(cx), len(cy))
+            cx = cx[:m]
+            cy = cy[:m]
+            cx = np.where(np.isfinite(cx), cx, np.nanmean(cx) if np.isfinite(cx).any() else 0.0)
+            cy = np.where(np.isfinite(cy), cy, np.nanmean(cy) if np.isfinite(cy).any() else 0.0)
+        else:
+            m = min(len(t), len(x_corr), len(y_corr))
+            cx = np.zeros(m, dtype=float)
+            cy = np.zeros(m, dtype=float)
+
+        t = t[:m]
+        x_corr = x_corr[:m]
+        y_corr = y_corr[:m]
+        rise_idx = _normalize_rise_index(float(rise_indices[i]), m)
+
+        pre_time_list.append(t[:rise_idx].tolist())
+        pre_x_raw_list.append((x_corr[:rise_idx] + cx[:rise_idx]).tolist())
+        pre_y_raw_list.append((y_corr[:rise_idx] + cy[:rise_idx]).tolist())
+
+    return pre_time_list, pre_x_raw_list, pre_y_raw_list
+
+
+def subtract_center_from_raw(
+    x_raw_list: Sequence[Sequence[float]],
+    y_raw_list: Sequence[Sequence[float]],
+    center_x_list: Sequence[Sequence[float]],
+    center_y_list: Sequence[Sequence[float]],
+) -> Tuple[List[List[float]], List[List[float]]]:
+    n = min(len(x_raw_list), len(y_raw_list), len(center_x_list), len(center_y_list))
+    x_corr_list: List[List[float]] = []
+    y_corr_list: List[List[float]] = []
+    for i in range(n):
+        xr = np.asarray(x_raw_list[i], dtype=float)
+        yr = np.asarray(y_raw_list[i], dtype=float)
+        cx = np.asarray(center_x_list[i], dtype=float)
+        cy = np.asarray(center_y_list[i], dtype=float)
+        m = min(len(xr), len(yr), len(cx), len(cy))
+        x_corr_list.append((xr[:m] - cx[:m]).tolist())
+        y_corr_list.append((yr[:m] - cy[:m]).tolist())
+    return x_corr_list, y_corr_list
+
+
+def split_rotational_series_by_rise(
+    time_list: Sequence[Sequence[float]],
+    angle_list: Sequence[Sequence[float]],
+    angular_velocity_list: Sequence[Sequence[float]],
+    valid_indices: Sequence[int],
+    rise_indices: Sequence[float],
+    mode: str,
+) -> Tuple[List[List[float]], List[List[float]], List[List[float]]]:
+    out_time: List[List[float]] = []
+    out_angle: List[List[float]] = []
+    out_av: List[List[float]] = []
+
+    n = min(len(time_list), len(angle_list), len(angular_velocity_list), len(valid_indices))
+    for i in range(n):
+        t = np.asarray(time_list[i], dtype=float)
+        ang = np.asarray(angle_list[i], dtype=float)
+        av = np.asarray(angular_velocity_list[i], dtype=float)
+        m = min(len(t), len(ang), len(av) + 1)
+        t = t[:m]
+        ang = ang[:m]
+        av = av[: max(0, m - 1)]
+
+        orig_idx = int(valid_indices[i])
+        rise_idx = _normalize_rise_index(float(rise_indices[orig_idx]), m) if orig_idx < len(rise_indices) else m
+
+        if mode == "pre":
+            t_seg = t[:rise_idx]
+            ang_seg = ang[:rise_idx]
+            av_seg = av[: max(0, rise_idx - 1)]
+        elif mode == "post":
+            t_seg = t[rise_idx:]
+            ang_seg = ang[rise_idx:]
+            av_seg = av[rise_idx:]
+        else:
+            raise ValueError(f"Unknown mode: {mode}")
+
+        if t_seg.size > 0:
+            t_seg = t_seg - t_seg[0]
+        out_time.append(t_seg.tolist())
+        out_angle.append(ang_seg.tolist())
+        out_av.append(av_seg.tolist())
+
+    return out_time, out_angle, out_av
+
+
+def save_segment_angular_velocity_outputs(
+    day: str,
+    segment_subdir: str,
+    time_list: Sequence[Sequence[float]],
+    angle_list: Sequence[Sequence[float]],
+    angular_velocity_list: Sequence[Sequence[float]],
+    original_sample_indices: Optional[Sequence[int]] = None,
+) -> None:
+    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/{segment_subdir}/angular_velocity"
+    os.makedirs(save_dir, exist_ok=True)
+
+    n = min(len(time_list), len(angle_list), len(angular_velocity_list))
+    angle_df = {}
+    av_df = {}
+    for i in range(n):
+        a = np.asarray(angle_list[i], dtype=float)
+        v = np.asarray(angular_velocity_list[i], dtype=float)
+        angle_df[f"No.{i + 1}"] = pd.Series(a, dtype="float64")
+        av_df[f"No.{i + 1}"] = pd.Series(v, dtype="float64")
+
+    pd.DataFrame(angle_df).to_csv(f"{save_dir}/angle_time-series.csv", index=False)
+    pd.DataFrame(av_df).to_csv(f"{save_dir}/angular-velocity_time-series.csv", index=False)
+    time_df = {}
+    for i in range(n):
+        time_df[f"No.{i + 1}"] = pd.Series(np.asarray(time_list[i], dtype=float), dtype="float64")
+    pd.DataFrame(time_df).to_csv(f"{param.save_dir_bef}/{day}/repellent_response/{segment_subdir}/time_list.csv", index=False)
+
+    if original_sample_indices is not None:
+        map_df = pd.DataFrame(
+            {
+                "segment_no": [i + 1 for i in range(n)],
+                "original_sample_no": [int(original_sample_indices[i]) + 1 for i in range(n)],
+            }
+        )
+        map_df.to_csv(f"{param.save_dir_bef}/{day}/repellent_response/{segment_subdir}/sample_index_map.csv", index=False)
+
+    make_graph.plot_repellent_angular_velocity_onecol(time_list, angle_list, angular_velocity_list, save_dir)
+
+
 def _get_valid_pre_rise_indices(
     pre_time_list: Sequence[Sequence[float]],
     pre_angular_velocity_list: Sequence[Sequence[float]],
@@ -598,6 +1130,7 @@ def run_pre_rise_fluctuation(
     pre_time_list: Sequence[Sequence[float]],
     pre_angular_velocity_list: Sequence[Sequence[float]],
     day: str,
+    original_sample_indices: Optional[Sequence[int]] = None,
 ) -> List[int]:
     target_dir = f"{param.save_dir_bef}/{day}/repellent_response/02_pre_rise_fluctuation"
     os.makedirs(target_dir, exist_ok=True)
@@ -642,10 +1175,20 @@ def run_pre_rise_fluctuation(
             shutil.rmtree(target_fluc_dir)
         shutil.copytree(src_dir, target_fluc_dir)
 
+    if original_sample_indices is None:
+        original_indices = [idx + 1 for idx in valid_indices]
+    else:
+        original_indices = []
+        for idx in valid_indices:
+            if idx < len(original_sample_indices):
+                original_indices.append(int(original_sample_indices[idx]) + 1)
+            else:
+                original_indices.append(int(idx) + 1)
+
     map_df = pd.DataFrame(
         {
             "pre_rise_fluctuation_no": [i + 1 for i in range(len(valid_indices))],
-            "original_sample_no": [idx + 1 for idx in valid_indices],
+            "original_sample_no": original_indices,
         }
     )
     map_df.to_csv(f"{target_dir}/sample_index_map.csv", index=False)
@@ -796,6 +1339,14 @@ def align_coordinate_series_to_time(
     return x_aligned, y_aligned
 
 
+def copy_center_coordinate_to_segment(day: str, segment_subdir: str) -> None:
+    src = f"{param.save_dir_bef}/{day}/center_coordinate"
+    if not os.path.isdir(src):
+        return
+    dst = f"{param.save_dir_bef}/{day}/repellent_response/{segment_subdir}/center_coordinate"
+    _copytree_replace(src, dst)
+
+
 def cleanup_legacy_repellent_outputs(day: str) -> None:
     root = f"{param.save_dir_bef}/{day}/repellent_response"
     legacy_files = [
@@ -812,6 +1363,9 @@ def cleanup_legacy_repellent_outputs(day: str) -> None:
         f"{root}/03_post_rise_analysis/centroid_coordinate/x_components.png",
     ]
     legacy_dirs = [
+        f"{root}/00_all_rotational_analysis",
+        f"{root}/02_pre_rise_fluctuation",
+        f"{root}/03_post_rise_analysis",
         f"{root}/center_coordinate",
         f"{root}/pre_rise_fluctuation",
     ]

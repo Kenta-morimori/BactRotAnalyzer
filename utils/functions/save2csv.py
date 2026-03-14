@@ -30,14 +30,14 @@ def save_angle_angular_velocity(angle_list, angular_velocity_list, day):
     with open(csv_save_dir, "w", newline="") as csvfile:
         csvwriter = csv.writer(csvfile)
         csvwriter.writerow(header)
-        for row in zip(*angle_list):
+        for row in zip_longest(*angle_list, fillvalue=None):
             csvwriter.writerow(row)
 
     csv_save_dir = f"{param.save_dir_bef}/{day}/angular_velocity/angular-velocity_time-series.csv"
     with open(csv_save_dir, "w", newline="") as csvfile:
         csvwriter = csv.writer(csvfile)
         csvwriter.writerow(header)
-        for row in zip(*angular_velocity_list):
+        for row in zip_longest(*angular_velocity_list, fillvalue=None):
             csvwriter.writerow(row)
 
 

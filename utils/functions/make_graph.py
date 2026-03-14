@@ -490,19 +490,34 @@ def plot_fft(freq_list, Amp_list, save_dir, save_name, day, flag_add_peak=False)
     for i in range(sample_num):
         row = i // cols
         col = i % cols
-        axs[row, col].plot(freq_list[i], Amp_list[i])
+        freq_arr = np.asarray(freq_list[i], dtype=float)
+        amp_arr = np.asarray(Amp_list[i], dtype=float)
+        if freq_arr.size == 0 or amp_arr.size == 0:
+            axs[row, col].axis("off")
+            if flag_add_peak:
+                peak_list.append(np.nan)
+            continue
+
+        axs[row, col].plot(freq_arr, amp_arr)
         if flag_add_peak:
-            max_amp_index = np.argmax(Amp_list[i])
-            freq_at_max_amp = freq_list[i][max_amp_index]
-            axs[row, col].axvline(x=freq_at_max_amp, color="r", alpha=0.6)
-            peak_list.append(freq_at_max_amp)
+            finite_amp_mask = np.isfinite(amp_arr)
+            if np.any(finite_amp_mask):
+                max_amp_index = int(np.nanargmax(amp_arr))
+                freq_at_max_amp = float(freq_arr[max_amp_index])
+                axs[row, col].axvline(x=freq_at_max_amp, color="r", alpha=0.6)
+                peak_list.append(freq_at_max_amp)
+            else:
+                peak_list.append(np.nan)
         axs[row, col].grid(True)
-        axs[row, col].set_xlim(0, freq_list[i][-1])
+        freq_max = float(np.nanmax(freq_arr))
+        if np.isfinite(freq_max) and freq_max > 0:
+            axs[row, col].set_xlim(0, freq_max)
         axs[row, col].set_title(f"No.{i+1}", fontsize=font_size)
         axs[row, col].set_xlabel("Freqency [Hz]", fontsize=font_size)
         axs[row, col].set_ylabel("Amp", fontsize=font_size)
         # axs[row, col].set_xscale("log")
-        axs[row, col].set_yscale("log")
+        if np.any(np.isfinite(amp_arr) & (amp_arr > 0)):
+            axs[row, col].set_yscale("log")
         axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
     plt.tight_layout()
     plt.savefig(f"{save_dir}/{save_name}")
@@ -1335,9 +1350,17 @@ def plot_repellent_center_x_components(time_list, x_raw_list, x_center_list, x_c
         plt.close(fig)
 
 
-def plot_repellent_component_panels(time_list, x_list, y_list, day, mode_label, save_name):
+def plot_repellent_component_panels(
+    time_list,
+    x_list,
+    y_list,
+    day,
+    mode_label,
+    save_name,
+    save_subdir="03_post_rise_analysis/centroid_coordinate",
+):
     sample_num = min(len(time_list), len(x_list), len(y_list))
-    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/03_post_rise_analysis/centroid_coordinate"
+    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/{save_subdir}"
     os.makedirs(save_dir, exist_ok=True)
     title_fs = font_size + 6
     label_fs = font_size + 4
@@ -1363,6 +1386,16 @@ def plot_repellent_component_panels(time_list, x_list, y_list, day, mode_label, 
         ax.plot(x_arr, y_arr, linewidth=1.8)
         ax.grid(True)
         ax.set_aspect("equal", "box")
+        if n > 0 and np.isfinite(x_arr).any() and np.isfinite(y_arr).any():
+            x_min = float(np.nanmin(x_arr))
+            x_max = float(np.nanmax(x_arr))
+            y_min = float(np.nanmin(y_arr))
+            y_max = float(np.nanmax(y_arr))
+            x_mid = 0.5 * (x_min + x_max)
+            y_mid = 0.5 * (y_min + y_max)
+            half = 0.55 * max(x_max - x_min, y_max - y_min, 1e-6)
+            ax.set_xlim(x_mid - half, x_mid + half)
+            ax.set_ylim(y_mid - half, y_mid + half)
         ax.set_title(f"{mode_label} No.{i+1} | x-y", fontsize=title_fs)
         ax.set_xlabel(r"x [$\mu$m]", fontsize=label_fs)
         ax.set_ylabel(r"y [$\mu$m]", fontsize=label_fs)
@@ -1423,3 +1456,70 @@ def plot_repellent_time_list(time_list, day):
     plt.tight_layout()
     plt.savefig(f"{save_dir}/time_list.png")
     plt.close(fig)
+
+
+def plot_repellent_angular_velocity_onecol(time_list, angle_list, angular_velocity_list, save_dir):
+    sample_num = min(len(time_list), len(angle_list), len(angular_velocity_list))
+    os.makedirs(save_dir, exist_ok=True)
+
+    title_fs = font_size + 4
+    label_fs = font_size + 2
+    tick_fs = font_size
+
+    def _plot_panel(y_lists, save_name, y_label, title_prefix, use_abs=False):
+        rows = max(1, sample_num)
+        fig, axs = plt.subplots(rows, 1, figsize=(24, max(3.0, rows * 2.6)))
+        axs = np.atleast_1d(axs)
+        for i in range(rows):
+            ax = axs[i]
+            if i >= sample_num:
+                ax.axis("off")
+                continue
+
+            t_arr = np.asarray(time_list[i], dtype=float)
+            y_arr = np.asarray(y_lists[i], dtype=float)
+            if use_abs:
+                y_arr = np.abs(y_arr)
+            n = min(len(t_arr), len(y_arr))
+            t_arr = t_arr[:n]
+            y_arr = y_arr[:n]
+            if n <= 0:
+                ax.axis("off")
+                continue
+
+            ax.plot(t_arr, y_arr, linewidth=1.8)
+            ax.grid(True)
+            ax.set_title(f"{title_prefix} No.{i + 1}", fontsize=title_fs)
+            ax.set_xlabel("Time [s]", fontsize=label_fs)
+            ax.set_ylabel(y_label, fontsize=label_fs)
+            if np.isfinite(t_arr).any():
+                t_min = float(np.nanmin(t_arr))
+                t_max = float(np.nanmax(t_arr))
+                if np.isfinite(t_min) and np.isfinite(t_max) and t_max > t_min:
+                    ax.set_xlim(t_min, t_max)
+            ax.tick_params(axis="both", which="major", labelsize=tick_fs)
+        plt.tight_layout()
+        plt.savefig(f"{save_dir}/{save_name}")
+        plt.close(fig)
+
+    _plot_panel(
+        angle_list,
+        "angle_time-series.png",
+        "Angle [rad]",
+        "Angle Time-series",
+        use_abs=False,
+    )
+    _plot_panel(
+        angular_velocity_list,
+        "angular_velocity_time-series.png",
+        "Angular velocity [rad/s]",
+        "Angular Velocity Time-series",
+        use_abs=False,
+    )
+    _plot_panel(
+        angular_velocity_list,
+        "angular_velocity_time-series_abs.png",
+        "Angular velocity [rad/s]",
+        "Angular Velocity Abs Time-series",
+        use_abs=True,
+    )

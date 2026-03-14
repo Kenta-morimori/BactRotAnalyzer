@@ -8,11 +8,9 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from utils.functions import (  # noqa
-    get_angular_velocity,
     input_data,
     make_graph,
     repellent_response,
-    rot_df_manage,
     save2csv,
 )
 from utils import param  # noqa
@@ -25,18 +23,18 @@ def main(
     min_consecutive: int,
 ):
     repellent_root = f"{param.save_dir_bef}/{day}/repellent_response"
+    repellent_response.cleanup_legacy_repellent_outputs(day)
+    os.makedirs(f"{repellent_root}/00_all_rotational_analysis", exist_ok=True)
     os.makedirs(f"{repellent_root}/00_time_list", exist_ok=True)
     os.makedirs(f"{repellent_root}/01_brightness_change", exist_ok=True)
     os.makedirs(f"{repellent_root}/02_pre_rise_fluctuation", exist_ok=True)
     os.makedirs(f"{repellent_root}/03_post_rise_analysis/centroid_coordinate", exist_ok=True)
-    repellent_response.cleanup_legacy_repellent_outputs(day)
 
     # Default repellent dataset may not have config.ini; create a minimal one when missing.
     repellent_response.ensure_repellent_config(day)
 
     # Keep time-list generation aligned with existing implementation.
     time_list = repellent_response.ensure_time_list(day)
-    rot_df_manage.create_rot_df(day)
     save2csv.save_repellent_time_list(time_list, day)
     make_graph.plot_repellent_time_list(time_list, day)
 
@@ -49,12 +47,6 @@ def main(
             repellent_response.generate_centroid_coordinate_simple(day)
     x_list, y_list = input_data.input_centroid_coordinate(day)
     x_list, y_list = repellent_response.align_coordinate_series_to_time(x_list, y_list, time_list)
-    motion_time_list = [time_list[i][: len(x_list[i])] for i in range(min(len(time_list), len(x_list), len(y_list)))]
-    try:
-        save2csv.save_time_list(motion_time_list, day)
-        _, angular_velocity_list = get_angular_velocity.get_angular_velocity(x_list, y_list, day)
-    finally:
-        save2csv.save_time_list(time_list, day)
 
     # Phase 1: background intensity and rise-point detection.
     background_list = repellent_response.get_background_intensity_time_series(day)
@@ -71,15 +63,159 @@ def main(
     save2csv.save_repellent_rise_summary(rise_results, day)
     make_graph.plot_repellent_background_intensity(time_list, background_list, rise_indices, day)
 
-    # Phase 2-a: pre-rise fluctuation analysis (equivalent flow as --fluc on sliced interval).
-    pre_time_list, pre_av_list = repellent_response.build_pre_rise_fluctuation_inputs(
+    # Segment 0: all-time rotational analysis.
+    repellent_response.save_repellent_segment_centroid_series(
         time_list=time_list,
-        angular_velocity_list=angular_velocity_list,
+        x_list=x_list,
+        y_list=y_list,
+        day=day,
+        segment_subdir="00_all_rotational_analysis",
+    )
+    all_rot = repellent_response.run_segment_rotational_analysis(
+        day=day,
+        segment_subdir="00_all_rotational_analysis",
+        time_list=time_list,
+        x_list=x_list,
+        y_list=y_list,
+        run_fluctuation=False,
+    )
+    repellent_response.save_segment_angular_velocity_outputs(
+        day=day,
+        segment_subdir="00_all_rotational_analysis",
+        time_list=all_rot["time_list"],
+        angle_list=all_rot["angle_list"],
+        angular_velocity_list=all_rot["angular_velocity_list"],
+        original_sample_indices=all_rot["valid_indices"],
+    )
+    repellent_response.copy_center_coordinate_to_segment(day, "00_all_rotational_analysis")
+    (
+        all_comp_time_list,
+        all_x_before_list,
+        all_y_before_list,
+        all_x_center_list,
+        all_y_center_list,
+        all_x_corr_list,
+        all_y_corr_list,
+    ) = repellent_response.build_post_rise_coordinate_components(
+        day=day,
+        time_list=time_list,
+        corrected_x_list=x_list,
+        corrected_y_list=y_list,
+        rise_indices=[0.0] * len(time_list),
+    )
+    make_graph.plot_repellent_component_panels(
+        all_comp_time_list,
+        all_x_before_list,
+        all_y_before_list,
+        day,
+        "All-time Centroid Before Correction",
+        "centroid_before.png",
+        save_subdir="00_all_rotational_analysis/centroid_coordinate",
+    )
+    make_graph.plot_repellent_component_panels(
+        all_comp_time_list,
+        all_x_center_list,
+        all_y_center_list,
+        day,
+        "All-time Rotation Center",
+        "rotation_center.png",
+        save_subdir="00_all_rotational_analysis/centroid_coordinate",
+    )
+    make_graph.plot_repellent_component_panels(
+        all_comp_time_list,
+        all_x_corr_list,
+        all_y_corr_list,
+        day,
+        "All-time Centroid Corrected",
+        "centroid_corrected.png",
+        save_subdir="00_all_rotational_analysis/centroid_coordinate",
+    )
+
+    # Segment 1: pre-rise rotational + fluctuation analyses.
+    pre_time_list, pre_x_raw_list, pre_y_raw_list = repellent_response.build_pre_rise_raw_centroid_series(
+        day=day,
+        time_list=time_list,
+        corrected_x_list=x_list,
+        corrected_y_list=y_list,
         rise_indices=rise_indices,
     )
-    repellent_response.run_pre_rise_fluctuation(pre_time_list, pre_av_list, day)
+    pre_center_x_list, pre_center_y_list = repellent_response.estimate_rotation_center_like_standard(
+        time_list=pre_time_list,
+        x_raw_list=pre_x_raw_list,
+        y_raw_list=pre_y_raw_list,
+    )
+    pre_x_list, pre_y_list = repellent_response.subtract_center_from_raw(
+        x_raw_list=pre_x_raw_list,
+        y_raw_list=pre_y_raw_list,
+        center_x_list=pre_center_x_list,
+        center_y_list=pre_center_y_list,
+    )
 
-    # Phase 2-b: post-rise centroid time series.
+    repellent_response.save_repellent_segment_centroid_series(
+        time_list=pre_time_list,
+        x_list=pre_x_list,
+        y_list=pre_y_list,
+        day=day,
+        segment_subdir="02_pre_rise_fluctuation",
+    )
+    repellent_response.save_segment_center_coordinate(
+        day=day,
+        segment_subdir="02_pre_rise_fluctuation",
+        center_x_list=pre_center_x_list,
+        center_y_list=pre_center_y_list,
+    )
+    pre_av_time_list, pre_angle_list, pre_av_list = repellent_response.split_rotational_series_by_rise(
+        time_list=all_rot["time_list"],
+        angle_list=all_rot["angle_list"],
+        angular_velocity_list=all_rot["angular_velocity_list"],
+        valid_indices=all_rot["valid_indices"],
+        rise_indices=rise_indices,
+        mode="pre",
+    )
+    repellent_response.save_segment_angular_velocity_outputs(
+        day=day,
+        segment_subdir="02_pre_rise_fluctuation",
+        time_list=pre_av_time_list,
+        angle_list=pre_angle_list,
+        angular_velocity_list=pre_av_list,
+        original_sample_indices=all_rot["valid_indices"],
+    )
+    repellent_response.run_pre_rise_fluctuation(
+        pre_time_list=pre_av_time_list,
+        pre_angular_velocity_list=pre_av_list,
+        day=day,
+        original_sample_indices=all_rot["valid_indices"],
+    )
+
+    make_graph.plot_repellent_component_panels(
+        pre_time_list,
+        pre_x_raw_list,
+        pre_y_raw_list,
+        day,
+        "Pre-rise Centroid Before Correction",
+        "centroid_before.png",
+        save_subdir="02_pre_rise_fluctuation/centroid_coordinate",
+    )
+    make_graph.plot_repellent_component_panels(
+        pre_time_list,
+        pre_center_x_list,
+        pre_center_y_list,
+        day,
+        "Pre-rise Rotation Center",
+        "rotation_center.png",
+        save_subdir="02_pre_rise_fluctuation/centroid_coordinate",
+    )
+    make_graph.plot_repellent_component_panels(
+        pre_time_list,
+        pre_x_list,
+        pre_y_list,
+        day,
+        "Pre-rise Centroid Corrected",
+        "centroid_corrected.png",
+        save_subdir="02_pre_rise_fluctuation/centroid_coordinate",
+    )
+
+    # Segment 2: post-rise rotational analysis.
     x_corrected_list, y_corrected_list = repellent_response.load_centroid_coordinate_with_nan(day)
     post_time_list, post_x_list, post_y_list = repellent_response.build_post_rise_centroid_series(
         time_list=time_list,
@@ -87,7 +223,31 @@ def main(
         y_list=y_corrected_list,
         rise_indices=rise_indices,
     )
+    repellent_response.save_repellent_segment_centroid_series(
+        time_list=post_time_list,
+        x_list=post_x_list,
+        y_list=post_y_list,
+        day=day,
+        segment_subdir="03_post_rise_analysis",
+        csv_name="post_rise_centroid_time_series.csv",
+    )
     save2csv.save_repellent_post_rise_centroid(post_time_list, post_x_list, post_y_list, day)
+    post_av_time_list, post_angle_list, post_av_list = repellent_response.split_rotational_series_by_rise(
+        time_list=all_rot["time_list"],
+        angle_list=all_rot["angle_list"],
+        angular_velocity_list=all_rot["angular_velocity_list"],
+        valid_indices=all_rot["valid_indices"],
+        rise_indices=rise_indices,
+        mode="post",
+    )
+    repellent_response.save_segment_angular_velocity_outputs(
+        day=day,
+        segment_subdir="03_post_rise_analysis",
+        time_list=post_av_time_list,
+        angle_list=post_angle_list,
+        angular_velocity_list=post_av_list,
+        original_sample_indices=all_rot["valid_indices"],
+    )
 
     # Plot three modes as panel figures (x-y, x-t, y-t): before, center, corrected.
     (
