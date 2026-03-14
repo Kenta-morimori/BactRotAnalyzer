@@ -624,7 +624,9 @@ def _copytree_replace(src: str, dst: str) -> None:
     shutil.copytree(src, dst)
 
 
-def _save_centroid_coordinate_csv(day: str, x_list: Sequence[Sequence[float]], y_list: Sequence[Sequence[float]]) -> None:
+def _save_centroid_coordinate_csv(
+    day: str, x_list: Sequence[Sequence[float]], y_list: Sequence[Sequence[float]]
+) -> None:
     n = min(len(x_list), len(y_list))
     save_dir = f"{param.save_dir_bef}/{day}"
     os.makedirs(save_dir, exist_ok=True)
@@ -662,9 +664,7 @@ def _prepare_valid_rotational_inputs(
         if not np.isfinite(time_arr[-1]) or not np.isfinite(time_arr[0]) or float(time_arr[-1]) <= float(time_arr[0]):
             continue
 
-        # Segment-local time axis (start at 0 s) for angular-velocity plots.
-        time_rel = time_arr - time_arr[0]
-        selected_time_list.append(time_rel.tolist())
+        selected_time_list.append(time_arr.tolist())
         selected_x_list.append(x_arr.tolist())
         selected_y_list.append(y_arr.tolist())
         valid_indices.append(i)
@@ -714,9 +714,9 @@ def run_segment_rotational_analysis(
         y_list=y_list,
     )
     if not valid_indices:
-        pd.DataFrame(
-            [{"message": "No sample has enough data for rotational analysis.", "analyzed_samples": 0}]
-        ).to_csv(f"{target_dir}/summary.csv", index=False)
+        pd.DataFrame([{"message": "No sample has enough data for rotational analysis.", "analyzed_samples": 0}]).to_csv(
+            f"{target_dir}/summary.csv", index=False
+        )
         return {
             "valid_indices": [],
             "time_list": [],
@@ -1064,8 +1064,6 @@ def split_rotational_series_by_rise(
         else:
             raise ValueError(f"Unknown mode: {mode}")
 
-        if t_seg.size > 0:
-            t_seg = t_seg - t_seg[0]
         out_time.append(t_seg.tolist())
         out_angle.append(ang_seg.tolist())
         out_av.append(av_seg.tolist())
@@ -1098,7 +1096,9 @@ def save_segment_angular_velocity_outputs(
     time_df = {}
     for i in range(n):
         time_df[f"No.{i + 1}"] = pd.Series(np.asarray(time_list[i], dtype=float), dtype="float64")
-    pd.DataFrame(time_df).to_csv(f"{param.save_dir_bef}/{day}/repellent_response/{segment_subdir}/time_list.csv", index=False)
+    pd.DataFrame(time_df).to_csv(
+        f"{param.save_dir_bef}/{day}/repellent_response/{segment_subdir}/time_list.csv", index=False
+    )
 
     if original_sample_indices is not None:
         map_df = pd.DataFrame(
@@ -1107,7 +1107,9 @@ def save_segment_angular_velocity_outputs(
                 "original_sample_no": [int(original_sample_indices[i]) + 1 for i in range(n)],
             }
         )
-        map_df.to_csv(f"{param.save_dir_bef}/{day}/repellent_response/{segment_subdir}/sample_index_map.csv", index=False)
+        map_df.to_csv(
+            f"{param.save_dir_bef}/{day}/repellent_response/{segment_subdir}/sample_index_map.csv", index=False
+        )
 
     make_graph.plot_repellent_angular_velocity_onecol(time_list, angle_list, angular_velocity_list, save_dir)
 

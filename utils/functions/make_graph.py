@@ -1468,7 +1468,7 @@ def plot_repellent_angular_velocity_onecol(time_list, angle_list, angular_veloci
 
     def _plot_panel(y_lists, save_name, y_label, title_prefix, use_abs=False):
         rows = max(1, sample_num)
-        fig, axs = plt.subplots(rows, 1, figsize=(24, max(3.0, rows * 2.6)))
+        fig, axs = plt.subplots(rows, 1, figsize=(24, max(5.0, rows * 4.2)))
         axs = np.atleast_1d(axs)
         for i in range(rows):
             ax = axs[i]
@@ -1512,14 +1512,14 @@ def plot_repellent_angular_velocity_onecol(time_list, angle_list, angular_veloci
     _plot_panel(
         angular_velocity_list,
         "angular_velocity_time-series.png",
-        "Angular velocity [rad/s]",
+        "AV [rad/s]",
         "Angular Velocity Time-series",
         use_abs=False,
     )
     _plot_panel(
         angular_velocity_list,
         "angular_velocity_time-series_abs.png",
-        "Angular velocity [rad/s]",
+        "AV [rad/s]",
         "Angular Velocity Abs Time-series",
         use_abs=True,
     )
