@@ -70,6 +70,7 @@ def main(
         time_list=all_comp_time_list,
         x_raw_list=all_x_before_list,
         y_raw_list=all_y_before_list,
+        rise_indices=rise_indices,
     )
     all_x_center_list, all_y_center_list = repellent_response.apply_post_rise_center_strategy(
         time_list=all_comp_time_list,
@@ -134,6 +135,8 @@ def main(
         "centroid_before.png",
         save_subdir="00_all_rotational_analysis/centroid_coordinate",
         rise_time_list=all_rise_time_for_centroid,
+        overlay_x_list=all_x_center_list,
+        overlay_y_list=all_y_center_list,
     )
     make_graph.plot_repellent_component_panels(
         all_comp_time_list,
@@ -221,6 +224,8 @@ def main(
         "Pre-rise Centroid Before Correction",
         "centroid_before.png",
         save_subdir="02_pre_rise_fluctuation/centroid_coordinate",
+        overlay_x_list=pre_center_x_list,
+        overlay_y_list=pre_center_y_list,
     )
     make_graph.plot_repellent_component_panels(
         pre_time_list,

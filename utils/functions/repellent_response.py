@@ -919,6 +919,7 @@ def estimate_rotation_center_like_standard(
     time_list: Sequence[Sequence[float]],
     x_raw_list: Sequence[Sequence[float]],
     y_raw_list: Sequence[Sequence[float]],
+    rise_indices: Optional[Sequence[float]] = None,
 ) -> Tuple[List[List[float]], List[List[float]]]:
     n = min(len(time_list), len(x_raw_list), len(y_raw_list))
     center_x_all: List[List[float]] = []
@@ -951,17 +952,36 @@ def estimate_rotation_center_like_standard(
         t = time_arr[valid_mask]
         x = x_arr[valid_mask]
         y = y_arr[valid_mask]
-        total_duration = float(t[-1] - t[0]) if len(t) > 1 else 0.0
-        if total_duration <= 0:
+        total_duration_all = float(t[-1] - t[0]) if len(t) > 1 else 0.0
+        if total_duration_all <= 0:
             center_x_mean = float(np.nanmean(x)) if np.isfinite(x).any() else 0.0
             center_y_mean = float(np.nanmean(y)) if np.isfinite(y).any() else 0.0
             center_x_all.append([center_x_mean] * m)
             center_y_all.append([center_y_mean] * m)
             continue
 
-        frame_rate = max(1e-6, float(len(t)) / total_duration)
-        x_freq, x_amp = frequency_analysis.fft(x, 1.0 / frame_rate)
-        y_freq, y_amp = frequency_analysis.fft(y, 1.0 / frame_rate)
+        rise_idx = m
+        if rise_indices is not None and i < len(rise_indices):
+            rise_idx = _normalize_rise_index(float(rise_indices[i]), m)
+        pre_mask = valid_mask & (np.arange(m) < rise_idx)
+        fft_mask = pre_mask if np.count_nonzero(pre_mask) >= max(3, param.min_ref_centroid_num) else valid_mask
+        fft_source = "pre-rise" if fft_mask is pre_mask else "all-time"
+
+        t_fft = time_arr[fft_mask]
+        x_fft = x_arr[fft_mask]
+        y_fft = y_arr[fft_mask]
+        total_duration_fft = float(t_fft[-1] - t_fft[0]) if len(t_fft) > 1 else 0.0
+        if total_duration_fft <= 0:
+            total_duration_fft = total_duration_all
+            t_fft = t
+            x_fft = x
+            y_fft = y
+            fft_source = "all-time"
+
+        frame_rate_fft = max(1e-6, float(len(t_fft)) / total_duration_fft)
+        frame_rate_all = max(1e-6, float(len(t)) / total_duration_all)
+        x_freq, x_amp = frequency_analysis.fft(x_fft, 1.0 / frame_rate_fft)
+        y_freq, y_amp = frequency_analysis.fft(y_fft, 1.0 / frame_rate_fft)
         freq_th = 5.0
         x_mask = np.asarray(x_freq) > freq_th
         y_mask = np.asarray(y_freq) > freq_th
@@ -978,15 +998,16 @@ def estimate_rotation_center_like_standard(
         if peak_candidates:
             peak_freq = max(peak_candidates)
         else:
-            peak_freq = max(0.1, 1.0 / max(total_duration, 1e-6))
+            peak_freq = max(0.1, 1.0 / max(total_duration_fft, 1e-6))
 
         width_time = param.n_rotations / max(peak_freq, 1e-6)
-        width_time = min(max(width_time, 1.0 / frame_rate), total_duration)
+        width_time = min(max(width_time, 1.0 / frame_rate_fft), total_duration_fft)
+        print(f"No.{i + 1} width_time ({fft_source}): {width_time:.3f} s")
 
         center_x_series: List[float] = []
         center_y_series: List[float] = []
         start_time = float(t[0])
-        dt = 1.0 / frame_rate
+        dt = 1.0 / frame_rate_all
         while True:
             cond = (t >= start_time) & (t < start_time + width_time)
             x_win = x[cond]
@@ -1045,7 +1066,9 @@ def estimate_rotation_center_like_standard(
     return center_x_all, center_y_all
 
 
-def _estimate_window_frames_from_fft(time_arr: np.ndarray, x_arr: np.ndarray, y_arr: np.ndarray) -> int:
+def _estimate_window_frames_from_fft(
+    time_arr: np.ndarray, x_arr: np.ndarray, y_arr: np.ndarray, rise_idx: Optional[int] = None
+) -> int:
     finite_time = np.isfinite(time_arr)
     finite_xy = np.isfinite(x_arr) & np.isfinite(y_arr)
     valid_mask = finite_time & finite_xy
@@ -1053,9 +1076,15 @@ def _estimate_window_frames_from_fft(time_arr: np.ndarray, x_arr: np.ndarray, y_
         base = min(len(time_arr), len(x_arr), len(y_arr))
         return max(3, min(base if base % 2 == 1 else max(3, base - 1), 301))
 
-    t = time_arr[valid_mask]
-    x = x_arr[valid_mask]
-    y = y_arr[valid_mask]
+    if rise_idx is None:
+        rise_idx = len(time_arr)
+    rise_idx = max(0, min(int(rise_idx), len(time_arr)))
+    pre_mask = valid_mask & (np.arange(len(time_arr)) < rise_idx)
+    fft_mask = pre_mask if np.count_nonzero(pre_mask) >= max(3, param.min_ref_centroid_num) else valid_mask
+
+    t = time_arr[fft_mask]
+    x = x_arr[fft_mask]
+    y = y_arr[fft_mask]
     total_duration = float(t[-1] - t[0]) if len(t) > 1 else 0.0
     if total_duration <= 0:
         return 3
@@ -1154,7 +1183,7 @@ def apply_post_rise_center_strategy(
                 cx_final[rise_idx:] = cx_post
                 cy_final[rise_idx:] = cy_post
             else:
-                window = _estimate_window_frames_from_fft(t, x_raw, y_raw)
+                window = _estimate_window_frames_from_fft(t, x_raw, y_raw, rise_idx=rise_idx)
                 stat_mode: Literal["mean", "median"] = "mean" if post_rise_center_mode == 1 else "median"
                 cx_slide = _rolling_stat(x_raw, window=window, stat=stat_mode)
                 cy_slide = _rolling_stat(y_raw, window=window, stat=stat_mode)
