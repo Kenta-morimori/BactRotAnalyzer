@@ -6,7 +6,7 @@ import re
 import shutil
 import tempfile
 from datetime import datetime
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple, TypedDict
 
 import cv2
 import numpy as np
@@ -27,7 +27,14 @@ from utils.functions import (
 )
 
 
-def _safe_extract_number(filename: str) -> int:
+class RotationalAnalysisResult(TypedDict):
+    valid_indices: List[int]
+    time_list: List[List[float]]
+    angle_list: List[List[float]]
+    angular_velocity_list: List[List[float]]
+
+
+def _safe_extract_number(filename: str) -> float:
     try:
         return get_tiff_info.extract_number(filename)
     except Exception:
@@ -146,8 +153,10 @@ def detect_rise_index(
     # Interpolate NaN to avoid breaking whole-series change-point evaluation.
     arr_work = arr.copy()
     if not np.all(finite_mask):
-        idx = np.arange(arr_work.size)
-        arr_work[~finite_mask] = np.interp(idx[~finite_mask], idx[finite_mask], arr_work[finite_mask])
+        interp_idx = np.arange(arr_work.size)
+        arr_work[~finite_mask] = np.interp(
+            interp_idx[~finite_mask], interp_idx[finite_mask], arr_work[finite_mask]
+        )
 
     n = arr_work.size
     min_segment_ratio = max(0.05, min(0.25, baseline_ratio / 2.0))
@@ -223,13 +232,13 @@ def detect_rise_index(
         active_threshold = max(diff_threshold, 0.35 * float(np.nanmax(local_diff)))
         active_mask = local_diff > active_threshold
 
-        runs = []
-        run_start = None
-        for idx, flag in enumerate(active_mask):
+        runs: List[Tuple[int, int]] = []
+        run_start: Optional[int] = None
+        for i, flag in enumerate(active_mask):
             if flag and run_start is None:
-                run_start = idx
+                run_start = i
             elif not flag and run_start is not None:
-                runs.append((run_start, idx - 1))
+                runs.append((run_start, i - 1))
                 run_start = None
         if run_start is not None:
             runs.append((run_start, len(active_mask) - 1))
@@ -704,7 +713,7 @@ def run_segment_rotational_analysis(
     x_list: Sequence[Sequence[float]],
     y_list: Sequence[Sequence[float]],
     run_fluctuation: bool = False,
-) -> Dict[str, object]:
+) -> RotationalAnalysisResult:
     target_dir = f"{param.save_dir_bef}/{day}/repellent_response/{segment_subdir}"
     os.makedirs(target_dir, exist_ok=True)
 
@@ -717,12 +726,12 @@ def run_segment_rotational_analysis(
         pd.DataFrame([{"message": "No sample has enough data for rotational analysis.", "analyzed_samples": 0}]).to_csv(
             f"{target_dir}/summary.csv", index=False
         )
-        return {
-            "valid_indices": [],
-            "time_list": [],
-            "angle_list": [],
-            "angular_velocity_list": [],
-        }
+        return RotationalAnalysisResult(
+            valid_indices=[],
+            time_list=[],
+            angle_list=[],
+            angular_velocity_list=[],
+        )
 
     tmp_day = f"repellent_tmp_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
     with tempfile.TemporaryDirectory() as tmp_root:
@@ -771,12 +780,12 @@ def run_segment_rotational_analysis(
     for i, t_series in enumerate(selected_time_list):
         time_data[f"No.{i + 1}"] = pd.Series(np.asarray(t_series, dtype=float), dtype="float64")
     pd.DataFrame(time_data).to_csv(f"{target_dir}/time_list.csv", index=False)
-    return {
-        "valid_indices": valid_indices,
-        "time_list": selected_time_list,
-        "angle_list": [np.asarray(a, dtype=float).tolist() for a in angle_list],
-        "angular_velocity_list": [np.asarray(v, dtype=float).tolist() for v in angular_velocity_list],
-    }
+    return RotationalAnalysisResult(
+        valid_indices=valid_indices,
+        time_list=selected_time_list,
+        angle_list=[np.asarray(a, dtype=float).tolist() for a in angle_list],
+        angular_velocity_list=[np.asarray(v, dtype=float).tolist() for v in angular_velocity_list],
+    )
 
 
 def _correct_center_outlier_like_standard(center_series: Sequence[float]) -> List[float]:
@@ -1078,6 +1087,7 @@ def save_segment_angular_velocity_outputs(
     angle_list: Sequence[Sequence[float]],
     angular_velocity_list: Sequence[Sequence[float]],
     original_sample_indices: Optional[Sequence[int]] = None,
+    rise_time_list: Optional[Sequence[float]] = None,
 ) -> None:
     save_dir = f"{param.save_dir_bef}/{day}/repellent_response/{segment_subdir}/angular_velocity"
     os.makedirs(save_dir, exist_ok=True)
@@ -1111,7 +1121,13 @@ def save_segment_angular_velocity_outputs(
             f"{param.save_dir_bef}/{day}/repellent_response/{segment_subdir}/sample_index_map.csv", index=False
         )
 
-    make_graph.plot_repellent_angular_velocity_onecol(time_list, angle_list, angular_velocity_list, save_dir)
+    make_graph.plot_repellent_angular_velocity_onecol(
+        time_list,
+        angle_list,
+        angular_velocity_list,
+        save_dir,
+        rise_time_list=rise_time_list,
+    )
 
 
 def _get_valid_pre_rise_indices(
@@ -1269,7 +1285,7 @@ def _extract_centroid_from_frame(frame) -> Tuple[float, float]:
 
 
 def _sort_avi_paths(avi_paths: Sequence[str]) -> List[str]:
-    def _key(path: str) -> int:
+    def _key(path: str) -> float:
         numbers = re.findall(r"\d+", os.path.basename(path))
         if not numbers:
             return math.inf

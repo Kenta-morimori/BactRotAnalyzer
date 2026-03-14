@@ -1358,6 +1358,7 @@ def plot_repellent_component_panels(
     mode_label,
     save_name,
     save_subdir="03_post_rise_analysis/centroid_coordinate",
+    rise_time_list=None,
 ):
     sample_num = min(len(time_list), len(x_list), len(y_list))
     save_dir = f"{param.save_dir_bef}/{day}/repellent_response/{save_subdir}"
@@ -1376,6 +1377,9 @@ def plot_repellent_component_panels(
         x_arr = np.asarray(x_list[i], dtype=float)
         y_arr = np.asarray(y_list[i], dtype=float)
         t_arr = np.asarray(time_list[i], dtype=float)
+        rise_time = np.nan
+        if rise_time_list is not None and i < len(rise_time_list):
+            rise_time = float(rise_time_list[i]) if np.isfinite(rise_time_list[i]) else np.nan
         n = min(x_arr.size, y_arr.size, t_arr.size)
         x_arr = x_arr[:n]
         y_arr = y_arr[:n]
@@ -1404,6 +1408,8 @@ def plot_repellent_component_panels(
         # x-t
         ax = axs[i, 1]
         ax.plot(t_arr, x_arr, linewidth=1.8)
+        if np.isfinite(rise_time):
+            ax.axvline(rise_time, color="red", linestyle="--", linewidth=1.6, alpha=0.85)
         ax.grid(True)
         ax.set_title(f"{mode_label} No.{i+1} | x-t", fontsize=title_fs)
         ax.set_xlabel("Time [s]", fontsize=label_fs)
@@ -1413,6 +1419,8 @@ def plot_repellent_component_panels(
         # y-t
         ax = axs[i, 2]
         ax.plot(t_arr, y_arr, linewidth=1.8)
+        if np.isfinite(rise_time):
+            ax.axvline(rise_time, color="red", linestyle="--", linewidth=1.6, alpha=0.85)
         ax.grid(True)
         ax.set_title(f"{mode_label} No.{i+1} | y-t", fontsize=title_fs)
         ax.set_xlabel("Time [s]", fontsize=label_fs)
@@ -1458,7 +1466,7 @@ def plot_repellent_time_list(time_list, day):
     plt.close(fig)
 
 
-def plot_repellent_angular_velocity_onecol(time_list, angle_list, angular_velocity_list, save_dir):
+def plot_repellent_angular_velocity_onecol(time_list, angle_list, angular_velocity_list, save_dir, rise_time_list=None):
     sample_num = min(len(time_list), len(angle_list), len(angular_velocity_list))
     os.makedirs(save_dir, exist_ok=True)
 
@@ -1488,6 +1496,11 @@ def plot_repellent_angular_velocity_onecol(time_list, angle_list, angular_veloci
                 continue
 
             ax.plot(t_arr, y_arr, linewidth=1.8)
+            rise_time = np.nan
+            if rise_time_list is not None and i < len(rise_time_list) and np.isfinite(rise_time_list[i]):
+                rise_time = float(rise_time_list[i])
+            if np.isfinite(rise_time):
+                ax.axvline(rise_time, color="red", linestyle="--", linewidth=1.6, alpha=0.85)
             ax.grid(True)
             ax.set_title(f"{title_prefix} No.{i + 1}", fontsize=title_fs)
             ax.set_xlabel("Time [s]", fontsize=label_fs)

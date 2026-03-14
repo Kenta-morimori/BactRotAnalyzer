@@ -7,13 +7,8 @@ os.environ.setdefault("MPLBACKEND", "Agg")
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from utils.functions import (  # noqa
-    input_data,
-    make_graph,
-    repellent_response,
-    save2csv,
-)
 from utils import param  # noqa
+from utils.functions import input_data, make_graph, repellent_response, save2csv  # noqa
 
 
 def main(
@@ -79,6 +74,12 @@ def main(
         y_list=y_list,
         run_fluctuation=False,
     )
+    all_rise_time_list = []
+    for idx in all_rot["valid_indices"]:
+        if idx < len(rise_results):
+            all_rise_time_list.append(rise_results[idx].get("rise_time", float("nan")))
+        else:
+            all_rise_time_list.append(float("nan"))
     repellent_response.save_segment_angular_velocity_outputs(
         day=day,
         segment_subdir="00_all_rotational_analysis",
@@ -86,6 +87,7 @@ def main(
         angle_list=all_rot["angle_list"],
         angular_velocity_list=all_rot["angular_velocity_list"],
         original_sample_indices=all_rot["valid_indices"],
+        rise_time_list=all_rise_time_list,
     )
     repellent_response.copy_center_coordinate_to_segment(day, "00_all_rotational_analysis")
     (
@@ -111,6 +113,7 @@ def main(
         "All-time Centroid Before Correction",
         "centroid_before.png",
         save_subdir="00_all_rotational_analysis/centroid_coordinate",
+        rise_time_list=all_rise_time_list,
     )
     make_graph.plot_repellent_component_panels(
         all_comp_time_list,
@@ -120,6 +123,7 @@ def main(
         "All-time Rotation Center",
         "rotation_center.png",
         save_subdir="00_all_rotational_analysis/centroid_coordinate",
+        rise_time_list=all_rise_time_list,
     )
     make_graph.plot_repellent_component_panels(
         all_comp_time_list,
@@ -129,6 +133,7 @@ def main(
         "All-time Centroid Corrected",
         "centroid_corrected.png",
         save_subdir="00_all_rotational_analysis/centroid_coordinate",
+        rise_time_list=all_rise_time_list,
     )
 
     # Segment 1: pre-rise rotational + fluctuation analyses.

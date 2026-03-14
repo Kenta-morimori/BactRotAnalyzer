@@ -3,7 +3,7 @@ import os
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import cv2
 import matplotlib.pyplot as plt
@@ -633,7 +633,7 @@ def main():
     plot_distribution(df, out_dir)
 
     # 2. Mean and Median analysis
-    stats_dict = defaultdict(list)
+    stats_dict: dict[str, list[Any]] = defaultdict(list)
     df["av_abs"] = np.abs(df["av"])
     for data_key in DATA_KEYS:
         cols = pd.read_csv(AV_DIR_DICT[data_key]).columns.tolist()
