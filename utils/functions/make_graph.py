@@ -1197,12 +1197,20 @@ def plot_repellent_background_and_av_stacked(
     label_fs = font_size + 2
     tick_fs = font_size
 
-    fig, axs = plt.subplots(2 * sample_num, 1, figsize=(24, max(6.0, sample_num * 5.2)))
-    axs = np.atleast_1d(axs)
+    nrows = sample_num * 3 - 1
+    height_ratios = []
+    for i in range(sample_num):
+        height_ratios.extend([1.0, 1.0])
+        if i < sample_num - 1:
+            # Spacer row between pairs to avoid title overlap.
+            height_ratios.append(0.22)
+    fig = plt.figure(figsize=(24, max(10.0, sample_num * 7.2)))
+    gs = fig.add_gridspec(nrows=nrows, ncols=1, height_ratios=height_ratios, hspace=0.1)
 
     for i in range(sample_num):
-        ax_bg = axs[2 * i]
-        ax_av = axs[2 * i + 1]
+        row_base = i * 3
+        ax_bg = fig.add_subplot(gs[row_base, 0])
+        ax_av = fig.add_subplot(gs[row_base + 1, 0])
 
         t_arr = np.asarray(time_list[i], dtype=float)
         bg_arr = np.asarray(background_list[i], dtype=float)
@@ -1238,8 +1246,7 @@ def plot_repellent_background_and_av_stacked(
 
         ax_bg.grid(True)
         ax_av.grid(True)
-        ax_bg.set_title(f"No.{sample_no} Background Intensity", fontsize=title_fs)
-        ax_av.set_title(f"No.{sample_no} Angular Velocity", fontsize=title_fs)
+        ax_bg.set_title(f"No.{sample_no}", fontsize=title_fs, pad=4)
 
         ax_bg.set_ylabel("Intensity", fontsize=label_fs)
         ax_av.set_ylabel("AV [rad/s]", fontsize=label_fs)
@@ -1250,7 +1257,7 @@ def plot_repellent_background_and_av_stacked(
         ax_bg.tick_params(axis="y", which="major", labelsize=tick_fs)
         ax_av.tick_params(axis="both", which="major", labelsize=tick_fs)
 
-    plt.tight_layout()
+    fig.subplots_adjust(top=0.985, bottom=0.045, left=0.08, right=0.98)
     plt.savefig(f"{save_dir}/background_intensity_and_angular_velocity_time_series.png")
     plt.close(fig)
 
