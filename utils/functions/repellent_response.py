@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import tempfile
+import threading
 from datetime import datetime
 from typing import Dict, List, Literal, Optional, Sequence, Tuple, TypedDict
 
@@ -12,7 +13,6 @@ import cv2
 import numpy as np
 import pandas as pd
 from PIL import Image
-import threading
 
 from utils import param
 from utils.functions import (
