@@ -1576,7 +1576,9 @@ def ensure_time_list(day: str) -> List[List[float]]:
             for frame_name in frame_names:
                 frame_path = os.path.join(sample_dir, frame_name)
                 with Image.open(frame_path) as img:
-                    metadata = img.tag_v2
+                    metadata = getattr(img, "tag_v2", None)
+                    if metadata is None:
+                        continue
                     time_raw = metadata.get(306, None)
                     if time_raw is None:
                         continue
