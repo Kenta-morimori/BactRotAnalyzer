@@ -513,7 +513,7 @@ def plot_fft(freq_list, Amp_list, save_dir, save_name, day, flag_add_peak=False)
         if np.isfinite(freq_max) and freq_max > 0:
             axs[row, col].set_xlim(0, freq_max)
         axs[row, col].set_title(f"No.{i+1}", fontsize=font_size)
-        axs[row, col].set_xlabel("Freqency [Hz]", fontsize=font_size)
+        axs[row, col].set_xlabel("Frequency [Hz]", fontsize=font_size)
         axs[row, col].set_ylabel("Amp", fontsize=font_size)
         # axs[row, col].set_xscale("log")
         if np.any(np.isfinite(amp_arr) & (amp_arr > 0)):
