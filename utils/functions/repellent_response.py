@@ -12,6 +12,7 @@ import cv2
 import numpy as np
 import pandas as pd
 from PIL import Image
+import threading
 
 from utils import param
 from utils.functions import (
@@ -25,6 +26,8 @@ from utils.functions import (
     rot_df_manage,
     save2csv,
 )
+
+_param_io_lock = threading.Lock()
 
 
 class RotationalAnalysisResult(TypedDict):
@@ -827,26 +830,27 @@ def run_segment_rotational_analysis(
         os.makedirs(tmp_output_root, exist_ok=True)
         _write_temp_config(f"{tmp_input_root}/{tmp_day}/config.ini", len(valid_indices))
 
-        orig_input_root = param.input_dir_bef
-        orig_output_root = param.save_dir_bef
-        try:
-            param.input_dir_bef = tmp_input_root
-            param.save_dir_bef = tmp_output_root
+        with _param_io_lock:
+            orig_input_root = param.input_dir_bef
+            orig_output_root = param.save_dir_bef
+            try:
+                param.input_dir_bef = tmp_input_root
+                param.save_dir_bef = tmp_output_root
 
-            save2csv.save_time_list(selected_time_list, tmp_day)
-            _save_centroid_coordinate_csv(tmp_day, selected_x_list, selected_y_list)
-            rot_df_manage.create_rot_df(tmp_day)
-            _write_dummy_angle_fft(tmp_day, len(valid_indices))
-            angle_list, angular_velocity_list = get_angular_velocity.get_angular_velocity(
-                selected_x_list, selected_y_list, tmp_day
-            )
+                save2csv.save_time_list(selected_time_list, tmp_day)
+                _save_centroid_coordinate_csv(tmp_day, selected_x_list, selected_y_list)
+                rot_df_manage.create_rot_df(tmp_day)
+                _write_dummy_angle_fft(tmp_day, len(valid_indices))
+                angle_list, angular_velocity_list = get_angular_velocity.get_angular_velocity(
+                    selected_x_list, selected_y_list, tmp_day
+                )
 
-            if run_fluctuation:
-                fluctuation_analysis.main(angular_velocity_list, tmp_day)
-                make_graph.plot_rot_param(tmp_day)
-        finally:
-            param.input_dir_bef = orig_input_root
-            param.save_dir_bef = orig_output_root
+                if run_fluctuation:
+                    fluctuation_analysis.main(angular_velocity_list, tmp_day)
+                    make_graph.plot_rot_param(tmp_day)
+            finally:
+                param.input_dir_bef = orig_input_root
+                param.save_dir_bef = orig_output_root
 
         src_base = f"{tmp_output_root}/{tmp_day}"
         if os.path.isdir(f"{src_base}/angular_velocity"):
