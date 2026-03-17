@@ -37,7 +37,13 @@ def main(
     centroid_csv = f"{param.save_dir_bef}/{day}/centroid_coordinate.csv"
     if not os.path.isfile(centroid_csv):
         try:
-            subprocess.run(["python3", "utils/functions/get_centroid_coordinate.py", day], check=True)
+            script_path = os.path.join(
+                os.path.dirname(os.path.dirname(__file__)),
+                "utils",
+                "functions",
+                "get_centroid_coordinate.py",
+            )
+            subprocess.run([sys.executable, script_path, day], check=True)
         except subprocess.CalledProcessError:
             repellent_response.generate_centroid_coordinate_simple(day)
     x_list, y_list = input_data.input_centroid_coordinate(day)
