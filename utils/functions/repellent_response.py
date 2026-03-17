@@ -1564,6 +1564,13 @@ def ensure_time_list(day: str) -> List[List[float]]:
 
         for sample_name in sample_names:
             sample_dir = os.path.join(tiff_root, sample_name)
+            # If the expected sample directory does not exist, append an empty/default
+            # time list and continue. This prevents FileNotFoundError when sample
+            # names from configuration are missing or misspelled.
+            if not os.path.isdir(sample_dir):
+                time_list_all.append([])
+                continue
+
             frame_names = [
                 name
                 for name in os.listdir(sample_dir)
