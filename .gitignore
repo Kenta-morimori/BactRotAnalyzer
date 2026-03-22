@@ -11,6 +11,7 @@ outputs/*
 scripts/dev_*
 utils/functions/dev_*
 notebooks/
+prompts/
 
 *.sh
 

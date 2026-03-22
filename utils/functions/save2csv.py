@@ -30,14 +30,14 @@ def save_angle_angular_velocity(angle_list, angular_velocity_list, day):
     with open(csv_save_dir, "w", newline="") as csvfile:
         csvwriter = csv.writer(csvfile)
         csvwriter.writerow(header)
-        for row in zip(*angle_list):
+        for row in zip_longest(*angle_list, fillvalue=None):
             csvwriter.writerow(row)
 
     csv_save_dir = f"{param.save_dir_bef}/{day}/angular_velocity/angular-velocity_time-series.csv"
     with open(csv_save_dir, "w", newline="") as csvfile:
         csvwriter = csv.writer(csvfile)
         csvwriter.writerow(header)
-        for row in zip(*angular_velocity_list):
+        for row in zip_longest(*angular_velocity_list, fillvalue=None):
             csvwriter.writerow(row)
 
 
@@ -117,3 +117,55 @@ def save_SD_FFT_refpoints(ref_point_list, day):
     }
     df = pd.DataFrame(data)
     df.to_csv(csv_save_dir, index=False)
+
+
+def save_repellent_background_intensity(time_list, background_list, day):
+    sample_num = min(len(time_list), len(background_list))
+    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/01_brightness_change"
+    os.makedirs(save_dir, exist_ok=True)
+    csv_save_dir = f"{save_dir}/background_intensity_time_series.csv"
+
+    data = {}
+    for i in range(sample_num):
+        time_arr = pd.Series(time_list[i], dtype="float64")
+        bg_arr = pd.Series(background_list[i], dtype="float64")
+        n = min(len(time_arr), len(bg_arr))
+        data[f"No.{i+1}_time"] = time_arr.iloc[:n].reset_index(drop=True)
+        data[f"No.{i+1}_background"] = bg_arr.iloc[:n].reset_index(drop=True)
+    pd.DataFrame(data).to_csv(csv_save_dir, index=False)
+
+
+def save_repellent_rise_summary(results, day):
+    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/01_brightness_change"
+    os.makedirs(save_dir, exist_ok=True)
+    csv_save_dir = f"{save_dir}/rise_summary.csv"
+    pd.DataFrame(results).to_csv(csv_save_dir, index=False)
+
+
+def save_repellent_post_rise_centroid(time_list, x_list, y_list, day):
+    sample_num = min(len(time_list), len(x_list), len(y_list))
+    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/03_post_rise_analysis/centroid_coordinate"
+    os.makedirs(save_dir, exist_ok=True)
+    csv_save_dir = f"{save_dir}/post_rise_centroid_time_series.csv"
+
+    data = {}
+    for i in range(sample_num):
+        time_arr = pd.Series(time_list[i], dtype="float64")
+        x_arr = pd.Series(x_list[i], dtype="float64")
+        y_arr = pd.Series(y_list[i], dtype="float64")
+        n = min(len(time_arr), len(x_arr), len(y_arr))
+        data[f"No.{i+1}_time"] = time_arr.iloc[:n].reset_index(drop=True)
+        data[f"No.{i+1}_x"] = x_arr.iloc[:n].reset_index(drop=True)
+        data[f"No.{i+1}_y"] = y_arr.iloc[:n].reset_index(drop=True)
+    pd.DataFrame(data).to_csv(csv_save_dir, index=False)
+
+
+def save_repellent_time_list(time_list, day):
+    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/00_time_list"
+    os.makedirs(save_dir, exist_ok=True)
+    csv_save_dir = f"{save_dir}/time_list.csv"
+
+    data = {}
+    for i in range(len(time_list)):
+        data[f"No.{i+1}"] = pd.Series(time_list[i], dtype="float64")
+    pd.DataFrame(data).to_csv(csv_save_dir, index=False)
