@@ -260,6 +260,7 @@ def plot_angular_velocity(angle_list, angular_velocity_list, day):
     cols = 2
     rows = max(1, math.ceil(sample_num / cols))
     fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y * rows / 5))
+    axs = np.atleast_2d(axs)
     for i in range(sample_num):
         row = i // cols
         col = i % cols
@@ -275,6 +276,7 @@ def plot_angular_velocity(angle_list, angular_velocity_list, day):
     plt.close(fig)
 
     fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y * rows / 5))
+    axs = np.atleast_2d(axs)
     for i in range(sample_num):
         row = i // cols
         col = i % cols
@@ -290,6 +292,7 @@ def plot_angular_velocity(angle_list, angular_velocity_list, day):
     plt.close(fig)
 
     fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y * rows / 5))
+    axs = np.atleast_2d(axs)
     for i in range(sample_num):
         row = i // cols
         col = i % cols
@@ -487,6 +490,7 @@ def plot_fft(freq_list, Amp_list, save_dir, save_name, day, flag_add_peak=False)
     cols = 2
     rows = max(1, math.ceil(sample_num / cols))
     fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y * rows / 5))
+    axs = np.atleast_2d(axs)
     for i in range(sample_num):
         row = i // cols
         col = i % cols

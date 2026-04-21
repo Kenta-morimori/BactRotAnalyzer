@@ -28,6 +28,8 @@ def contours(img):
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     _, img_binary = cv2.threshold(img_gray, 120, 255, cv2.THRESH_BINARY)
     contours, _ = cv2.findContours(img_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if len(contours) == 0:
+        return np.nan, np.nan, None
     max_contour = max(contours, key=cv2.contourArea)
 
     # Centroid coordinates were taken as the mean of the contours.
@@ -37,7 +39,7 @@ def contours(img):
         ellipse = cv2.fitEllipse(max_contour)
         return mean_x, mean_y, ellipse
     else:
-        return None, None, None
+        return np.nan, np.nan, None
 
 
 # Save centroid coordinates (cannot be written in save2csv.py due to subprocess)
@@ -430,7 +432,7 @@ def main(day):
                 break
             if param.flag_get_angle_with_cell_direcetion:
                 x, y, ellipse = contours(frame)
-                add_angle_list_bef.append(ellipse[2])
+                add_angle_list_bef.append(ellipse[2] if ellipse is not None else np.nan)
             else:
                 x, y, _ = contours(frame)
             add_x_list.append(x * px2um_x)
