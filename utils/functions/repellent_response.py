@@ -130,12 +130,42 @@ def get_post_rise_center_mode(day: str, default_mode: int = 2) -> int:
 
 
 def get_background_intensity_time_series(day: str, roi_size: int = 10) -> List[List[float]]:
+    """Extract background intensity using mean centroid-based ROI."""
     tiff_root = f"{param.input_dir_bef}/{day}/tiff_data"
     sample_names = get_tiff_sample_names(day)
     background_list: List[List[float]] = []
+    
+    try:
+        px2um_x, px2um_y = param.get_px2um_config(day)
+    except Exception:
+        px2um_x, px2um_y = 1.0, 1.0
+    
+    try:
+        x_center_list, y_center_list = load_centroid_coordinate_with_nan(day)
+    except Exception:
+        x_center_list, y_center_list = [], []
 
-    for sample_name in sample_names:
+    for idx, sample_name in enumerate(sample_names):
         sample_dir = os.path.join(tiff_root, sample_name)
+        
+        if idx < len(x_center_list) and idx < len(y_center_list):
+            x_center_arr = np.asarray(x_center_list[idx], dtype=float)
+            y_center_arr = np.asarray(y_center_list[idx], dtype=float)
+            x_center_arr = x_center_arr[np.isfinite(x_center_arr)]
+            y_center_arr = y_center_arr[np.isfinite(y_center_arr)]
+            
+            if len(x_center_arr) > 0 and len(y_center_arr) > 0:
+                mean_x = float(np.mean(x_center_arr))
+                mean_y = float(np.mean(y_center_arr))
+            else:
+                mean_x, mean_y = 0.0, 0.0
+        else:
+            mean_x, mean_y = 0.0, 0.0
+        
+        offset_px = int(param.bg_roi_offset_um_downward / max(px2um_y, 0.1))
+        roi_center_y = int(mean_y + offset_px)
+        roi_center_x = int(mean_x)
+        
         if not os.path.isdir(sample_dir):
             background_list.append([])
             continue
@@ -152,13 +182,83 @@ def get_background_intensity_time_series(day: str, roi_size: int = 10) -> List[L
                 frame_arr = np.asarray(img)
             if frame_arr.ndim >= 3:
                 frame_arr = frame_arr[..., 0]
+            
             h, w = frame_arr.shape[:2]
-            roi_h = min(roi_size, h)
-            roi_w = min(roi_size, w)
-            roi = frame_arr[:roi_h, w - roi_w : w]
-            sample_bg.append(float(np.mean(roi)))
+            roi_top = max(0, roi_center_y - roi_size // 2)
+            roi_bottom = min(h, roi_center_y + (roi_size - roi_size // 2))
+            roi_left = max(0, roi_center_x - roi_size // 2)
+            roi_right = min(w, roi_center_x + (roi_size - roi_size // 2))
+            
+            if roi_top < roi_bottom and roi_left < roi_right:
+                roi = frame_arr[roi_top:roi_bottom, roi_left:roi_right]
+                sample_bg.append(float(np.mean(roi)))
+            else:
+                sample_bg.append(np.nan)
+        
         background_list.append(sample_bg)
+    
     return background_list
+
+
+def calculate_angular_velocity_switching_frequency(
+    time_list: Sequence[Sequence[float]],
+    angular_velocity_list: Sequence[Sequence[float]],
+    window_width_sec: float = 2.0,
+    window_shift_sec: float = 0.5,
+) -> Tuple[List[List[float]], List[List[float]]]:
+    """Calculate sign-reversal frequency using sliding windows."""
+    out_time = []
+    out_freq = []
+    
+    for time_arr, av_arr in zip(time_list, angular_velocity_list):
+        if len(time_arr) < 2 or len(av_arr) < 2:
+            out_time.append([])
+            out_freq.append([])
+            continue
+        
+        t = np.asarray(time_arr, dtype=float)
+        av = np.asarray(av_arr, dtype=float)
+        
+        valid_mask = np.isfinite(t) & np.isfinite(av)
+        if np.sum(valid_mask) < 2:
+            out_time.append([])
+            out_freq.append([])
+            continue
+        
+        t = t[valid_mask]
+        av = av[valid_mask]
+        
+        if len(t) < 2 or len(av) < 2:
+            out_time.append([])
+            out_freq.append([])
+            continue
+        
+        w_times = []
+        w_freqs = []
+        
+        t_start = float(t[0])
+        t_end = float(t[-1])
+        current_time = t_start
+        
+        while current_time + window_width_sec <= t_end:
+            window_end = current_time + window_width_sec
+            window_mask = (t >= current_time) & (t <= window_end)
+            
+            if np.sum(window_mask) >= 2:
+                window_av = av[window_mask]
+                sign_changes = np.sum(np.diff(np.sign(window_av)) != 0)
+                frequency = float(sign_changes) / window_width_sec
+                
+                window_center_time = float(current_time + window_width_sec / 2.0)
+                w_times.append(window_center_time)
+                w_freqs.append(frequency)
+            
+            current_time += window_shift_sec
+        
+        out_time.append(w_times)
+        out_freq.append(w_freqs)
+    
+    return out_time, out_freq
 
 
 def detect_rise_index(

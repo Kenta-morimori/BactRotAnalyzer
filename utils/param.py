@@ -121,6 +121,13 @@ min_ref_av_num = 10  # Average
 ## Switching
 flag_eval_switching_with_averaged_av = False
 
+# Angular Velocity Switching Frequency Analysis (post-rise)
+av_switching_window_width_sec = 2.0  # Window width in seconds
+av_switching_window_shift_sec = 0.5   # Window shift step in seconds
+
+# Background ROI Configuration (repellent response)
+bg_roi_offset_um_downward = 10.0  # Downward offset from centroid in micrometers
+
 # fluctuation analysis
 # SD_window_width_list = [0.1, 0.5, 1.0]
 SD_window_width_list = [0.1, 0.2, 0.5, 1.0, 1.5, 2.0]

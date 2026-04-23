@@ -1650,3 +1650,40 @@ def plot_repellent_angular_velocity_onecol(time_list, angle_list, angular_veloci
         "Angular Velocity Abs Time-series",
         use_abs=True,
     )
+
+
+def plot_angular_velocity_switching_frequency(
+    time_list: Sequence[Sequence[float]],
+    frequency_list: Sequence[Sequence[float]],
+    day: str,
+    sample_indices: Optional[Sequence[int]] = None,
+) -> None:
+    """Plot switching frequency time-series."""
+    if not time_list or not frequency_list:
+        return
+    
+    if sample_indices is None:
+        sample_indices = list(range(1, len(time_list) + 1))
+    
+    fig, ax = plt.subplots(figsize=(12, 6))
+    
+    for idx, (t_series, f_series) in enumerate(zip(time_list, frequency_list)):
+        if len(t_series) > 0 and len(f_series) > 0:
+            sample_no = sample_indices[idx] if idx < len(sample_indices) else idx + 1
+            ax.plot(t_series, f_series, marker='o', markersize=4, 
+                   label=f"No.{sample_no}", linewidth=2)
+    
+    ax.set_xlabel("Time (s)", fontsize=12)
+    ax.set_ylabel("Sign Reversal Frequency (1/s)", fontsize=12)
+    ax.set_title("Angular Velocity Sign-Reversal Frequency (Post-rise)", 
+                 fontsize=14, fontweight="bold")
+    ax.legend(loc="best", fontsize=10)
+    ax.grid(True, alpha=0.3)
+    
+    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/03_post_rise_analysis/angular_velocity"
+    os.makedirs(save_dir, exist_ok=True)
+    
+    save_path = f"{save_dir}/switching_frequency.png"
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=100)
+    plt.close(fig)
