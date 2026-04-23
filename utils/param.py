@@ -106,6 +106,52 @@ def get_flag_use_brightness_data(day, default_flag=False):
         return default_flag
 
 
+def get_flag_use_manual_rise_time(day, default_flag=False):
+    config_dir = f"{input_dir_bef}/{day}/config.ini"
+    config = configparser.ConfigParser()
+    config.read(config_dir)
+
+    section = "RepellentResponse"
+    option = "flag_use_manual_rise_time"
+
+    if not config.has_section(section):
+        return default_flag
+    if not config.has_option(section, option):
+        return default_flag
+
+    try:
+        return config.getboolean(section, option)
+    except ValueError:
+        return default_flag
+
+
+def get_manual_rise_time_sec_config(day):
+    config_dir = f"{input_dir_bef}/{day}/config.ini"
+    config = configparser.ConfigParser()
+    config.read(config_dir)
+
+    section = "RepellentResponse"
+    option = "manual_rise_time_sec"
+
+    if not config.has_section(section):
+        return []
+    if not config.has_option(section, option):
+        return []
+
+    raw_value = config.get(section, option, fallback="").strip()
+    if raw_value == "":
+        return []
+
+    values = []
+    for item in raw_value.split(","):
+        item = item.strip()
+        if item == "":
+            continue
+        values.append(float(item))
+
+    return values
+
+
 # rotational analysis
 ## Determine the angle by the direction of the cell.
 # flag_get_angle_with_cell_direcetion = True

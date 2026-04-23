@@ -265,74 +265,76 @@ def get_background_intensity_time_series(day: str, roi_size: int = 10) -> List[L
     return background_list
 
 
-def calculate_angular_velocity_switching_frequency(
+def _count_sign_switches(values: np.ndarray) -> int:
+    sign_arr = np.sign(values)
+    sign_arr = sign_arr[np.isfinite(sign_arr)]
+    sign_arr = sign_arr[sign_arr != 0]
+
+    if sign_arr.size < 2:
+        return 0
+
+    return int(np.sum(np.diff(sign_arr) != 0))
+
+
+def calculate_angular_velocity_switching_count(
     time_list: Sequence[Sequence[float]],
     angular_velocity_list: Sequence[Sequence[float]],
-    window_width_sec: float = 2.0,
-    window_shift_sec: float = 0.5,
+    window_width_sec: float = 1.0,
 ) -> Tuple[List[List[float]], List[List[float]]]:
-    """Calculate sign-reversal frequency using sliding windows."""
+    """
+    Calculate sign-switching count in sliding windows.
+
+    - Use all-time angular velocity series.
+    - Window width is fixed in seconds.
+    - Window shift is 1 data point (i.e. 1 / FrameRate when sampling is regular).
+    - Each output time is the center time of the window.
+    """
     out_time: List[List[float]] = []
-    out_freq: List[List[float]] = []
+    out_count: List[List[float]] = []
 
     for time_arr, av_arr in zip(time_list, angular_velocity_list):
-        if len(time_arr) < 2 or len(av_arr) < 2:
-            out_time.append([])
-            out_freq.append([])
-            continue
-
         t = np.asarray(time_arr, dtype=float)
         av = np.asarray(av_arr, dtype=float)
 
         n = min(len(t), len(av))
         if n < 2:
             out_time.append([])
-            out_freq.append([])
+            out_count.append([])
             continue
 
         t = t[:n]
         av = av[:n]
 
         valid_mask = np.isfinite(t) & np.isfinite(av)
-        if np.sum(valid_mask) < 2:
-            out_time.append([])
-            out_freq.append([])
-            continue
-
         t = t[valid_mask]
         av = av[valid_mask]
 
-        if len(t) < 2 or len(av) < 2:
+        if len(t) < 2:
             out_time.append([])
-            out_freq.append([])
+            out_count.append([])
             continue
 
         w_times: List[float] = []
-        w_freqs: List[float] = []
+        w_counts: List[float] = []
 
-        t_start = float(t[0])
-        t_end = float(t[-1])
-        current_time = t_start
+        for start_idx in range(len(t)):
+            window_start = float(t[start_idx])
+            window_end = window_start + window_width_sec
+            window_mask = (t >= window_start) & (t <= window_end)
 
-        while current_time + window_width_sec <= t_end:
-            window_end = current_time + window_width_sec
-            window_mask = (t >= current_time) & (t <= window_end)
+            if np.sum(window_mask) < 2:
+                continue
 
-            if np.sum(window_mask) >= 2:
-                window_av = av[window_mask]
-                sign_changes = np.sum(np.diff(np.sign(window_av)) != 0)
-                frequency = float(sign_changes) / window_width_sec
+            window_av = av[window_mask]
+            switch_count = _count_sign_switches(window_av)
 
-                window_center_time = float(current_time + window_width_sec / 2.0)
-                w_times.append(window_center_time)
-                w_freqs.append(frequency)
-
-            current_time += window_shift_sec
+            w_times.append(window_start + window_width_sec / 2.0)
+            w_counts.append(float(switch_count))
 
         out_time.append(w_times)
-        out_freq.append(w_freqs)
+        out_count.append(w_counts)
 
-    return out_time, out_freq
+    return out_time, out_count
 
 
 def detect_rise_index(
@@ -1713,21 +1715,87 @@ def run_pre_rise_fluctuation(
     return valid_indices
 
 
-def add_rise_time_to_results(results: List[Dict[str, float]], time_list: Sequence[Sequence[float]]) -> None:
+def add_rise_time_to_results(
+    day: str,
+    results: List[Dict[str, float]],
+    time_list: Sequence[Sequence[float]],
+) -> None:
+    flag_use_manual_rise_time = param.get_flag_use_manual_rise_time(day, default_flag=False)
+
+    if flag_use_manual_rise_time:
+        manual_rise_time_list = param.get_manual_rise_time_sec_config(day)
+
+        if len(manual_rise_time_list) != len(results):
+            raise ValueError(
+                "Length mismatch: manual_rise_time_sec must have the same number of values "
+                f"as samples. manual={len(manual_rise_time_list)}, results={len(results)}"
+            )
+
+        for i, result in enumerate(results):
+            manual_rise_time = float(manual_rise_time_list[i])
+
+            if i >= len(time_list):
+                result["rise_index"] = np.nan
+                result["rise_time"] = manual_rise_time
+                continue
+
+            t = np.asarray(time_list[i], dtype=float)
+
+            if t.size == 0:
+                result["rise_index"] = np.nan
+                result["rise_time"] = manual_rise_time
+                continue
+
+            finite_idx = np.flatnonzero(np.isfinite(t))
+            if finite_idx.size == 0:
+                result["rise_index"] = np.nan
+                result["rise_time"] = manual_rise_time
+                continue
+
+            finite_t = t[finite_idx]
+            insert_pos = int(np.searchsorted(finite_t, manual_rise_time, side="left"))
+
+            if insert_pos >= finite_idx.size:
+                rise_idx = len(t)
+            else:
+                rise_idx = int(finite_idx[insert_pos])
+
+            result["rise_index"] = float(rise_idx)
+            result["rise_time"] = manual_rise_time
+            result["baseline_mean"] = np.nan
+            result["baseline_std"] = np.nan
+            result["threshold"] = np.nan
+            result["num_frames"] = float(len(t))
+            result["sample_no"] = float(i + 1)
+
+        return
+
     for i, result in enumerate(results):
+        if i >= len(time_list):
+            result["rise_time"] = np.nan
+            continue
+
+        t = np.asarray(time_list[i], dtype=float)
+        if t.size == 0:
+            result["rise_time"] = np.nan
+            continue
+
         rise_index = result.get("rise_index", np.nan)
-        if i >= len(time_list) or not np.isfinite(rise_index):
+        if rise_index is None or not np.isfinite(rise_index):
             result["rise_time"] = np.nan
             continue
-        time_arr = np.asarray(time_list[i], dtype=float)
-        if time_arr.size == 0:
+
+        rise_idx = int(rise_index)
+        if rise_idx < 0:
             result["rise_time"] = np.nan
             continue
-        idx = _normalize_rise_index(float(rise_index), time_arr.size)
-        if idx >= time_arr.size:
-            result["rise_time"] = np.nan
-        else:
-            result["rise_time"] = float(time_arr[idx])
+        if rise_idx >= len(t):
+            finite_t = t[np.isfinite(t)]
+            result["rise_time"] = float(finite_t[-1]) if finite_t.size > 0 else np.nan
+            continue
+
+        rise_time = t[rise_idx]
+        result["rise_time"] = float(rise_time) if np.isfinite(rise_time) else np.nan
 
 
 def ensure_time_list(day: str) -> List[List[float]]:

@@ -1674,36 +1674,60 @@ def plot_repellent_angular_velocity_onecol(time_list, angle_list, angular_veloci
     )
 
 
-def plot_angular_velocity_switching_frequency(
-    time_list: Sequence[Sequence[float]],
-    frequency_list: Sequence[Sequence[float]],
-    day: str,
-    sample_indices: Optional[Sequence[int]] = None,
-) -> None:
-    """Plot switching frequency time-series."""
-    if not time_list or not frequency_list:
-        return
-
+def plot_angular_velocity_switching_count(
+    time_list,
+    count_list,
+    day,
+    sample_indices=None,
+    rise_time_list=None,
+):
+    sample_num = len(time_list)
     if sample_indices is None:
-        sample_indices = list(range(1, len(time_list) + 1))
+        sample_indices = [i + 1 for i in range(sample_num)]
 
-    fig, ax = plt.subplots(figsize=(12, 6))
-
-    for idx, (t_series, f_series) in enumerate(zip(time_list, frequency_list)):
-        if len(t_series) > 0 and len(f_series) > 0:
-            sample_no = sample_indices[idx] if idx < len(sample_indices) else idx + 1
-            ax.plot(t_series, f_series, marker="o", markersize=4, label=f"No.{sample_no}", linewidth=2)
-
-    ax.set_xlabel("Time (s)", fontsize=12)
-    ax.set_ylabel("Sign Reversal Frequency (1/s)", fontsize=12)
-    ax.set_title("Angular Velocity Sign-Reversal Frequency (Post-rise)", fontsize=14, fontweight="bold")
-    ax.legend(loc="best", fontsize=10)
-    ax.grid(True, alpha=0.3)
-
-    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/03_post_rise_analysis/angular_velocity"
+    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/00_all_rotational_analysis/angular_velocity"
     os.makedirs(save_dir, exist_ok=True)
 
-    save_path = f"{save_dir}/switching_frequency.png"
-    fig.tight_layout()
-    fig.savefig(save_path, dpi=100)
+    cols = 2
+    rows = max(1, math.ceil(sample_num / cols))
+    fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y * rows / 5))
+    axs = np.atleast_2d(axs)
+
+    for i in range(rows * cols):
+        row = i // cols
+        col = i % cols
+
+        if i >= sample_num:
+            axs[row, col].axis("off")
+            continue
+
+        t = np.asarray(time_list[i], dtype=float)
+        c = np.asarray(count_list[i], dtype=float)
+        n = min(len(t), len(c))
+
+        if n == 0:
+            axs[row, col].axis("off")
+            continue
+
+        t = t[:n]
+        c = c[:n]
+
+        axs[row, col].plot(t, c)
+        axs[row, col].grid(True)
+        axs[row, col].set_title(f"Switching Count Time-series No.{sample_indices[i]}", fontsize=font_size)
+        axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
+        axs[row, col].set_ylabel("Switching Count [/1 s window]", fontsize=font_size)
+        axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
+
+        finite_t = t[np.isfinite(t)]
+        if finite_t.size > 0:
+            axs[row, col].set_xlim(0, finite_t[-1])
+
+        if rise_time_list is not None and i < len(rise_time_list):
+            rise_time = rise_time_list[i]
+            if rise_time is not None and np.isfinite(rise_time):
+                axs[row, col].axvline(rise_time, color="red", linestyle="--")
+
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/switching_count.png")
     plt.close(fig)

@@ -57,7 +57,7 @@ def main(
         sigma_threshold=sigma_threshold,
         min_consecutive=min_consecutive,
     )
-    repellent_response.add_rise_time_to_results(rise_results, time_list)
+    repellent_response.add_rise_time_to_results(day, rise_results, time_list)
     rise_indices = [result["rise_index"] for result in rise_results]
 
     save2csv.save_repellent_background_intensity(time_list, background_list, day)
@@ -137,6 +137,7 @@ def main(
             bg_for_av.append(background_list[idx])
         else:
             bg_for_av.append([])
+
     make_graph.plot_repellent_background_and_av_stacked(
         time_list=all_rot["time_list"],
         background_list=bg_for_av,
@@ -145,6 +146,38 @@ def main(
         sample_indices=[idx + 1 for idx in all_rot["valid_indices"]],
         rise_time_list=all_rise_time_for_av,
     )
+
+    switching_time_list, switching_count_list = repellent_response.calculate_angular_velocity_switching_count(
+        time_list=all_rot["time_list"],
+        angular_velocity_list=all_rot["angular_velocity_list"],
+        window_width_sec=1.0,
+    )
+    save2csv.save_angular_velocity_switching_count(
+        switching_time_list,
+        switching_count_list,
+        day,
+    )
+    make_graph.plot_angular_velocity_switching_count(
+        switching_time_list,
+        switching_count_list,
+        day,
+        sample_indices=[idx + 1 for idx in all_rot["valid_indices"]],
+        rise_time_list=all_rise_time_for_av,
+    )
+
+    legacy_switching_csv = (
+        f"{param.save_dir_bef}/{day}/repellent_response/03_post_rise_analysis/"
+        "angular_velocity/switching_frequency.csv"
+    )
+    legacy_switching_png = (
+        f"{param.save_dir_bef}/{day}/repellent_response/03_post_rise_analysis/"
+        "angular_velocity/switching_frequency.png"
+    )
+    if os.path.isfile(legacy_switching_csv):
+        os.remove(legacy_switching_csv)
+    if os.path.isfile(legacy_switching_png):
+        os.remove(legacy_switching_png)
+
     all_rise_time_for_centroid = [result.get("rise_time", float("nan")) for result in rise_results]
     make_graph.plot_repellent_component_panels(
         all_comp_time_list,
@@ -344,18 +377,6 @@ def main(
         day,
         "Centroid Corrected",
         "centroid_corrected.png",
-    )
-
-    # Calculate and plot angular velocity switching frequency
-    switching_time_list, switching_freq_list = repellent_response.calculate_angular_velocity_switching_frequency(
-        time_list=post_av_time_list,
-        angular_velocity_list=post_av_list,
-        window_width_sec=param.av_switching_window_width_sec,
-        window_shift_sec=param.av_switching_window_shift_sec,
-    )
-    save2csv.save_angular_velocity_switching_frequency(switching_time_list, switching_freq_list, day)
-    make_graph.plot_angular_velocity_switching_frequency(
-        switching_time_list, switching_freq_list, day, sample_indices=[idx + 1 for idx in all_rot["valid_indices"]]
     )
 
 
