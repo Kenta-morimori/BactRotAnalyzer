@@ -153,7 +153,7 @@ flag_eval_switching_with_averaged_av = False
 
 # Angular Velocity Switching Frequency Analysis (post-rise)
 av_switching_window_width_sec = 2.0  # Window width in seconds
-av_switching_window_shift_sec = 0.5   # Window shift step in seconds
+av_switching_window_shift_sec = 0.5  # Window shift step in seconds
 
 # Background ROI Configuration (repellent response)
 bg_roi_offset_um_downward = 10.0  # Downward offset from centroid in micrometers

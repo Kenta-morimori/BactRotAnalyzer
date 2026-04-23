@@ -203,7 +203,7 @@ def _load_brightness_data_mean_series(day: str, sample_name: str, target_len: Op
 
     df = pd.read_csv(csv_path)
 
-    required_columns = ['[inch]', 'Mean']
+    required_columns = ["[inch]", "Mean"]
     for col in required_columns:
         if col not in df.columns:
             raise ValueError(f"Required column '{col}' not found in {csv_path}")
@@ -245,8 +245,7 @@ def get_background_intensity_time_series(day: str, roi_size: int = 10) -> List[L
             continue
 
         frame_names = [
-            name for name in os.listdir(sample_dir)
-            if name.lower().endswith(".tif") or name.lower().endswith(".tiff")
+            name for name in os.listdir(sample_dir) if name.lower().endswith(".tif") or name.lower().endswith(".tiff")
         ]
         frame_names = sorted(frame_names, key=_safe_extract_number)
 

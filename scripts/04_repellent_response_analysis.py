@@ -353,12 +353,9 @@ def main(
         window_width_sec=param.av_switching_window_width_sec,
         window_shift_sec=param.av_switching_window_shift_sec,
     )
-    save2csv.save_angular_velocity_switching_frequency(
-        switching_time_list, switching_freq_list, day
-    )
+    save2csv.save_angular_velocity_switching_frequency(switching_time_list, switching_freq_list, day)
     make_graph.plot_angular_velocity_switching_frequency(
-        switching_time_list, switching_freq_list, day,
-        sample_indices=[idx + 1 for idx in all_rot["valid_indices"]]
+        switching_time_list, switching_freq_list, day, sample_indices=[idx + 1 for idx in all_rot["valid_indices"]]
     )
 
 
