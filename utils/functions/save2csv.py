@@ -1,6 +1,7 @@
 import csv
 import os
 from itertools import zip_longest
+from typing import Sequence
 
 import pandas as pd
 
