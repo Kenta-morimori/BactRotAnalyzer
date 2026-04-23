@@ -87,6 +87,25 @@ def get_tiffinfo_config(day):
     return items
 
 
+def get_flag_use_brightness_data(day, default_flag=False):
+    config_dir = f"{input_dir_bef}/{day}/config.ini"
+    config = configparser.ConfigParser()
+    config.read(config_dir)
+
+    section = "RepellentResponse"
+    option = "flag_use_brightness_data"
+
+    if not config.has_section(section):
+        return default_flag
+    if not config.has_option(section, option):
+        return default_flag
+
+    try:
+        return config.getboolean(section, option)
+    except ValueError:
+        return default_flag
+
+
 # rotational analysis
 ## Determine the angle by the direction of the cell.
 # flag_get_angle_with_cell_direcetion = True
