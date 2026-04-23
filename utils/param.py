@@ -19,6 +19,17 @@ def get_flag_use_tiff_log(day):
     return flag_use_tiff_log
 
 
+def get_flag_use_brightness_data(day, default_flag=False):
+    config_dir = f"{input_dir_bef}/{day}/config.ini"
+    config = configparser.ConfigParser()
+    config.read(config_dir)
+
+    try:
+        return config.getboolean("RepellentResponse", "flag_use_brightness_data")
+    except (configparser.NoSectionError, configparser.NoOptionError, ValueError):
+        return bool(default_flag)
+
+
 def get_config(day):
     config_dir = f"{input_dir_bef}/{day}/config.ini"
     config = configparser.ConfigParser()
