@@ -62,7 +62,7 @@ def main(
     make_graph.plot_repellent_background_intensity(time_list, background_list, rise_indices, day)
 
     # Build all-time centroid components once, then split into pre/post later.
-    post_rise_center_mode = param.get_post_rise_center_mode(day)
+    post_rise_center_mode = param.post_rise_center_mode
     all_comp_time_list, all_x_before_list, all_y_before_list = repellent_response.build_all_time_raw_centroid_series(
         day=day,
         time_list=time_list,

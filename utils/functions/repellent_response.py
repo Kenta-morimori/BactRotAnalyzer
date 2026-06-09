@@ -63,41 +63,6 @@ def _get_top_right_roi_mean(frame_arr: np.ndarray, roi_size: int = 10) -> float:
         frame_arr = frame_arr[..., 0]
 
     h, w = frame_arr.shape[:2]
-    roi_h = min(roi_size, h)
-    roi_w = min(roi_size, w)
-    if roi_h <= 0 or roi_w <= 0:
-        return np.nan
-
-    roi = frame_arr[:roi_h, w - roi_w : w]
-    return float(np.mean(roi))
-
-
-def _load_brightness_data_mean_series(
-    day: str,
-    sample_name: str,
-    ref_time_list: Sequence[float],
-) -> List[float]:
-    csv_path = f"{param.input_dir_bef}/{day}/brightness_data/{sample_name}.csv"
-    if not os.path.isfile(csv_path):
-        raise FileNotFoundError(f"brightness_data csv not found: {csv_path}")
-
-    df = pd.read_csv(csv_path)
-
-    if "Mean" not in df.columns:
-        raise KeyError(f"'Mean' column not found in {csv_path}")
-    if "[inch]" not in df.columns:
-        raise KeyError(f"'[inch]' column not found in {csv_path}")
-
-    mean_arr = pd.to_numeric(df["Mean"], errors="coerce").to_numpy(dtype=float)
-    n = min(len(mean_arr), len(ref_time_list))
-    return mean_arr[:n].tolist()
-
-
-def _get_top_right_roi_mean(frame_arr: np.ndarray, roi_size: int = 10) -> float:
-    if frame_arr.ndim >= 3:
-        frame_arr = frame_arr[..., 0]
-
-    h, w = frame_arr.shape[:2]
     if h <= 0 or w <= 0:
         return float(np.nan)
 
@@ -150,12 +115,12 @@ def get_background_intensity_time_series(day: str, roi_size: int = 10) -> List[L
             target_len = len(time_list[idx])
 
         if flag_use_brightness_data:
-            sample_bg = _load_brightness_data_mean_series(
+            brightness_bg = _load_brightness_data_mean_series(
                 day=day,
                 sample_name=sample_name,
                 target_len=target_len,
             )
-            background_list.append(sample_bg)
+            background_list.append(brightness_bg)
             continue
 
         sample_dir = os.path.join(tiff_root, sample_name)
@@ -168,18 +133,18 @@ def get_background_intensity_time_series(day: str, roi_size: int = 10) -> List[L
         ]
         frame_names = sorted(frame_names, key=_safe_extract_number)
 
-        sample_bg: List[float] = []
+        roi_bg: List[float] = []
         for frame_name in frame_names:
             frame_path = os.path.join(sample_dir, frame_name)
             with Image.open(frame_path) as img:
                 frame_arr = np.asarray(img)
 
-            sample_bg.append(_get_top_right_roi_mean(frame_arr, roi_size=roi_size))
+            roi_bg.append(_get_top_right_roi_mean(frame_arr, roi_size=roi_size))
 
         if target_len is not None:
-            sample_bg = sample_bg[: min(len(sample_bg), target_len)]
+            roi_bg = roi_bg[: min(len(roi_bg), target_len)]
 
-        background_list.append(sample_bg)
+        background_list.append(roi_bg)
 
     return background_list
 

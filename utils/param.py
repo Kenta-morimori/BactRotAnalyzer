@@ -39,27 +39,6 @@ def get_flag_use_brightness_data(day, default_flag=False):
         return bool(default_flag)
 
 
-def get_post_rise_center_mode(day, default_mode=2):
-    config = _read_config(day)
-    section = "RepellentResponse"
-    option = "post_rise_center_mode"
-
-    if not config.has_section(section):
-        return int(default_mode)
-    if not config.has_option(section, option):
-        return int(default_mode)
-
-    raw_value = config.get(section, option, fallback=str(default_mode))
-    try:
-        mode = int(raw_value)
-    except (ValueError, TypeError):
-        return int(default_mode)
-
-    if mode not in (1, 2, 3):
-        return int(default_mode)
-    return mode
-
-
 def get_config(day):
     config = _read_config(day)
     flag_use_tiff_log = get_flag_use_tiff_log(day)
@@ -203,6 +182,12 @@ av_switching_window_shift_sec = 0.5  # Window shift step in seconds
 
 # Background ROI Configuration (repellent response)
 bg_roi_offset_um_downward = 10.0  # Downward offset from centroid in micrometers
+
+# Repellent response post-rise center strategy.
+# 1: use rolling mean of the raw coordinates after rise
+# 2: use rolling median of the raw coordinates after rise
+# 3: use the constant post-rise mean center
+post_rise_center_mode = 2
 
 # fluctuation analysis
 # SD_window_width_list = [0.1, 0.5, 1.0]
