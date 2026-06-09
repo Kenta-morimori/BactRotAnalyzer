@@ -211,7 +211,17 @@ def get_ellipse_info(X, Y, index, day):
         x_freq_list, x_Amp_list = x_freq_list[x_mask], x_Amp_list[x_mask]
         y_freq_list, y_Amp_list = y_freq_list[y_mask], y_Amp_list[y_mask]
 
-        width_time = param.n_rotations / max(x_freq_list[np.argmax(x_Amp_list)], y_freq_list[np.argmax(y_Amp_list)])
+        peak_candidates = []
+        if x_freq_list.size > 0 and x_Amp_list.size > 0 and np.isfinite(x_Amp_list).any():
+            peak_candidates.append(float(x_freq_list[int(np.nanargmax(x_Amp_list))]))
+        if y_freq_list.size > 0 and y_Amp_list.size > 0 and np.isfinite(y_Amp_list).any():
+            peak_candidates.append(float(y_freq_list[int(np.nanargmax(y_Amp_list))]))
+        if peak_candidates:
+            peak_freq = max(peak_candidates)
+        else:
+            peak_freq = 0.1
+
+        width_time = param.n_rotations / max(peak_freq, 1e-6)
         print(f"No.{index + 1}   width_time: {width_time:.2f} s")
 
         start_time = 0.0

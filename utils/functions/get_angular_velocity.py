@@ -131,7 +131,10 @@ def get_angular_velocity(x_list, y_list, day):
             if flag_use_conts_width_time:
                 width_time = conts_width_time
             else:
-                width_time = param.n_rotations / freq_list[i][np.argmax(Amp_list[i])]
+                if len(freq_list[i]) == 0 or len(Amp_list[i]) == 0 or not np.isfinite(Amp_list[i]).any():
+                    width_time = conts_width_time
+                else:
+                    width_time = param.n_rotations / freq_list[i][int(np.nanargmax(Amp_list[i]))]
 
             add_angular_velocity_mean = []
             start_time = 0.0

@@ -25,9 +25,6 @@ def main(
     os.makedirs(f"{repellent_root}/02_pre_rise_fluctuation", exist_ok=True)
     os.makedirs(f"{repellent_root}/03_post_rise_analysis/centroid_coordinate", exist_ok=True)
 
-    # Default repellent dataset may not have config.ini; create a minimal one when missing.
-    repellent_response.ensure_repellent_config(day)
-
     # Keep time-list generation aligned with existing implementation.
     time_list = repellent_response.ensure_time_list(day)
     save2csv.save_repellent_time_list(time_list, day)
@@ -65,7 +62,7 @@ def main(
     make_graph.plot_repellent_background_intensity(time_list, background_list, rise_indices, day)
 
     # Build all-time centroid components once, then split into pre/post later.
-    post_rise_center_mode = repellent_response.get_post_rise_center_mode(day)
+    post_rise_center_mode = param.get_post_rise_center_mode(day)
     all_comp_time_list, all_x_before_list, all_y_before_list = repellent_response.build_all_time_raw_centroid_series(
         day=day,
         time_list=time_list,

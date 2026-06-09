@@ -9,32 +9,59 @@ input_dir_bef = f"{curr_dir}/data"
 save_dir_bef = f"{curr_dir}/outputs"
 
 
-def get_flag_use_tiff_log(day):
+def _read_config(day):
     config_dir = f"{input_dir_bef}/{day}/config.ini"
     config = configparser.ConfigParser()
     config.read(config_dir)
+    return config
 
+
+def get_flag_use_tiff_log(day):
+    config = _read_config(day)
     flag_use_tiff_log = config.getboolean("Settings", "flag_use_tiff_log")
 
     return flag_use_tiff_log
 
 
 def get_flag_use_brightness_data(day, default_flag=False):
-    config_dir = f"{input_dir_bef}/{day}/config.ini"
-    config = configparser.ConfigParser()
-    config.read(config_dir)
+    config = _read_config(day)
+    section = "RepellentResponse"
+    option = "flag_use_brightness_data"
+
+    if not config.has_section(section):
+        return bool(default_flag)
+    if not config.has_option(section, option):
+        return bool(default_flag)
 
     try:
-        return config.getboolean("RepellentResponse", "flag_use_brightness_data")
-    except (configparser.NoSectionError, configparser.NoOptionError, ValueError):
+        return config.getboolean(section, option)
+    except ValueError:
         return bool(default_flag)
 
 
-def get_config(day):
-    config_dir = f"{input_dir_bef}/{day}/config.ini"
-    config = configparser.ConfigParser()
-    config.read(config_dir)
+def get_post_rise_center_mode(day, default_mode=2):
+    config = _read_config(day)
+    section = "RepellentResponse"
+    option = "post_rise_center_mode"
 
+    if not config.has_section(section):
+        return int(default_mode)
+    if not config.has_option(section, option):
+        return int(default_mode)
+
+    raw_value = config.get(section, option, fallback=str(default_mode))
+    try:
+        mode = int(raw_value)
+    except (ValueError, TypeError):
+        return int(default_mode)
+
+    if mode not in (1, 2, 3):
+        return int(default_mode)
+    return mode
+
+
+def get_config(day):
+    config = _read_config(day)
     flag_use_tiff_log = get_flag_use_tiff_log(day)
     sample_num = config.getint("Settings", "sample_num")
     # Frame Rate, Total Time
@@ -63,9 +90,7 @@ def get_config(day):
 
 
 def get_px2um_config(day):
-    config_dir = f"{input_dir_bef}/{day}/config.ini"
-    config = configparser.ConfigParser()
-    config.read(config_dir)
+    config = _read_config(day)
     try:
         px2um_x = config.getfloat("Settings", "px2um_x")
     except (ValueError, TypeError):
@@ -78,38 +103,15 @@ def get_px2um_config(day):
 
 
 def get_tiffinfo_config(day):
-    config_dir = f"{input_dir_bef}/{day}/config.ini"
-    config = configparser.ConfigParser()
-    config.read(config_dir)
+    config = _read_config(day)
 
     items = config["Tiff_info"]["tiff_data"].split(", ")
 
     return items
 
 
-def get_flag_use_brightness_data(day, default_flag=False):
-    config_dir = f"{input_dir_bef}/{day}/config.ini"
-    config = configparser.ConfigParser()
-    config.read(config_dir)
-
-    section = "RepellentResponse"
-    option = "flag_use_brightness_data"
-
-    if not config.has_section(section):
-        return default_flag
-    if not config.has_option(section, option):
-        return default_flag
-
-    try:
-        return config.getboolean(section, option)
-    except ValueError:
-        return default_flag
-
-
 def get_flag_use_manual_rise_time(day, default_flag=False):
-    config_dir = f"{input_dir_bef}/{day}/config.ini"
-    config = configparser.ConfigParser()
-    config.read(config_dir)
+    config = _read_config(day)
 
     section = "RepellentResponse"
     option = "flag_use_manual_rise_time"
@@ -126,9 +128,7 @@ def get_flag_use_manual_rise_time(day, default_flag=False):
 
 
 def get_manual_rise_time_sec_config(day):
-    config_dir = f"{input_dir_bef}/{day}/config.ini"
-    config = configparser.ConfigParser()
-    config.read(config_dir)
+    config = _read_config(day)
 
     section = "RepellentResponse"
     option = "manual_rise_time_sec"

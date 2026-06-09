@@ -1,7 +1,5 @@
 import math
 import os
-from typing import Optional, Sequence
-
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
@@ -20,6 +18,14 @@ from utils.functions import (
 font_size = 20
 fig_size_x = 20
 fig_size_y = 23
+
+
+def _set_log_y_if_positive(ax, *series) -> None:
+    for values in series:
+        arr = np.asarray(values, dtype=float)
+        if np.any(np.isfinite(arr) & (arr > 0)):
+            ax.set_yscale("log")
+            return
 
 
 def plot_coordinate(x_list, y_list, day, mode):
@@ -528,8 +534,7 @@ def plot_fft(freq_list, Amp_list, save_dir, save_name, day, flag_add_peak=False)
         axs[row, col].set_xlabel("Frequency [Hz]", fontsize=font_size)
         axs[row, col].set_ylabel("Amp", fontsize=font_size)
         # axs[row, col].set_xscale("log")
-        if np.any(np.isfinite(amp_arr) & (amp_arr > 0)):
-            axs[row, col].set_yscale("log")
+        _set_log_y_if_positive(axs[row, col], amp_arr)
         axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
     plt.tight_layout()
     plt.savefig(f"{save_dir}/{save_name}")
@@ -675,7 +680,7 @@ def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
             axs[row, col].set_xlabel("Freqency [Hz]", fontsize=font_size)
             axs[row, col].set_ylabel("Amp", fontsize=font_size)
             # axs[row, col].set_xscale("log")
-            axs[row, col].set_yscale("log")
+            _set_log_y_if_positive(axs[row, col], Amp_list[j][i])
             axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
         plt.tight_layout()
         if flag_std:
@@ -706,7 +711,7 @@ def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
             axs[row, col].set_xlabel("Freqency [Hz]", fontsize=font_size)
             axs[row, col].set_ylabel("Amp", fontsize=font_size)
             # axs[row, col].set_xscale("log")
-            axs[row, col].set_yscale("log")
+            _set_log_y_if_positive(axs[row, col], Amp_list[j][i])
             axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
         axs[-1][-1].legend(plot_label_list, loc="upper left", bbox_to_anchor=(1, 1))
     plt.tight_layout()
@@ -1079,7 +1084,7 @@ def dev_plot_sd_FFT_with_rotation(freq_list, Amp_list, day):
         axs[row, col].set_xlabel("Freqency [Hz]", fontsize=font_size)
         axs[row, col].set_ylabel("Amp", fontsize=font_size)
         # axs[row, col].set_xscale("log")
-        axs[row, col].set_yscale("log")
+        _set_log_y_if_positive(axs[row, col], av_Amp_list[j], *[Amp_list[j][i] for i in range(len(width_time_list))])
         axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
 
     # SD
@@ -1108,10 +1113,22 @@ def dev_plot_fft_coordinates(X, Y, day):
     for i in range(sample_num):
         x_freq_list, x_Amp_list = frequency_analysis.fft(X[i], 1 / FrameRate[i])
         y_freq_list, y_Amp_list = frequency_analysis.fft(Y[i], 1 / FrameRate[i])
-        peak = max(x_freq_list[np.argmax(x_Amp_list)], y_freq_list[np.argmax(y_Amp_list)])
+        peak_candidates = []
+        if x_freq_list.size > 0 and x_Amp_list.size > 0 and np.isfinite(x_Amp_list).any():
+            peak_candidates.append(float(x_freq_list[int(np.nanargmax(x_Amp_list))]))
+        if y_freq_list.size > 0 and y_Amp_list.size > 0 and np.isfinite(y_Amp_list).any():
+            peak_candidates.append(float(y_freq_list[int(np.nanargmax(y_Amp_list))]))
+        if peak_candidates:
+            peak = max(peak_candidates)
+        else:
+            peak = 0.1
 
         row = i // cols
         col = i % cols
+        if x_freq_list.size == 0 or y_freq_list.size == 0:
+            axs[row, 2 * col].axis("off")
+            axs[row, 2 * col + 1].axis("off")
+            continue
         axs[row, 2 * col].plot(x_freq_list, x_Amp_list)
         axs[row, 2 * col + 1].plot(y_freq_list, y_Amp_list)
         axs[row, 2 * col].set_xlim(0, x_freq_list[-1])
@@ -1126,7 +1143,7 @@ def dev_plot_fft_coordinates(X, Y, day):
             )
             axs[row, 2 * col + j].set_xlabel("Freqency [Hz]", fontsize=font_size)
             axs[row, 2 * col + j].set_ylabel("Amp", fontsize=font_size)
-            axs[row, 2 * col + j].set_yscale("log")
+            _set_log_y_if_positive(axs[row, 2 * col + j], x_Amp_list if j == 0 else y_Amp_list)
             axs[row, 2 * col + j].tick_params(axis="both", which="major", labelsize=font_size)
     plt.tight_layout()
     plt.savefig(f"{save_dir}/{save_name}")

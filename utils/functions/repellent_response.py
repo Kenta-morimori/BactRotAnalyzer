@@ -58,60 +58,6 @@ def get_tiff_sample_names(day: str) -> List[str]:
     return sorted([name for name in os.listdir(tiff_root) if os.path.isdir(os.path.join(tiff_root, name))])
 
 
-def ensure_repellent_config(day: str, default_frame_rate: float = 200.0, default_px2um: float = 1.0) -> str:
-    config_path = f"{param.input_dir_bef}/{day}/config.ini"
-
-    cfg = configparser.ConfigParser()
-    changed = False
-
-    if os.path.isfile(config_path):
-        cfg.read(config_path)
-    else:
-        input_dir = f"{param.input_dir_bef}/{day}"
-        avi_names = sorted([name for name in os.listdir(input_dir) if name.lower().endswith(".avi")])
-        sample_num = len(avi_names)
-        if sample_num == 0:
-            raise FileNotFoundError(f"No .avi file found in {input_dir}")
-
-        tiff_names = get_tiff_sample_names(day)
-        if len(tiff_names) == 0:
-            raise FileNotFoundError(f"No tiff sample directory found in {input_dir}/tiff_data")
-
-        if len(tiff_names) < sample_num:
-            tiff_names = tiff_names + [tiff_names[-1]] * (sample_num - len(tiff_names))
-        else:
-            tiff_names = tiff_names[:sample_num]
-
-        cfg["Settings"] = {
-            "sample_num": str(sample_num),
-            "FrameRate": str(default_frame_rate),
-            "total_time": "1",
-            "flag_use_tiff_log": "True",
-            "px2um_x": str(default_px2um),
-            "px2um_y": str(default_px2um),
-        }
-        cfg["Tiff_info"] = {"tiff_data": ", ".join(tiff_names)}
-        changed = True
-
-    if not cfg.has_section("RepellentResponse"):
-        cfg.add_section("RepellentResponse")
-        changed = True
-
-    if not cfg.has_option("RepellentResponse", "post_rise_center_mode"):
-        cfg.set("RepellentResponse", "post_rise_center_mode", "2")
-        changed = True
-
-    if not cfg.has_option("RepellentResponse", "flag_use_brightness_data"):
-        cfg.set("RepellentResponse", "flag_use_brightness_data", "False")
-        changed = True
-
-    if changed:
-        with open(config_path, "w", encoding="utf-8") as fp:
-            cfg.write(fp)
-
-    return config_path
-
-
 def _get_top_right_roi_mean(frame_arr: np.ndarray, roi_size: int = 10) -> float:
     if frame_arr.ndim >= 3:
         frame_arr = frame_arr[..., 0]
@@ -145,37 +91,6 @@ def _load_brightness_data_mean_series(
     mean_arr = pd.to_numeric(df["Mean"], errors="coerce").to_numpy(dtype=float)
     n = min(len(mean_arr), len(ref_time_list))
     return mean_arr[:n].tolist()
-
-
-def get_post_rise_center_mode(day: str, default_mode: int = 2) -> int:
-    config_path = f"{param.input_dir_bef}/{day}/config.ini"
-    cfg = configparser.ConfigParser()
-    cfg.read(config_path)
-
-    section = "RepellentResponse"
-    changed = False
-    if not cfg.has_section(section):
-        cfg.add_section(section)
-        changed = True
-    if not cfg.has_option(section, "post_rise_center_mode"):
-        cfg.set(section, "post_rise_center_mode", str(default_mode))
-        changed = True
-
-    raw_mode = cfg.get(section, "post_rise_center_mode", fallback=str(default_mode))
-    try:
-        mode = int(raw_mode)
-    except (ValueError, TypeError):
-        mode = int(default_mode)
-    if mode not in (1, 2, 3):
-        mode = int(default_mode)
-    if cfg.get(section, "post_rise_center_mode", fallback="") != str(mode):
-        cfg.set(section, "post_rise_center_mode", str(mode))
-        changed = True
-
-    if changed:
-        with open(config_path, "w", encoding="utf-8") as fp:
-            cfg.write(fp)
-    return mode
 
 
 def _get_top_right_roi_mean(frame_arr: np.ndarray, roi_size: int = 10) -> float:
@@ -219,9 +134,13 @@ def _load_brightness_data_mean_series(day: str, sample_name: str, target_len: Op
 def get_background_intensity_time_series(day: str, roi_size: int = 10) -> List[List[float]]:
     """Extract background intensity from brightness_data CSV or top-right fixed ROI."""
     tiff_root = f"{param.input_dir_bef}/{day}/tiff_data"
+    brightness_root = f"{param.input_dir_bef}/{day}/brightness_data"
     sample_names = get_tiff_sample_names(day)
     time_list = ensure_time_list(day)
     flag_use_brightness_data = param.get_flag_use_brightness_data(day, default_flag=False)
+
+    if flag_use_brightness_data and not os.path.isdir(brightness_root):
+        raise FileNotFoundError(f"brightness_data directory not found: {brightness_root}")
 
     background_list: List[List[float]] = []
 
