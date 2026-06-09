@@ -2,6 +2,7 @@ import argparse
 import os
 import subprocess
 import sys
+from typing import Optional
 
 os.environ.setdefault("MPLBACKEND", "Agg")
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
@@ -16,7 +17,14 @@ def main(
     baseline_ratio: float,
     sigma_threshold: float,
     min_consecutive: int,
+    post_rise_center_mode: int,
+    output_suffix: Optional[str],
 ):
+    base_save_dir = param.save_dir_bef
+    if output_suffix is not None and output_suffix != "":
+        param.save_dir_bef = f"{base_save_dir}/{output_suffix}"
+    param.post_rise_center_mode = post_rise_center_mode
+
     repellent_root = f"{param.save_dir_bef}/{day}/repellent_response"
     repellent_response.cleanup_legacy_repellent_outputs(day)
     os.makedirs(f"{repellent_root}/00_all_rotational_analysis", exist_ok=True)
@@ -32,17 +40,22 @@ def main(
 
     # Reuse existing centroid / angular-velocity pipeline.
     centroid_csv = f"{param.save_dir_bef}/{day}/centroid_coordinate.csv"
+    base_centroid_csv = f"{base_save_dir}/{day}/centroid_coordinate.csv"
     if not os.path.isfile(centroid_csv):
-        try:
-            script_path = os.path.join(
-                os.path.dirname(os.path.dirname(__file__)),
-                "utils",
-                "functions",
-                "get_centroid_coordinate.py",
-            )
-            subprocess.run([sys.executable, script_path, day], check=True)
-        except subprocess.CalledProcessError:
-            repellent_response.generate_centroid_coordinate_simple(day)
+        if os.path.isfile(base_centroid_csv):
+            os.makedirs(os.path.dirname(centroid_csv), exist_ok=True)
+            subprocess.run(["cp", base_centroid_csv, centroid_csv], check=True)
+        else:
+            try:
+                script_path = os.path.join(
+                    os.path.dirname(os.path.dirname(__file__)),
+                    "utils",
+                    "functions",
+                    "get_centroid_coordinate.py",
+                )
+                subprocess.run([sys.executable, script_path, day], check=True)
+            except subprocess.CalledProcessError:
+                repellent_response.generate_centroid_coordinate_simple(day)
     x_list, y_list = input_data.input_centroid_coordinate(day)
     x_list, y_list = repellent_response.align_coordinate_series_to_time(x_list, y_list, time_list)
 
@@ -62,7 +75,6 @@ def main(
     make_graph.plot_repellent_background_intensity(time_list, background_list, rise_indices, day)
 
     # Build all-time centroid components once, then split into pre/post later.
-    post_rise_center_mode = param.post_rise_center_mode
     all_comp_time_list, all_x_before_list, all_y_before_list = repellent_response.build_all_time_raw_centroid_series(
         day=day,
         time_list=time_list,
@@ -384,6 +396,8 @@ if __name__ == "__main__":
     parser.add_argument("--baseline-ratio", type=float, default=0.5)
     parser.add_argument("--sigma-threshold", type=float, default=3.0)
     parser.add_argument("--min-consecutive", type=int, default=3)
+    parser.add_argument("--post-rise-center-mode", type=int, choices=[1, 2, 3], default=param.post_rise_center_mode)
+    parser.add_argument("--output-suffix", type=str, default=None)
 
     args = parser.parse_args()
 
@@ -392,4 +406,6 @@ if __name__ == "__main__":
         baseline_ratio=args.baseline_ratio,
         sigma_threshold=args.sigma_threshold,
         min_consecutive=args.min_consecutive,
+        post_rise_center_mode=args.post_rise_center_mode,
+        output_suffix=args.output_suffix,
     )

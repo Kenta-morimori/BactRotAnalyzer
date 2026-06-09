@@ -139,9 +139,17 @@ def calculate_ellipse_properties(X, Y):
     X = np.asarray(X, dtype=np.float64)
     Y = np.asarray(Y, dtype=np.float64)
 
+    if X.size < 5 or Y.size < 5:
+        return np.nan, np.nan, np.nan, np.nan, True
+    if not np.isfinite(X).any() or not np.isfinite(Y).any():
+        return np.nan, np.nan, np.nan, np.nan, True
+
     A = np.hstack([X**2, X * Y, Y**2, X, Y])
     b = np.ones_like(X)
-    x_arr = np.linalg.lstsq(A, b, rcond=None)[0].squeeze()
+    try:
+        x_arr = np.linalg.lstsq(A, b, rcond=None)[0].squeeze()
+    except np.linalg.LinAlgError:
+        return np.nan, np.nan, np.nan, np.nan, True
     x = x_arr.tolist()
     flag_Warning = False
 
