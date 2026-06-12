@@ -1501,8 +1501,6 @@ def plot_repellent_component_panels(
     cols = 3  # x-y, x-t, y-t
     fig, axs = plt.subplots(rows, cols, figsize=(3 * fig_size_x / 2, max(6, rows * 4)))
     axs = np.atleast_2d(axs)
-    if rows == 1:
-        axs = np.array([axs])
 
     for i in range(rows):
         x_arr = np.asarray(x_list[i], dtype=float)
