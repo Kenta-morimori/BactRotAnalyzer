@@ -1072,7 +1072,6 @@ def dev_plot_sd_FFT_with_rotation(freq_list, Amp_list, day):
     fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y + 2))
     axs = np.atleast_2d(axs)
     # fig, axs = plt.subplots(5, sample_num // 5, figsize=(15, 23))
-    axs = np.atleast_2d(axs)
     # Angular Velocisy
     for j in range(sample_num):
         row = j // cols
