@@ -45,6 +45,7 @@ def main(
         if os.path.isfile(base_centroid_csv):
             os.makedirs(os.path.dirname(centroid_csv), exist_ok=True)
             import shutil
+
             shutil.copy2(base_centroid_csv, centroid_csv)
         else:
             try:
