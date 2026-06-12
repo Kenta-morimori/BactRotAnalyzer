@@ -126,7 +126,10 @@ def get_manual_rise_time_sec_config(day):
         item = item.strip()
         if item == "":
             continue
-        values.append(float(item))
+        try:
+            values.append(float(item))
+        except ValueError as exc:
+            raise ValueError(f"Invalid float in {section}.{option}: '{item}'") from exc
 
     return values
 
