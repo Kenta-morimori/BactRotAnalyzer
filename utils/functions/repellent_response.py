@@ -201,20 +201,24 @@ def calculate_angular_velocity_switching_count(
         w_times: List[float] = []
         w_counts: List[float] = []
 
-        for start_idx in range(len(t)):
+        end_idx = 1
+        for start_idx in range(len(t) - 1):
             window_start = float(t[start_idx])
             window_end = window_start + window_width_sec
-            window_mask = (t >= window_start) & (t <= window_end)
 
-            if np.sum(window_mask) < 2:
+            if end_idx < start_idx + 1:
+                end_idx = start_idx + 1
+            while end_idx < len(t) and t[end_idx] <= window_end:
+                end_idx += 1
+
+            if end_idx - start_idx < 2:
                 continue
 
-            window_av = av[window_mask]
+            window_av = av[start_idx:end_idx]
             switch_count = _count_sign_switches(window_av)
 
             w_times.append(window_start + window_width_sec / 2.0)
             w_counts.append(float(switch_count))
-
         out_time.append(w_times)
         out_count.append(w_counts)
 
