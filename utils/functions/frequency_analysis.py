@@ -5,7 +5,12 @@ from utils.functions import get_angular_velocity, make_graph, save2csv
 
 
 def fft(data_bef, dt):
-    data_aft = np.array(data_bef) - np.average(np.array(data_bef))
+    data_arr = np.asarray(data_bef, dtype=float)
+    if data_arr.size == 0 or not np.isfinite(data_arr).any():
+        empty = np.asarray([], dtype=float)
+        return empty, empty
+
+    data_aft = data_arr - np.nanmean(data_arr)
     N = len(data_aft)
     # FFT
     F = np.fft.fft(data_aft)

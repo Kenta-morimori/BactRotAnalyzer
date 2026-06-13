@@ -58,83 +58,71 @@ def get_tiff_sample_names(day: str) -> List[str]:
     return sorted([name for name in os.listdir(tiff_root) if os.path.isdir(os.path.join(tiff_root, name))])
 
 
-def ensure_repellent_config(day: str, default_frame_rate: float = 200.0, default_px2um: float = 1.0) -> str:
-    config_path = f"{param.input_dir_bef}/{day}/config.ini"
+def _get_top_right_roi_mean(frame_arr: np.ndarray, roi_size: int = 10) -> float:
+    if frame_arr.ndim >= 3:
+        frame_arr = frame_arr[..., 0]
 
-    cfg = configparser.ConfigParser()
-    if os.path.isfile(config_path):
-        cfg.read(config_path)
-        if cfg.has_section("Settings") and cfg.has_section("Tiff_info"):
-            return config_path
+    h, w = frame_arr.shape[:2]
+    if h <= 0 or w <= 0:
+        return float(np.nan)
 
-    input_dir = f"{param.input_dir_bef}/{day}"
-    avi_names = sorted([name for name in os.listdir(input_dir) if name.lower().endswith(".avi")])
-    sample_num = len(avi_names)
-    if sample_num == 0:
-        raise FileNotFoundError(f"No .avi file found in {input_dir}")
+    roi_h = min(roi_size, h)
+    roi_w = min(roi_size, w)
+    roi = frame_arr[:roi_h, w - roi_w : w]
 
-    tiff_names = get_tiff_sample_names(day)
-    if len(tiff_names) == 0:
-        raise FileNotFoundError(f"No tiff sample directory found in {input_dir}/tiff_data")
+    if roi.size == 0:
+        return float(np.nan)
 
-    if len(tiff_names) < sample_num:
-        tiff_names = tiff_names + [tiff_names[-1]] * (sample_num - len(tiff_names))
-    else:
-        tiff_names = tiff_names[:sample_num]
-
-    cfg = configparser.ConfigParser()
-    cfg["Settings"] = {
-        "sample_num": str(sample_num),
-        "FrameRate": str(default_frame_rate),
-        "total_time": "1",
-        "flag_use_tiff_log": "True",
-        "px2um_x": str(default_px2um),
-        "px2um_y": str(default_px2um),
-    }
-    cfg["Tiff_info"] = {"tiff_data": ", ".join(tiff_names)}
-    cfg["RepellentResponse"] = {"post_rise_center_mode": "2"}
-    with open(config_path, "w", encoding="utf-8") as fp:
-        cfg.write(fp)
-    return config_path
+    return float(np.mean(roi))
 
 
-def get_post_rise_center_mode(day: str, default_mode: int = 2) -> int:
-    config_path = f"{param.input_dir_bef}/{day}/config.ini"
-    cfg = configparser.ConfigParser()
-    cfg.read(config_path)
+def _load_brightness_data_mean_series(day: str, sample_name: str, target_len: Optional[int] = None) -> List[float]:
+    csv_path = f"{param.input_dir_bef}/{day}/brightness_data/{sample_name}.csv"
+    if not os.path.isfile(csv_path):
+        raise FileNotFoundError(f"brightness_data csv not found: {csv_path}")
 
-    section = "RepellentResponse"
-    changed = False
-    if not cfg.has_section(section):
-        cfg.add_section(section)
-        changed = True
-    if not cfg.has_option(section, "post_rise_center_mode"):
-        cfg.set(section, "post_rise_center_mode", str(default_mode))
-        changed = True
+    df = pd.read_csv(csv_path)
 
-    raw_mode = cfg.get(section, "post_rise_center_mode", fallback=str(default_mode))
-    try:
-        mode = int(raw_mode)
-    except (ValueError, TypeError):
-        mode = int(default_mode)
-    if mode not in (1, 2, 3):
-        mode = int(default_mode)
-    if cfg.get(section, "post_rise_center_mode", fallback="") != str(mode):
-        cfg.set(section, "post_rise_center_mode", str(mode))
-        changed = True
+    required_columns = ["[inch]", "Mean"]
+    for col in required_columns:
+        if col not in df.columns:
+            raise ValueError(f"Required column '{col}' not found in {csv_path}")
 
-    if changed:
-        with open(config_path, "w", encoding="utf-8") as fp:
-            cfg.write(fp)
-    return mode
+    mean_arr = pd.to_numeric(df["Mean"], errors="coerce").to_numpy(dtype=float)
+
+    if target_len is not None:
+        mean_arr = mean_arr[: min(len(mean_arr), target_len)]
+
+    return mean_arr.tolist()
 
 
 def get_background_intensity_time_series(day: str, roi_size: int = 10) -> List[List[float]]:
+    """Extract background intensity from brightness_data CSV or top-right fixed ROI."""
     tiff_root = f"{param.input_dir_bef}/{day}/tiff_data"
+    brightness_root = f"{param.input_dir_bef}/{day}/brightness_data"
     sample_names = get_tiff_sample_names(day)
+    time_list = ensure_time_list(day)
+    flag_use_brightness_data = param.get_flag_use_brightness_data(day, default_flag=False)
+
+    if flag_use_brightness_data and not os.path.isdir(brightness_root):
+        raise FileNotFoundError(f"brightness_data directory not found: {brightness_root}")
+
     background_list: List[List[float]] = []
 
-    for sample_name in sample_names:
+    for idx, sample_name in enumerate(sample_names):
+        target_len: Optional[int] = None
+        if idx < len(time_list):
+            target_len = len(time_list[idx])
+
+        if flag_use_brightness_data:
+            brightness_bg = _load_brightness_data_mean_series(
+                day=day,
+                sample_name=sample_name,
+                target_len=target_len,
+            )
+            background_list.append(brightness_bg)
+            continue
+
         sample_dir = os.path.join(tiff_root, sample_name)
         if not os.path.isdir(sample_dir):
             background_list.append([])
@@ -145,20 +133,96 @@ def get_background_intensity_time_series(day: str, roi_size: int = 10) -> List[L
         ]
         frame_names = sorted(frame_names, key=_safe_extract_number)
 
-        sample_bg: List[float] = []
+        roi_bg: List[float] = []
         for frame_name in frame_names:
             frame_path = os.path.join(sample_dir, frame_name)
             with Image.open(frame_path) as img:
                 frame_arr = np.asarray(img)
-            if frame_arr.ndim >= 3:
-                frame_arr = frame_arr[..., 0]
-            h, w = frame_arr.shape[:2]
-            roi_h = min(roi_size, h)
-            roi_w = min(roi_size, w)
-            roi = frame_arr[:roi_h, w - roi_w : w]
-            sample_bg.append(float(np.mean(roi)))
-        background_list.append(sample_bg)
+
+            roi_bg.append(_get_top_right_roi_mean(frame_arr, roi_size=roi_size))
+
+        if target_len is not None:
+            roi_bg = roi_bg[: min(len(roi_bg), target_len)]
+
+        background_list.append(roi_bg)
+
     return background_list
+
+
+def _count_sign_switches(values: np.ndarray) -> int:
+    sign_arr = np.sign(values)
+    sign_arr = sign_arr[np.isfinite(sign_arr)]
+    sign_arr = sign_arr[sign_arr != 0]
+
+    if sign_arr.size < 2:
+        return 0
+
+    return int(np.sum(np.diff(sign_arr) != 0))
+
+
+def calculate_angular_velocity_switching_count(
+    time_list: Sequence[Sequence[float]],
+    angular_velocity_list: Sequence[Sequence[float]],
+    window_width_sec: float = 1.0,
+) -> Tuple[List[List[float]], List[List[float]]]:
+    """
+    Calculate sign-switching count in sliding windows.
+
+    - Use all-time angular velocity series.
+    - Window width is fixed in seconds.
+    - Window shift is 1 data point (i.e. 1 / FrameRate when sampling is regular).
+    - Each output time is the center time of the window.
+    """
+    out_time: List[List[float]] = []
+    out_count: List[List[float]] = []
+
+    for time_arr, av_arr in zip(time_list, angular_velocity_list):
+        t = np.asarray(time_arr, dtype=float)
+        av = np.asarray(av_arr, dtype=float)
+
+        n = min(len(t), len(av))
+        if n < 2:
+            out_time.append([])
+            out_count.append([])
+            continue
+
+        t = t[:n]
+        av = av[:n]
+
+        valid_mask = np.isfinite(t) & np.isfinite(av)
+        t = t[valid_mask]
+        av = av[valid_mask]
+
+        if len(t) < 2:
+            out_time.append([])
+            out_count.append([])
+            continue
+
+        w_times: List[float] = []
+        w_counts: List[float] = []
+
+        end_idx = 1
+        for start_idx in range(len(t) - 1):
+            window_start = float(t[start_idx])
+            window_end = window_start + window_width_sec
+
+            if end_idx < start_idx + 1:
+                end_idx = start_idx + 1
+            while end_idx < len(t) and t[end_idx] <= window_end:
+                end_idx += 1
+
+            if end_idx - start_idx < 2:
+                continue
+
+            window_av = av[start_idx:end_idx]
+            switch_count = _count_sign_switches(window_av)
+
+            w_times.append(window_start + window_width_sec / 2.0)
+            w_counts.append(float(switch_count))
+        out_time.append(w_times)
+        out_count.append(w_counts)
+
+    return out_time, out_count
 
 
 def detect_rise_index(
@@ -1539,21 +1603,87 @@ def run_pre_rise_fluctuation(
     return valid_indices
 
 
-def add_rise_time_to_results(results: List[Dict[str, float]], time_list: Sequence[Sequence[float]]) -> None:
+def add_rise_time_to_results(
+    day: str,
+    results: List[Dict[str, float]],
+    time_list: Sequence[Sequence[float]],
+) -> None:
+    flag_use_manual_rise_time = param.get_flag_use_manual_rise_time(day, default_flag=False)
+
+    if flag_use_manual_rise_time:
+        manual_rise_time_list = param.get_manual_rise_time_sec_config(day)
+
+        if len(manual_rise_time_list) != len(results):
+            raise ValueError(
+                "Length mismatch: manual_rise_time_sec must have the same number of values "
+                f"as samples. manual={len(manual_rise_time_list)}, results={len(results)}"
+            )
+
+        for i, result in enumerate(results):
+            manual_rise_time = float(manual_rise_time_list[i])
+
+            if i >= len(time_list):
+                result["rise_index"] = np.nan
+                result["rise_time"] = manual_rise_time
+                continue
+
+            t = np.asarray(time_list[i], dtype=float)
+
+            if t.size == 0:
+                result["rise_index"] = np.nan
+                result["rise_time"] = manual_rise_time
+                continue
+
+            finite_idx = np.flatnonzero(np.isfinite(t))
+            if finite_idx.size == 0:
+                result["rise_index"] = np.nan
+                result["rise_time"] = manual_rise_time
+                continue
+
+            finite_t = t[finite_idx]
+            insert_pos = int(np.searchsorted(finite_t, manual_rise_time, side="left"))
+
+            if insert_pos >= finite_idx.size:
+                rise_idx = len(t)
+            else:
+                rise_idx = int(finite_idx[insert_pos])
+
+            result["rise_index"] = float(rise_idx)
+            result["rise_time"] = manual_rise_time
+            result["baseline_mean"] = np.nan
+            result["baseline_std"] = np.nan
+            result["threshold"] = np.nan
+            result["num_frames"] = float(len(t))
+            result["sample_no"] = float(i + 1)
+
+        return
+
     for i, result in enumerate(results):
+        if i >= len(time_list):
+            result["rise_time"] = np.nan
+            continue
+
+        t = np.asarray(time_list[i], dtype=float)
+        if t.size == 0:
+            result["rise_time"] = np.nan
+            continue
+
         rise_index = result.get("rise_index", np.nan)
-        if i >= len(time_list) or not np.isfinite(rise_index):
+        if rise_index is None or not np.isfinite(rise_index):
             result["rise_time"] = np.nan
             continue
-        time_arr = np.asarray(time_list[i], dtype=float)
-        if time_arr.size == 0:
+
+        rise_idx = int(rise_index)
+        if rise_idx < 0:
             result["rise_time"] = np.nan
             continue
-        idx = _normalize_rise_index(float(rise_index), time_arr.size)
-        if idx >= time_arr.size:
-            result["rise_time"] = np.nan
-        else:
-            result["rise_time"] = float(time_arr[idx])
+        if rise_idx >= len(t):
+            finite_t = t[np.isfinite(t)]
+            result["rise_time"] = float(finite_t[-1]) if finite_t.size > 0 else np.nan
+            continue
+
+        rise_time = t[rise_idx]
+        result["rise_time"] = float(rise_time) if np.isfinite(rise_time) else np.nan
 
 
 def ensure_time_list(day: str) -> List[List[float]]:

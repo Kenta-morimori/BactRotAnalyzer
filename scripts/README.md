@@ -45,6 +45,41 @@ python3 scripts/01_standard_analyisis/rotation_analysis_main.py --day [directory
 python3 scripts/01_standard_analyisis/rotation_analysis_main.py --day [directory_name_to_analyze] --fluc
 ```
 
+### 2.4. Repellent Response Analysis
+
+Repellent response analysis can be performed by executing the following command:
+
+```bash
+python3 scripts/04_repellent_response_analysis.py --day [day_directory]
+```
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `--day` | str | `repellent-response/20260312` | Data directory (subdirectory in `data/`) |
+| `--baseline-ratio` | float | `0.5` | Baseline ratio for rise-point detection |
+| `--sigma-threshold` | float | `3.0` | Standard deviation threshold for rise-point detection |
+| `--min-consecutive` | int | `3` | Minimum consecutive frames for rise detection |
+
+**Example:**
+
+```bash
+python3 scripts/04_repellent_response_analysis.py --day repellent-response/20260416_23
+python3 scripts/04_repellent_response_analysis.py --day repellent-response/20260416_23 \
+  --baseline-ratio 0.4 --sigma-threshold 2.5 --min-consecutive 4
+```
+
+**Output directory structure:**
+
+Generated outputs are saved in `outputs/{day}/repellent_response/`:
+
+- `00_time_list/`: Time list and visualization  
+- `01_brightness_change/`: Background intensity and rise detection results  
+- `00_all_rotational_analysis/`: All-time rotational analysis, including centroid coordinates, rotation center, and angular velocity  
+- `02_pre_rise_fluctuation/`: Pre-rise rotational and fluctuation analyses  
+- `03_post_rise_analysis/`: Post-rise centroid and angular velocity analysis
+
 ## 日本語版
 
 # スクリプトディレクトリ
@@ -92,3 +127,38 @@ python3 scripts/01_standard_analyisis/rotation_analysis_main.py --day [directory
 ```bash
 python3 scripts/01_standard_analyisis/rotation_analysis_main.py --day [directory_name_to_analyze] --fluc
 ```
+
+### 2.4. 忌避応答解析
+
+忌避応答解析は以下のコマンドで実行できます。
+
+```bash
+python3 scripts/04_repellent_response_analysis.py --day [day_directory]
+```
+
+**パラメータ：**
+
+| パラメータ | 型 | デフォルト値 | 説明 |
+|-----------|-----|--------|------|
+| `--day` | str | `repellent-response/20260312` | データディレクトリ（`data/` 配下のサブディレクトリ） |
+| `--baseline-ratio` | float | `0.5` | ベースライン比率（rise point検出用） |
+| `--sigma-threshold` | float | `3.0` | 標準偏差の閾値（rise point検出用） |
+| `--min-consecutive` | int | `3` | rise検出の最小連続フレーム数 |
+
+**実行例：**
+
+```bash
+python3 scripts/04_repellent_response_analysis.py --day repellent-response/20260416_23
+python3 scripts/04_repellent_response_analysis.py --day repellent-response/20260416_23 \
+  --baseline-ratio 0.4 --sigma-threshold 2.5 --min-consecutive 4
+```
+
+**出力ディレクトリ構成：**
+
+生成された出力は `outputs/{day}/repellent_response/` に保存されます。
+
+- `00_time_list/`: 時刻リストと可視化  
+- `01_brightness_change/`: 背景輝度と rise検出結果  
+- `00_all_rotational_analysis/`: 全時間の回転解析（重心座標、回転中心、角速度を含む）  
+- `02_pre_rise_fluctuation/`: pre-rise の回転解析と揺らぎ解析  
+- `03_post_rise_analysis/`: post-rise の重心座標と角速度解析

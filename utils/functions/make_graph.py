@@ -21,6 +21,14 @@ fig_size_x = 20
 fig_size_y = 23
 
 
+def _set_log_y_if_positive(ax, *series) -> None:
+    for values in series:
+        arr = np.asarray(values, dtype=float)
+        if np.any(np.isfinite(arr) & (arr > 0)):
+            ax.set_yscale("log")
+            return
+
+
 def plot_coordinate(x_list, y_list, day, mode):
     sample_num, _, _ = param.get_config(day)
 
@@ -68,6 +76,7 @@ def plot_coordinate(x_list, y_list, day, mode):
     rows = max(1, math.ceil(sample_num / cols))
     for label_i, xy_list in enumerate([x_list, y_list]):
         fig, axs = plt.subplots(rows, cols, figsize=(20, 4 * rows))
+        axs = np.atleast_2d(axs)
         for i in range(sample_num):
             row = i // cols
             col = i % cols
@@ -129,6 +138,7 @@ def plot_coordinate_with_center(x_list, y_list, center_x_list, center_y_list, da
     rows = max(1, math.ceil(sample_num / cols))
     for axis_label in ["x", "y"]:
         fig, axs = plt.subplots(rows, cols, figsize=(20, 4 * rows))
+        axs = np.atleast_2d(axs)
         plot_label = ["centroid", "center"]
         if axis_label == "x":
             xy_list = x_list
@@ -203,6 +213,7 @@ def plot_rot_axes(long_axis_arr, short_axis_arr, aspect_ratio_arr, day):
     cols = 2
     rows = max(1, math.ceil(sample_num / cols))
     fig, axs = plt.subplots(rows, 2 * cols, figsize=(2 * fig_size_x, fig_size_y))
+    axs = np.atleast_2d(axs)
     for i in range(sample_num):
         row = i // cols
         col = i % cols
@@ -237,6 +248,7 @@ def plot_r(r_arr, day):
     cols = 2
     rows = max(1, math.ceil(sample_num / cols))
     fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, 23 * rows / 5))
+    axs = np.atleast_2d(axs)
     for i in range(sample_num):
         row = i // cols
         col = i % cols
@@ -260,6 +272,7 @@ def plot_angular_velocity(angle_list, angular_velocity_list, day):
     cols = 2
     rows = max(1, math.ceil(sample_num / cols))
     fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y * rows / 5))
+    axs = np.atleast_2d(axs)
     for i in range(sample_num):
         row = i // cols
         col = i % cols
@@ -275,6 +288,7 @@ def plot_angular_velocity(angle_list, angular_velocity_list, day):
     plt.close(fig)
 
     fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y * rows / 5))
+    axs = np.atleast_2d(axs)
     for i in range(sample_num):
         row = i // cols
         col = i % cols
@@ -290,6 +304,7 @@ def plot_angular_velocity(angle_list, angular_velocity_list, day):
     plt.close(fig)
 
     fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y * rows / 5))
+    axs = np.atleast_2d(axs)
     for i in range(sample_num):
         row = i // cols
         col = i % cols
@@ -425,6 +440,7 @@ def plot_angular_velocity_rot_part(angular_velocity_list, th_list, th_list_means
     rows = max(1, math.ceil(sample_num / cols))
 
     fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y * rows / 5))
+    axs = np.atleast_2d(axs)
     for i in range(sample_num):
         row = i // cols
         col = i % cols
@@ -456,6 +472,7 @@ def plot_averaged_angular_velocity(angular_velocity_list, angular_velocity_mean_
     cols = 2
     rows = max(1, math.ceil(sample_num / cols))
     fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y * rows / 5))
+    axs = np.atleast_2d(axs)
     plot_label = ["original", "mean"]
     for i in range(sample_num):
         row = i // cols
@@ -487,6 +504,7 @@ def plot_fft(freq_list, Amp_list, save_dir, save_name, day, flag_add_peak=False)
     cols = 2
     rows = max(1, math.ceil(sample_num / cols))
     fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y * rows / 5))
+    axs = np.atleast_2d(axs)
     for i in range(sample_num):
         row = i // cols
         col = i % cols
@@ -516,8 +534,7 @@ def plot_fft(freq_list, Amp_list, save_dir, save_name, day, flag_add_peak=False)
         axs[row, col].set_xlabel("Frequency [Hz]", fontsize=font_size)
         axs[row, col].set_ylabel("Amp", fontsize=font_size)
         # axs[row, col].set_xscale("log")
-        if np.any(np.isfinite(amp_arr) & (amp_arr > 0)):
-            axs[row, col].set_yscale("log")
+        _set_log_y_if_positive(axs[row, col], amp_arr)
         axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
     plt.tight_layout()
     plt.savefig(f"{save_dir}/{save_name}")
@@ -538,6 +555,7 @@ def plot_SD_list(df, day, flag_std=False):
     # sepalate save
     for i, width_time in enumerate(width_time_list):
         fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y * rows / 5))
+        axs = np.atleast_2d(axs)
         for j in range(sample_num):
             row = j // cols
             col = j % cols
@@ -571,6 +589,7 @@ def plot_SD_list(df, day, flag_std=False):
         plot_label_list.append(f"SD {width_time}s")
 
     fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y * rows / 5))
+    axs = np.atleast_2d(axs)
     for i, width_time in enumerate(width_time_list):
         for j in range(sample_num):
             row = j // cols
@@ -647,6 +666,7 @@ def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
     # sepalate save
     for i, width_time in enumerate(width_time_list):
         fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y * rows / 5))
+        axs = np.atleast_2d(axs)
         for j in range(sample_num):
             row = j // cols
             col = j % cols
@@ -660,7 +680,7 @@ def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
             axs[row, col].set_xlabel("Freqency [Hz]", fontsize=font_size)
             axs[row, col].set_ylabel("Amp", fontsize=font_size)
             # axs[row, col].set_xscale("log")
-            axs[row, col].set_yscale("log")
+            _set_log_y_if_positive(axs[row, col], Amp_list[j][i])
             axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
         plt.tight_layout()
         if flag_std:
@@ -676,6 +696,7 @@ def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
         plot_label_list.append(f"SD {width_time}s")
 
     fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y * rows / 5))
+    axs = np.atleast_2d(axs)
     for i, width_time in enumerate(width_time_list):
         for j in range(sample_num):
             row = j // cols
@@ -690,7 +711,7 @@ def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
             axs[row, col].set_xlabel("Freqency [Hz]", fontsize=font_size)
             axs[row, col].set_ylabel("Amp", fontsize=font_size)
             # axs[row, col].set_xscale("log")
-            axs[row, col].set_yscale("log")
+            _set_log_y_if_positive(axs[row, col], Amp_list[j][i])
             axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
         axs[-1][-1].legend(plot_label_list, loc="upper left", bbox_to_anchor=(1, 1))
     plt.tight_layout()
@@ -788,11 +809,11 @@ def plot_rot_param(day):
             if flag_i_width_depend:
                 data_i_aft = data_i_bef.copy()
             else:
-                data_i_aft = [data_i_bef[0] for _ in range(sample_num)]
+                data_i_aft = [data_i_bef[0] for _ in range(len(width_time_list))]
             if flag_j_width_depend:
                 data_j_aft = data_j_bef.copy()
             else:
-                data_j_aft = [data_j_bef[0] for _ in range(sample_num)]
+                data_j_aft = [data_j_bef[0] for _ in range(len(width_time_list))]
 
             # plot
             if flag_i_width_depend or flag_j_width_depend:
@@ -826,6 +847,7 @@ def dev_plot_centroid_and_center(x_list, y_list, center_x_list, center_y_list, d
     for flag_normalize in [False, True]:
         for label in ["x", "y"]:
             fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
+            axs = np.atleast_2d(axs)
             plot_label = ["centroid", "center"]
             if label == "x":
                 xy_list = x_list
@@ -888,6 +910,7 @@ def dev_plot_time_list(day):
     cols = 2
     rows = max(1, math.ceil(sample_num / cols))
     fig, axs = plt.subplots(rows, 2 * cols, figsize=(2 * fig_size_x, fig_size_y))
+    axs = np.atleast_2d(axs)
     for i in range(sample_num):
         row = i // cols
         col = i % cols
@@ -925,6 +948,7 @@ def dev_plot_sd_data_num(data_num_list, day):
     cols = 2
     rows = max(1, math.ceil(sample_num / cols))
     fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
+    axs = np.atleast_2d(axs)
     for i, width_time in enumerate(width_time_list):
         time_list = read_csv.get_timelist(day)
 
@@ -960,6 +984,7 @@ def dev_plot_av_with_stats(av_list, av_means, av_medians, day):
     rows = max(1, math.ceil(sample_num / cols))
 
     fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
+    axs = np.atleast_2d(axs)
     for i in range(sample_num):
         row = i // cols
         col = i % cols
@@ -990,6 +1015,7 @@ def dev_plot_av_with_mean_sd(av_list, df_sd, day):
         time_list = read_csv.get_timelist(day)
 
         fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
+        axs = np.atleast_2d(axs)
         for i in range(sample_num):
             row = i // cols
             col = i % cols
@@ -1044,6 +1070,7 @@ def dev_plot_sd_FFT_with_rotation(freq_list, Amp_list, day):
     cols = 2
     rows = max(1, math.ceil(sample_num / cols))
     fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y + 2))
+    axs = np.atleast_2d(axs)
     # fig, axs = plt.subplots(5, sample_num // 5, figsize=(15, 23))
     # Angular Velocisy
     for j in range(sample_num):
@@ -1056,7 +1083,7 @@ def dev_plot_sd_FFT_with_rotation(freq_list, Amp_list, day):
         axs[row, col].set_xlabel("Freqency [Hz]", fontsize=font_size)
         axs[row, col].set_ylabel("Amp", fontsize=font_size)
         # axs[row, col].set_xscale("log")
-        axs[row, col].set_yscale("log")
+        _set_log_y_if_positive(axs[row, col], av_Amp_list[j], *[Amp_list[j][i] for i in range(len(width_time_list))])
         axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
 
     # SD
@@ -1081,13 +1108,26 @@ def dev_plot_fft_coordinates(X, Y, day):
     rows = max(1, math.ceil(sample_num / cols))
 
     fig, axs = plt.subplots(rows, 2 * cols, figsize=(2 * fig_size_x, fig_size_y))
+    axs = np.atleast_2d(axs)
     for i in range(sample_num):
         x_freq_list, x_Amp_list = frequency_analysis.fft(X[i], 1 / FrameRate[i])
         y_freq_list, y_Amp_list = frequency_analysis.fft(Y[i], 1 / FrameRate[i])
-        peak = max(x_freq_list[np.argmax(x_Amp_list)], y_freq_list[np.argmax(y_Amp_list)])
+        peak_candidates = []
+        if x_freq_list.size > 0 and x_Amp_list.size > 0 and np.isfinite(x_Amp_list).any():
+            peak_candidates.append(float(x_freq_list[int(np.nanargmax(x_Amp_list))]))
+        if y_freq_list.size > 0 and y_Amp_list.size > 0 and np.isfinite(y_Amp_list).any():
+            peak_candidates.append(float(y_freq_list[int(np.nanargmax(y_Amp_list))]))
+        if peak_candidates:
+            peak = max(peak_candidates)
+        else:
+            peak = 0.1
 
         row = i // cols
         col = i % cols
+        if x_freq_list.size == 0 or y_freq_list.size == 0:
+            axs[row, 2 * col].axis("off")
+            axs[row, 2 * col + 1].axis("off")
+            continue
         axs[row, 2 * col].plot(x_freq_list, x_Amp_list)
         axs[row, 2 * col + 1].plot(y_freq_list, y_Amp_list)
         axs[row, 2 * col].set_xlim(0, x_freq_list[-1])
@@ -1102,7 +1142,7 @@ def dev_plot_fft_coordinates(X, Y, day):
             )
             axs[row, 2 * col + j].set_xlabel("Freqency [Hz]", fontsize=font_size)
             axs[row, 2 * col + j].set_ylabel("Amp", fontsize=font_size)
-            axs[row, 2 * col + j].set_yscale("log")
+            _set_log_y_if_positive(axs[row, 2 * col + j], x_Amp_list if j == 0 else y_Amp_list)
             axs[row, 2 * col + j].tick_params(axis="both", which="major", labelsize=font_size)
     plt.tight_layout()
     plt.savefig(f"{save_dir}/{save_name}")
@@ -1119,6 +1159,7 @@ def dev_plot_max_dist_stat(max_dists, max_dists_all, day):
     cols = 2
     rows = max(1, math.ceil(sample_num / cols))
     fig, axs = plt.subplots(rows, cols, figsize=(50 * mag / 4, 20 * mag / 4))
+    axs = np.atleast_2d(axs)
     axs = axs.flatten()
     for i, data in enumerate(max_dists):
         axs[i].boxplot(data * 1000, positions=[1])
@@ -1457,8 +1498,7 @@ def plot_repellent_component_panels(
     rows = max(1, sample_num)
     cols = 3  # x-y, x-t, y-t
     fig, axs = plt.subplots(rows, cols, figsize=(3 * fig_size_x / 2, max(6, rows * 4)))
-    if rows == 1:
-        axs = np.array([axs])
+    axs = np.atleast_2d(axs)
 
     for i in range(rows):
         x_arr = np.asarray(x_list[i], dtype=float)
@@ -1646,3 +1686,62 @@ def plot_repellent_angular_velocity_onecol(time_list, angle_list, angular_veloci
         "Angular Velocity Abs Time-series",
         use_abs=True,
     )
+
+
+def plot_angular_velocity_switching_count(
+    time_list,
+    count_list,
+    day,
+    sample_indices=None,
+    rise_time_list=None,
+):
+    sample_num = len(time_list)
+    if sample_indices is None:
+        sample_indices = [i + 1 for i in range(sample_num)]
+
+    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/00_all_rotational_analysis/angular_velocity"
+    os.makedirs(save_dir, exist_ok=True)
+
+    cols = 2
+    rows = max(1, math.ceil(sample_num / cols))
+    fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y * rows / 5))
+    axs = np.atleast_2d(axs)
+
+    for i in range(rows * cols):
+        row = i // cols
+        col = i % cols
+
+        if i >= sample_num:
+            axs[row, col].axis("off")
+            continue
+
+        t = np.asarray(time_list[i], dtype=float)
+        c = np.asarray(count_list[i], dtype=float)
+        n = min(len(t), len(c))
+
+        if n == 0:
+            axs[row, col].axis("off")
+            continue
+
+        t = t[:n]
+        c = c[:n]
+
+        axs[row, col].plot(t, c)
+        axs[row, col].grid(True)
+        axs[row, col].set_title(f"Switching Count Time-series No.{sample_indices[i]}", fontsize=font_size)
+        axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
+        axs[row, col].set_ylabel("Switching Count [/1 s window]", fontsize=font_size)
+        axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
+
+        finite_t = t[np.isfinite(t)]
+        if finite_t.size > 0:
+            axs[row, col].set_xlim(0, finite_t[-1])
+
+        if rise_time_list is not None and i < len(rise_time_list):
+            rise_time = rise_time_list[i]
+            if rise_time is not None and np.isfinite(rise_time):
+                axs[row, col].axvline(rise_time, color="red", linestyle="--")
+
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/switching_count.png")
+    plt.close(fig)

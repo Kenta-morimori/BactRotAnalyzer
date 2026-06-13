@@ -2,6 +2,7 @@ import argparse
 import os
 import subprocess
 import sys
+from typing import Optional
 
 os.environ.setdefault("MPLBACKEND", "Agg")
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
@@ -16,7 +17,14 @@ def main(
     baseline_ratio: float,
     sigma_threshold: float,
     min_consecutive: int,
+    post_rise_center_mode: int,
+    output_suffix: Optional[str],
 ):
+    base_save_dir = param.save_dir_bef
+    if output_suffix is not None and output_suffix != "":
+        param.save_dir_bef = f"{base_save_dir}/{output_suffix}"
+    param.post_rise_center_mode = post_rise_center_mode
+
     repellent_root = f"{param.save_dir_bef}/{day}/repellent_response"
     repellent_response.cleanup_legacy_repellent_outputs(day)
     os.makedirs(f"{repellent_root}/00_all_rotational_analysis", exist_ok=True)
@@ -25,9 +33,6 @@ def main(
     os.makedirs(f"{repellent_root}/02_pre_rise_fluctuation", exist_ok=True)
     os.makedirs(f"{repellent_root}/03_post_rise_analysis/centroid_coordinate", exist_ok=True)
 
-    # Default repellent dataset may not have config.ini; create a minimal one when missing.
-    repellent_response.ensure_repellent_config(day)
-
     # Keep time-list generation aligned with existing implementation.
     time_list = repellent_response.ensure_time_list(day)
     save2csv.save_repellent_time_list(time_list, day)
@@ -35,17 +40,24 @@ def main(
 
     # Reuse existing centroid / angular-velocity pipeline.
     centroid_csv = f"{param.save_dir_bef}/{day}/centroid_coordinate.csv"
+    base_centroid_csv = f"{base_save_dir}/{day}/centroid_coordinate.csv"
     if not os.path.isfile(centroid_csv):
-        try:
-            script_path = os.path.join(
-                os.path.dirname(os.path.dirname(__file__)),
-                "utils",
-                "functions",
-                "get_centroid_coordinate.py",
-            )
-            subprocess.run([sys.executable, script_path, day], check=True)
-        except subprocess.CalledProcessError:
-            repellent_response.generate_centroid_coordinate_simple(day)
+        if os.path.isfile(base_centroid_csv):
+            os.makedirs(os.path.dirname(centroid_csv), exist_ok=True)
+            import shutil
+
+            shutil.copy2(base_centroid_csv, centroid_csv)
+        else:
+            try:
+                script_path = os.path.join(
+                    os.path.dirname(os.path.dirname(__file__)),
+                    "utils",
+                    "functions",
+                    "get_centroid_coordinate.py",
+                )
+                subprocess.run([sys.executable, script_path, day], check=True)
+            except subprocess.CalledProcessError:
+                repellent_response.generate_centroid_coordinate_simple(day)
     x_list, y_list = input_data.input_centroid_coordinate(day)
     x_list, y_list = repellent_response.align_coordinate_series_to_time(x_list, y_list, time_list)
 
@@ -57,7 +69,7 @@ def main(
         sigma_threshold=sigma_threshold,
         min_consecutive=min_consecutive,
     )
-    repellent_response.add_rise_time_to_results(rise_results, time_list)
+    repellent_response.add_rise_time_to_results(day, rise_results, time_list)
     rise_indices = [result["rise_index"] for result in rise_results]
 
     save2csv.save_repellent_background_intensity(time_list, background_list, day)
@@ -65,7 +77,6 @@ def main(
     make_graph.plot_repellent_background_intensity(time_list, background_list, rise_indices, day)
 
     # Build all-time centroid components once, then split into pre/post later.
-    post_rise_center_mode = repellent_response.get_post_rise_center_mode(day)
     all_comp_time_list, all_x_before_list, all_y_before_list = repellent_response.build_all_time_raw_centroid_series(
         day=day,
         time_list=time_list,
@@ -137,6 +148,7 @@ def main(
             bg_for_av.append(background_list[idx])
         else:
             bg_for_av.append([])
+
     make_graph.plot_repellent_background_and_av_stacked(
         time_list=all_rot["time_list"],
         background_list=bg_for_av,
@@ -145,6 +157,38 @@ def main(
         sample_indices=[idx + 1 for idx in all_rot["valid_indices"]],
         rise_time_list=all_rise_time_for_av,
     )
+
+    switching_time_list, switching_count_list = repellent_response.calculate_angular_velocity_switching_count(
+        time_list=all_rot["time_list"],
+        angular_velocity_list=all_rot["angular_velocity_list"],
+        window_width_sec=1.0,
+    )
+    save2csv.save_angular_velocity_switching_count(
+        switching_time_list,
+        switching_count_list,
+        day,
+    )
+    make_graph.plot_angular_velocity_switching_count(
+        switching_time_list,
+        switching_count_list,
+        day,
+        sample_indices=[idx + 1 for idx in all_rot["valid_indices"]],
+        rise_time_list=all_rise_time_for_av,
+    )
+
+    legacy_switching_csv = (
+        f"{param.save_dir_bef}/{day}/repellent_response/03_post_rise_analysis/"
+        "angular_velocity/switching_frequency.csv"
+    )
+    legacy_switching_png = (
+        f"{param.save_dir_bef}/{day}/repellent_response/03_post_rise_analysis/"
+        "angular_velocity/switching_frequency.png"
+    )
+    if os.path.isfile(legacy_switching_csv):
+        os.remove(legacy_switching_csv)
+    if os.path.isfile(legacy_switching_png):
+        os.remove(legacy_switching_png)
+
     all_rise_time_for_centroid = [result.get("rise_time", float("nan")) for result in rise_results]
     make_graph.plot_repellent_component_panels(
         all_comp_time_list,
@@ -354,6 +398,8 @@ if __name__ == "__main__":
     parser.add_argument("--baseline-ratio", type=float, default=0.5)
     parser.add_argument("--sigma-threshold", type=float, default=3.0)
     parser.add_argument("--min-consecutive", type=int, default=3)
+    parser.add_argument("--post-rise-center-mode", type=int, choices=[1, 2, 3], default=param.post_rise_center_mode)
+    parser.add_argument("--output-suffix", type=str, default=None)
 
     args = parser.parse_args()
 
@@ -362,4 +408,6 @@ if __name__ == "__main__":
         baseline_ratio=args.baseline_ratio,
         sigma_threshold=args.sigma_threshold,
         min_consecutive=args.min_consecutive,
+        post_rise_center_mode=args.post_rise_center_mode,
+        output_suffix=args.output_suffix,
     )

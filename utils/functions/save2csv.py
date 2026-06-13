@@ -1,6 +1,7 @@
 import csv
 import os
 from itertools import zip_longest
+from typing import Sequence
 
 import pandas as pd
 
@@ -169,3 +170,26 @@ def save_repellent_time_list(time_list, day):
     for i in range(len(time_list)):
         data[f"No.{i+1}"] = pd.Series(time_list[i], dtype="float64")
     pd.DataFrame(data).to_csv(csv_save_dir, index=False)
+
+
+def save_angular_velocity_switching_count(
+    time_list: Sequence[Sequence[float]],
+    count_list: Sequence[Sequence[float]],
+    day: str,
+) -> None:
+    """Save angular velocity switching count to CSV."""
+    sample_num = min(len(time_list), len(count_list))
+    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/00_all_rotational_analysis/angular_velocity"
+    os.makedirs(save_dir, exist_ok=True)
+
+    csv_path = f"{save_dir}/switching_count.csv"
+
+    data = {}
+    for i in range(sample_num):
+        t_arr = pd.Series(time_list[i], dtype="float64")
+        c_arr = pd.Series(count_list[i], dtype="float64")
+        n = min(len(t_arr), len(c_arr))
+        data[f"No.{i+1}_time"] = t_arr.iloc[:n].reset_index(drop=True)
+        data[f"No.{i+1}_count"] = c_arr.iloc[:n].reset_index(drop=True)
+
+    pd.DataFrame(data).to_csv(csv_path, index=False)

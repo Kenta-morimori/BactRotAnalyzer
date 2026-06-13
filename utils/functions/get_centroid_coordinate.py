@@ -28,6 +28,8 @@ def contours(img):
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     _, img_binary = cv2.threshold(img_gray, 120, 255, cv2.THRESH_BINARY)
     contours, _ = cv2.findContours(img_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if len(contours) == 0:
+        return np.nan, np.nan, None
     max_contour = max(contours, key=cv2.contourArea)
 
     # Centroid coordinates were taken as the mean of the contours.
@@ -37,7 +39,7 @@ def contours(img):
         ellipse = cv2.fitEllipse(max_contour)
         return mean_x, mean_y, ellipse
     else:
-        return None, None, None
+        return np.nan, np.nan, None
 
 
 # Save centroid coordinates (cannot be written in save2csv.py due to subprocess)
@@ -137,9 +139,17 @@ def calculate_ellipse_properties(X, Y):
     X = np.asarray(X, dtype=np.float64)
     Y = np.asarray(Y, dtype=np.float64)
 
+    if X.size < 5 or Y.size < 5:
+        return np.nan, np.nan, np.nan, np.nan, True
+    if not np.isfinite(X).any() or not np.isfinite(Y).any():
+        return np.nan, np.nan, np.nan, np.nan, True
+
     A = np.hstack([X**2, X * Y, Y**2, X, Y])
     b = np.ones_like(X)
-    x_arr = np.linalg.lstsq(A, b, rcond=None)[0].squeeze()
+    try:
+        x_arr = np.linalg.lstsq(A, b, rcond=None)[0].squeeze()
+    except np.linalg.LinAlgError:
+        return np.nan, np.nan, np.nan, np.nan, True
     x = x_arr.tolist()
     flag_Warning = False
 
@@ -209,7 +219,17 @@ def get_ellipse_info(X, Y, index, day):
         x_freq_list, x_Amp_list = x_freq_list[x_mask], x_Amp_list[x_mask]
         y_freq_list, y_Amp_list = y_freq_list[y_mask], y_Amp_list[y_mask]
 
-        width_time = param.n_rotations / max(x_freq_list[np.argmax(x_Amp_list)], y_freq_list[np.argmax(y_Amp_list)])
+        peak_candidates = []
+        if x_freq_list.size > 0 and x_Amp_list.size > 0 and np.isfinite(x_Amp_list).any():
+            peak_candidates.append(float(x_freq_list[int(np.nanargmax(x_Amp_list))]))
+        if y_freq_list.size > 0 and y_Amp_list.size > 0 and np.isfinite(y_Amp_list).any():
+            peak_candidates.append(float(y_freq_list[int(np.nanargmax(y_Amp_list))]))
+        if peak_candidates:
+            peak_freq = max(peak_candidates)
+        else:
+            peak_freq = 0.1
+
+        width_time = param.n_rotations / max(peak_freq, 1e-6)
         print(f"No.{index + 1}   width_time: {width_time:.2f} s")
 
         start_time = 0.0
@@ -430,7 +450,7 @@ def main(day):
                 break
             if param.flag_get_angle_with_cell_direcetion:
                 x, y, ellipse = contours(frame)
-                add_angle_list_bef.append(ellipse[2])
+                add_angle_list_bef.append(ellipse[2] if ellipse is not None else np.nan)
             else:
                 x, y, _ = contours(frame)
             add_x_list.append(x * px2um_x)
