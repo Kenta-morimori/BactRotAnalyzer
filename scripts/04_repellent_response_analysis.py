@@ -93,7 +93,7 @@ def main(
         y_raw_list=all_y_before_list,
         rise_indices=rise_indices,
     )
-    stop_indices = repellent_response.detect_rotation_stop_indices(
+    automatic_stop_indices = repellent_response.detect_rotation_stop_indices(
         time_list=all_comp_time_list,
         x_raw_list=all_x_before_list,
         y_raw_list=all_y_before_list,
@@ -101,9 +101,16 @@ def main(
         activity_ratio=stop_activity_ratio,
         min_duration_rotations=stop_min_duration_rotations,
     )
+    stop_indices, stop_sources = repellent_response.resolve_rotation_stop_indices(
+        time_list=all_comp_time_list,
+        rise_indices=rise_indices,
+        automatic_stop_indices=automatic_stop_indices,
+        manual_stop_indices=param.get_manual_stop_frame_indices_config(day),
+    )
     for i, result in enumerate(rise_results):
         stop_idx = stop_indices[i] if i < len(stop_indices) else float("nan")
         result["rotation_stop_index"] = stop_idx
+        result["rotation_stop_source"] = stop_sources[i] if i < len(stop_sources) else "none"
         if np.isfinite(stop_idx) and i < len(all_comp_time_list):
             sample_time = all_comp_time_list[i]
             index = int(stop_idx)

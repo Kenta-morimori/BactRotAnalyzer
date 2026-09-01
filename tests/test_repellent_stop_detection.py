@@ -57,3 +57,34 @@ def test_continued_rotation_and_missing_data_do_not_trigger_stop():
     y[rise_idx:] = np.nan
     missing = repellent_response.detect_rotation_stop_indices([time], [x], [y], [rise_idx])[0]
     assert np.isnan(missing)
+
+
+def test_manual_stop_index_overrides_automatic_detection_and_is_validated():
+    time, x, y, rise_idx, _ = _rotating_then_stopped_series(stopped=False)
+    manual_idx = 1200
+    stops, sources = repellent_response.resolve_rotation_stop_indices(
+        [time], [rise_idx], [float("nan")], [manual_idx]
+    )
+    assert stops == [float(manual_idx)]
+    assert sources == ["manual"]
+
+    automatic_stops, automatic_sources = repellent_response.resolve_rotation_stop_indices(
+        [time], [rise_idx], [1300.0], []
+    )
+    assert automatic_stops == [1300.0]
+    assert automatic_sources == ["auto"]
+
+    cx_std = np.linspace(1.0, 2.0, len(time))
+    cy_std = np.linspace(2.0, 3.0, len(time))
+    cx, cy = repellent_response.apply_post_rise_center_strategy(
+        [time], [x], [y], [cx_std], [cy_std], [rise_idx], stop_indices=stops
+    )
+    assert np.allclose(cx[0][manual_idx:], cx[0][manual_idx])
+    assert np.allclose(cy[0][manual_idx:], cy[0][manual_idx])
+    assert np.isclose(cx[0][manual_idx], 1.0, atol=0.02)
+    assert np.isclose(cy[0][manual_idx], 2.0, atol=0.02)
+
+    with np.testing.assert_raises(ValueError):
+        repellent_response.resolve_rotation_stop_indices([time], [rise_idx], [float("nan")], [rise_idx])
+    with np.testing.assert_raises(ValueError):
+        repellent_response.resolve_rotation_stop_indices([time], [rise_idx], [float("nan")], [len(time)])

@@ -134,6 +134,38 @@ def get_manual_rise_time_sec_config(day):
     return values
 
 
+def get_manual_stop_frame_indices_config(day):
+    """Read optional per-sample zero-based stop-frame indices.
+
+    ``auto`` delegates that sample to the activity-based stop detector.  A
+    shorter list also leaves remaining samples to automatic detection.
+    """
+    config = _read_config(day)
+    section = "RepellentResponse"
+    option = "manual_stop_frame_indices"
+    if not config.has_section(section) or not config.has_option(section, option):
+        return []
+
+    raw_value = config.get(section, option, fallback="").strip()
+    if raw_value == "":
+        return []
+
+    values = []
+    for item in raw_value.split(","):
+        item = item.strip()
+        if item == "" or item.lower() == "auto":
+            values.append(None)
+            continue
+        try:
+            value = int(item)
+        except ValueError as exc:
+            raise ValueError(f"Invalid stop-frame index in {section}.{option}: '{item}'") from exc
+        if value < 0:
+            raise ValueError(f"Stop-frame index in {section}.{option} must be non-negative: '{item}'")
+        values.append(value)
+    return values
+
+
 # rotational analysis
 ## Determine the angle by the direction of the cell.
 # flag_get_angle_with_cell_direcetion = True

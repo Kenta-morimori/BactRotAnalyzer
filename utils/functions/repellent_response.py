@@ -1277,6 +1277,36 @@ def detect_rotation_stop_indices(
     return stop_indices
 
 
+def resolve_rotation_stop_indices(
+    time_list: Sequence[Sequence[float]],
+    rise_indices: Sequence[float],
+    automatic_stop_indices: Sequence[float],
+    manual_stop_indices: Optional[Sequence[Optional[int]]] = None,
+) -> Tuple[List[float], List[str]]:
+    """Prefer valid manual stop indices, with automatic detection as fallback."""
+    n = min(len(time_list), len(rise_indices), len(automatic_stop_indices))
+    resolved: List[float] = []
+    sources: List[str] = []
+    for i in range(n):
+        m = len(time_list[i])
+        rise_idx = _normalize_rise_index(float(rise_indices[i]), m)
+        manual_idx = manual_stop_indices[i] if manual_stop_indices is not None and i < len(manual_stop_indices) else None
+        if manual_idx is not None:
+            if manual_idx >= m:
+                raise ValueError(f"Manual stop-frame index for sample No.{i + 1} is outside the series: {manual_idx}")
+            if manual_idx <= rise_idx:
+                raise ValueError(f"Manual stop-frame index for sample No.{i + 1} must be after the rise index: {manual_idx}")
+            resolved.append(float(manual_idx))
+            sources.append("manual")
+        elif np.isfinite(automatic_stop_indices[i]):
+            resolved.append(float(automatic_stop_indices[i]))
+            sources.append("auto")
+        else:
+            resolved.append(float("nan"))
+            sources.append("none")
+    return resolved, sources
+
+
 def apply_post_rise_center_strategy(
     time_list: Sequence[Sequence[float]],
     x_raw_list: Sequence[Sequence[float]],
@@ -1344,17 +1374,21 @@ def apply_post_rise_center_strategy(
         if stop_indices is not None and i < len(stop_indices) and np.isfinite(stop_indices[i]):
             stop_idx = _normalize_rise_index(float(stop_indices[i]), m)
             if stop_idx > rise_idx:
-                # Use the final complete rotation before the low-activity run,
-                # not the stationary coordinates that triggered the detection.
+                # Fit directly to the final complete pre-stop rotation.  The
+                # standard-center series is forward-looking, so using its last
+                # values would contaminate this snapshot with stationary data.
                 window = _estimate_window_frames_from_fft(t, x_raw, y_raw, rise_idx=rise_idx)
                 ref_start = max(rise_idx, stop_idx - window)
-                ref_x = cx_std[ref_start:stop_idx]
-                ref_y = cy_std[ref_start:stop_idx]
-                ref_x = ref_x[np.isfinite(ref_x)]
-                ref_y = ref_y[np.isfinite(ref_y)]
-                if ref_x.size > 0 and ref_y.size > 0:
-                    cx_final[stop_idx:] = float(np.median(ref_x))
-                    cy_final[stop_idx:] = float(np.median(ref_y))
+                ref_x = x_raw[ref_start:stop_idx]
+                ref_y = y_raw[ref_start:stop_idx]
+                finite = np.isfinite(ref_x) & np.isfinite(ref_y)
+                if np.count_nonzero(finite) >= param.min_ref_centroid_num:
+                    frozen_x, frozen_y, _, _, _ = get_centroid_coordinate.calculate_ellipse_properties(
+                        ref_x[finite].reshape(-1, 1), ref_y[finite].reshape(-1, 1)
+                    )
+                    if np.isfinite(frozen_x) and np.isfinite(frozen_y):
+                        cx_final[stop_idx:] = float(frozen_x)
+                        cy_final[stop_idx:] = float(frozen_y)
 
         out_center_x_list.append(cx_final.tolist())
         out_center_y_list.append(cy_final.tolist())
