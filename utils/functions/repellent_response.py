@@ -1197,6 +1197,86 @@ def _rolling_stat(arr: np.ndarray, window: int, stat: Literal["mean", "median"])
     return out.to_numpy(dtype=float)
 
 
+def detect_rotation_stop_indices(
+    time_list: Sequence[Sequence[float]],
+    x_raw_list: Sequence[Sequence[float]],
+    y_raw_list: Sequence[Sequence[float]],
+    rise_indices: Sequence[float],
+    activity_ratio: float = param.stop_activity_ratio,
+    min_duration_rotations: float = param.stop_min_duration_rotations,
+) -> List[float]:
+    """Return the first post-rise frame of sustained low rotational activity.
+
+    Activity is the RMS spatial spread in a one-rotation trailing window.  Its
+    pre-rise median is the per-sample reference, so absolute coordinate units
+    and bead sizes do not affect the threshold.  Windows with insufficient
+    finite points are ignored rather than treated as stationary.
+    """
+    if not 0.0 < activity_ratio < 1.0:
+        raise ValueError("activity_ratio must be between 0 and 1.")
+    if min_duration_rotations <= 0.0:
+        raise ValueError("min_duration_rotations must be positive.")
+
+    n = min(len(time_list), len(x_raw_list), len(y_raw_list), len(rise_indices))
+    stop_indices: List[float] = []
+    for i in range(n):
+        t = np.asarray(time_list[i], dtype=float)
+        x = np.asarray(x_raw_list[i], dtype=float)
+        y = np.asarray(y_raw_list[i], dtype=float)
+        m = min(len(t), len(x), len(y))
+        if m <= 0:
+            stop_indices.append(float("nan"))
+            continue
+
+        t, x, y = t[:m], x[:m], y[:m]
+        rise_idx = _normalize_rise_index(float(rise_indices[i]), m)
+        window = _estimate_window_frames_from_fft(t, x, y, rise_idx=rise_idx)
+        # A sparse acquisition can contain a long missing interval after
+        # stopping.  Require enough actual observations to measure spread, but
+        # do not require every frame in the nominal one-rotation window.
+        min_finite = max(param.min_ref_centroid_num, int(np.ceil(window * 0.2)))
+        activity = np.full(m, np.nan, dtype=float)
+        for end in range(window - 1, m):
+            sl = slice(end - window + 1, end + 1)
+            finite = np.isfinite(x[sl]) & np.isfinite(y[sl])
+            if np.count_nonzero(finite) < min_finite:
+                continue
+            x_win, y_win = x[sl][finite], y[sl][finite]
+            activity[end] = float(np.sqrt(np.var(x_win) + np.var(y_win)))
+
+        baseline = activity[window - 1 : rise_idx]
+        baseline = baseline[np.isfinite(baseline) & (baseline > 0.0)]
+        if baseline.size == 0:
+            stop_indices.append(float("nan"))
+            continue
+
+        threshold = float(np.median(baseline) * activity_ratio)
+        duration = max(1, int(np.ceil(window * min_duration_rotations)))
+        post_start = max(rise_idx + window - 1, window - 1)
+        low_run = 0
+        low_start = -1
+        detected = float("nan")
+        for idx in range(post_start, m):
+            if not np.isfinite(activity[idx]):
+                # Missing observations cannot establish a stop, but also
+                # should not discard a low-activity run observed on both
+                # sides of a gap.
+                continue
+            if activity[idx] < threshold:
+                if low_run == 0:
+                    low_start = idx
+                low_run += 1
+                if low_run >= duration:
+                    detected = float(low_start)
+                    break
+            else:
+                low_run = 0
+                low_start = -1
+        stop_indices.append(detected)
+
+    return stop_indices
+
+
 def apply_post_rise_center_strategy(
     time_list: Sequence[Sequence[float]],
     x_raw_list: Sequence[Sequence[float]],
@@ -1205,6 +1285,7 @@ def apply_post_rise_center_strategy(
     center_y_standard_list: Sequence[Sequence[float]],
     rise_indices: Sequence[float],
     post_rise_center_mode: int = 2,
+    stop_indices: Optional[Sequence[float]] = None,
 ) -> Tuple[List[List[float]], List[List[float]]]:
     n = min(
         len(time_list),
@@ -1259,6 +1340,21 @@ def apply_post_rise_center_strategy(
                 cy_slide = _fill_center_nan_with_previous(cy_slide.tolist())
                 cx_final[rise_idx:] = cx_slide[rise_idx:]
                 cy_final[rise_idx:] = cy_slide[rise_idx:]
+
+        if stop_indices is not None and i < len(stop_indices) and np.isfinite(stop_indices[i]):
+            stop_idx = _normalize_rise_index(float(stop_indices[i]), m)
+            if stop_idx > rise_idx:
+                # Use the final complete rotation before the low-activity run,
+                # not the stationary coordinates that triggered the detection.
+                window = _estimate_window_frames_from_fft(t, x_raw, y_raw, rise_idx=rise_idx)
+                ref_start = max(rise_idx, stop_idx - window)
+                ref_x = cx_std[ref_start:stop_idx]
+                ref_y = cy_std[ref_start:stop_idx]
+                ref_x = ref_x[np.isfinite(ref_x)]
+                ref_y = ref_y[np.isfinite(ref_y)]
+                if ref_x.size > 0 and ref_y.size > 0:
+                    cx_final[stop_idx:] = float(np.median(ref_x))
+                    cy_final[stop_idx:] = float(np.median(ref_y))
 
         out_center_x_list.append(cx_final.tolist())
         out_center_y_list.append(cy_final.tolist())

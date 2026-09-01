@@ -192,6 +192,12 @@ bg_roi_offset_um_downward = 10.0  # Downward offset from centroid in micrometers
 # 3: use the constant post-rise mean center
 post_rise_center_mode = 2
 
+# Freeze the post-rise rotation center once rotation has stopped.  The activity
+# threshold is expressed as a fraction of the pre-rise activity level, and the
+# duration is expressed in estimated rotations.
+stop_activity_ratio = 0.20
+stop_min_duration_rotations = 1.0
+
 # fluctuation analysis
 # SD_window_width_list = [0.1, 0.5, 1.0]
 SD_window_width_list = [0.1, 0.2, 0.5, 1.0, 1.5, 2.0]

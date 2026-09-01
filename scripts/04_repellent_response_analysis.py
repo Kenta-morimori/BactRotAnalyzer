@@ -4,6 +4,8 @@ import subprocess
 import sys
 from typing import Optional
 
+import numpy as np
+
 os.environ.setdefault("MPLBACKEND", "Agg")
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
@@ -18,6 +20,8 @@ def main(
     sigma_threshold: float,
     min_consecutive: int,
     post_rise_center_mode: int,
+    stop_activity_ratio: float,
+    stop_min_duration_rotations: float,
     output_suffix: Optional[str],
 ):
     base_save_dir = param.save_dir_bef
@@ -89,6 +93,24 @@ def main(
         y_raw_list=all_y_before_list,
         rise_indices=rise_indices,
     )
+    stop_indices = repellent_response.detect_rotation_stop_indices(
+        time_list=all_comp_time_list,
+        x_raw_list=all_x_before_list,
+        y_raw_list=all_y_before_list,
+        rise_indices=rise_indices,
+        activity_ratio=stop_activity_ratio,
+        min_duration_rotations=stop_min_duration_rotations,
+    )
+    for i, result in enumerate(rise_results):
+        stop_idx = stop_indices[i] if i < len(stop_indices) else float("nan")
+        result["rotation_stop_index"] = stop_idx
+        if np.isfinite(stop_idx) and i < len(all_comp_time_list):
+            sample_time = all_comp_time_list[i]
+            index = int(stop_idx)
+            result["rotation_stop_time"] = sample_time[index] if index < len(sample_time) else float("nan")
+        else:
+            result["rotation_stop_time"] = float("nan")
+    save2csv.save_repellent_rise_summary(rise_results, day)
     all_x_center_list, all_y_center_list = repellent_response.apply_post_rise_center_strategy(
         time_list=all_comp_time_list,
         x_raw_list=all_x_before_list,
@@ -97,6 +119,7 @@ def main(
         center_y_standard_list=all_center_y_standard_list,
         rise_indices=rise_indices,
         post_rise_center_mode=post_rise_center_mode,
+        stop_indices=stop_indices,
     )
     all_x_corr_list, all_y_corr_list = repellent_response.subtract_center_from_raw(
         x_raw_list=all_x_before_list,
@@ -399,6 +422,8 @@ if __name__ == "__main__":
     parser.add_argument("--sigma-threshold", type=float, default=3.0)
     parser.add_argument("--min-consecutive", type=int, default=3)
     parser.add_argument("--post-rise-center-mode", type=int, choices=[1, 2, 3], default=param.post_rise_center_mode)
+    parser.add_argument("--stop-activity-ratio", type=float, default=param.stop_activity_ratio)
+    parser.add_argument("--stop-min-duration-rotations", type=float, default=param.stop_min_duration_rotations)
     parser.add_argument("--output-suffix", type=str, default=None)
 
     args = parser.parse_args()
@@ -409,5 +434,7 @@ if __name__ == "__main__":
         sigma_threshold=args.sigma_threshold,
         min_consecutive=args.min_consecutive,
         post_rise_center_mode=args.post_rise_center_mode,
+        stop_activity_ratio=args.stop_activity_ratio,
+        stop_min_duration_rotations=args.stop_min_duration_rotations,
         output_suffix=args.output_suffix,
     )
