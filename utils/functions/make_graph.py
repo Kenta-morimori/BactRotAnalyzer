@@ -16,7 +16,7 @@ from utils.functions import (
     save2csv,
 )
 
-font_size = 20
+font_size = 24
 fig_size_x = 20
 fig_size_y = 23
 
@@ -1298,8 +1298,10 @@ def plot_repellent_background_and_av_stacked(
         ax_bg.tick_params(axis="y", which="major", labelsize=tick_fs)
         ax_av.tick_params(axis="both", which="major", labelsize=tick_fs)
 
-    fig.subplots_adjust(top=0.985, bottom=0.045, left=0.08, right=0.98)
-    plt.savefig(f"{save_dir}/background_intensity_and_angular_velocity_time_series.png")
+    # Reserve enough space for the enlarged bottom tick labels and x-axis
+    # label; the previous 4.5% margin clipped "Time [s]" on this figure.
+    fig.subplots_adjust(top=0.95, bottom=0.12, left=0.1, right=0.98)
+    plt.savefig(f"{save_dir}/background_intensity_and_angular_velocity_time_series.png", dpi=200)
     plt.close(fig)
 
 
