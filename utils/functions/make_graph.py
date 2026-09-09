@@ -20,6 +20,29 @@ font_size = 24
 fig_size_x = 20
 fig_size_y = 23
 
+# Keep sample-panel figures readable when analysing large batches.  This is a
+# module-level setting on purpose: all analysis entry points share it without
+# requiring changes to their config.ini files or command-line interfaces.
+PLOT_SAMPLES_PER_FILE = 10
+
+
+def _sample_pages(sample_num):
+    """Yield ``(part_number, start, end)`` ranges for sample-panel figures."""
+    for start in range(0, sample_num, PLOT_SAMPLES_PER_FILE):
+        yield start // PLOT_SAMPLES_PER_FILE + 1, start, min(start + PLOT_SAMPLES_PER_FILE, sample_num)
+
+
+def _page_save_name(filename, sample_num, part_number):
+    """Preserve legacy names for one-page plots and suffix multi-page plots."""
+    if sample_num <= PLOT_SAMPLES_PER_FILE:
+        return filename
+    stem, ext = os.path.splitext(filename)
+    return f"{stem}_part{part_number:02d}{ext}"
+
+
+def _page_path(save_dir, filename, sample_num, part_number):
+    return os.path.join(save_dir, _page_save_name(filename, sample_num, part_number))
+
 
 def _set_log_y_if_positive(ax, *series) -> None:
     for values in series:
@@ -39,56 +62,61 @@ def plot_coordinate(x_list, y_list, day, mode):
     # x_list, y_list = (np.array(x_list) * px2um_x).tolist(), (np.array(y_list) * px2um_y).tolist()
 
     cols = 5
-    rows = max(1, math.ceil(sample_num / cols))
     # plot centroid coordinate
-    fig = plt.figure(figsize=(20, 4 * rows))
-    gs = gridspec.GridSpec(rows, cols, figure=fig, wspace=0.38, hspace=0.2)
-    for i in range(sample_num):
-        row = i // cols
-        col = i % cols
-        ax = fig.add_subplot(gs[row, col])
-        ax.plot(x_list[i], y_list[i])
+    for part_number, start, end in _sample_pages(sample_num):
+        rows = max(1, math.ceil((end - start) / cols))
+        fig = plt.figure(figsize=(20, 4 * rows))
+        gs = gridspec.GridSpec(rows, cols, figure=fig, wspace=0.38, hspace=0.2)
+        for local_i, i in enumerate(range(start, end)):
+            row = local_i // cols
+            col = local_i % cols
+            ax = fig.add_subplot(gs[row, col])
+            ax.plot(x_list[i], y_list[i])
 
-        if mode == "centroid":
-            # detect x_lim, y_lim
-            x_range = max(x_list[i]) - min(x_list[i])
-            y_range = max(y_list[i]) - min(y_list[i])
-            max_range = 1.1 * max(x_range, y_range) / 2
-            ax.set_xlim(-max_range, max_range)
-            ax.set_ylim(-max_range, max_range)
-            # ax.scatter(0, 0, c="red")  # center is zero
-        ax.set_aspect("equal", "box")
-        ax.grid(True)
-        ax.set_title(f"Trajectory No.{i+1}", fontsize=16)
-        ax.set_xlabel(r"x [$\mu$m]", fontsize=16)
-        ax.set_ylabel(r"y [$\mu$m]", fontsize=16)
-        ax.tick_params(axis="both", which="major", labelsize=16)
-    fig.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05, wspace=0.38, hspace=0.2)
-    plt.savefig(f"{save_dir}/trajectory.png")
-    plt.close(fig)
+            if mode == "centroid":
+                # detect x_lim, y_lim
+                x_range = max(x_list[i]) - min(x_list[i])
+                y_range = max(y_list[i]) - min(y_list[i])
+                max_range = 1.1 * max(x_range, y_range) / 2
+                ax.set_xlim(-max_range, max_range)
+                ax.set_ylim(-max_range, max_range)
+                # ax.scatter(0, 0, c="red")  # center is zero
+            ax.set_aspect("equal", "box")
+            ax.grid(True)
+            ax.set_title(f"Trajectory No.{i+1}", fontsize=16)
+            ax.set_xlabel(r"x [$\mu$m]", fontsize=16)
+            ax.set_ylabel(r"y [$\mu$m]", fontsize=16)
+            ax.tick_params(axis="both", which="major", labelsize=16)
+        fig.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05, wspace=0.38, hspace=0.2)
+        plt.savefig(_page_path(save_dir, "trajectory.png", sample_num, part_number))
+        plt.close(fig)
 
     # plot x, y
     time_list = read_csv.get_timelist(day)
     xy_plot_label = [r"x [$\mu$m]", r"y [$\mu$m]"]
     xy_save_label = ["x_coordinate.png", "y_coordinate.png"]
 
-    cols = 2
-    rows = max(1, math.ceil(sample_num / cols))
     for label_i, xy_list in enumerate([x_list, y_list]):
-        fig, axs = plt.subplots(rows, cols, figsize=(20, 4 * rows))
-        axs = np.atleast_2d(axs)
-        for i in range(sample_num):
-            row = i // cols
-            col = i % cols
-            axs[row, col].plot(time_list[i], xy_list[i])
-            axs[row, col].grid(True)
-            axs[row, col].set_title(f"Trajectory No.{i+1}", fontsize=font_size)
-            axs[row, col].set_xlabel("Time [s]", fontsize=18)
-            axs[row, col].set_ylabel(xy_plot_label[label_i], fontsize=font_size)
-            axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
-        plt.tight_layout()
-        plt.savefig(f"{save_dir}/{xy_save_label[label_i]}")
-        plt.close(fig)
+        for part_number, start, end in _sample_pages(sample_num):
+            cols = 2
+            rows = max(1, math.ceil((end - start) / cols))
+            fig, axs = plt.subplots(rows, cols, figsize=(20, 4 * rows))
+            axs = np.atleast_2d(axs)
+            for local_i in range(rows * cols):
+                ax = axs[local_i // cols, local_i % cols]
+                i = start + local_i
+                if i >= end:
+                    ax.axis("off")
+                    continue
+                ax.plot(time_list[i], xy_list[i])
+                ax.grid(True)
+                ax.set_title(f"Trajectory No.{i+1}", fontsize=font_size)
+                ax.set_xlabel("Time [s]", fontsize=18)
+                ax.set_ylabel(xy_plot_label[label_i], fontsize=font_size)
+                ax.tick_params(axis="both", which="major", labelsize=font_size)
+            plt.tight_layout()
+            plt.savefig(_page_path(save_dir, xy_save_label[label_i], sample_num, part_number))
+            plt.close(fig)
 
 
 def plot_coordinate_with_center(x_list, y_list, center_x_list, center_y_list, day):
@@ -1184,40 +1212,31 @@ def plot_repellent_background_intensity(time_list, background_list, rise_indices
     tick_fs = font_size + 2
 
     cols = 2
-    rows = max(1, math.ceil(sample_num / cols))
-    fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
-    axs = np.atleast_2d(axs)
-
-    for i in range(rows * cols):
-        row = i // cols
-        col = i % cols
-        ax = axs[row, col]
-        if i >= sample_num:
-            ax.axis("off")
-            continue
-
-        time_arr = np.asarray(time_list[i], dtype=float)
-        bg_arr = np.asarray(background_list[i], dtype=float)
-        n = min(time_arr.size, bg_arr.size)
-        time_arr = time_arr[:n]
-        bg_arr = bg_arr[:n]
-        ax.plot(time_arr, bg_arr, linewidth=2)
-
-        rise_idx = rise_indices[i]
-        if np.isfinite(rise_idx):
-            rise_idx = int(rise_idx)
-            if 0 <= rise_idx < n:
-                ax.axvline(time_arr[rise_idx], color="red", linestyle="--", alpha=0.8)
-
-        ax.grid(True)
-        ax.set_title(f"Background Intensity No.{i+1}", fontsize=title_fs)
-        ax.set_xlabel("Time [s]", fontsize=label_fs)
-        ax.set_ylabel("Intensity", fontsize=label_fs)
-        ax.tick_params(axis="both", which="major", labelsize=tick_fs)
-
-    plt.tight_layout()
-    plt.savefig(f"{save_dir}/background_intensity_time_series.png")
-    plt.close(fig)
+    for part_number, start, end in _sample_pages(sample_num):
+        rows = max(1, math.ceil((end - start) / cols))
+        fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y * rows / 5))
+        axs = np.atleast_2d(axs)
+        for local_i in range(rows * cols):
+            ax = axs[local_i // cols, local_i % cols]
+            i = start + local_i
+            if i >= end:
+                ax.axis("off")
+                continue
+            time_arr, bg_arr = np.asarray(time_list[i], dtype=float), np.asarray(background_list[i], dtype=float)
+            n = min(time_arr.size, bg_arr.size)
+            time_arr, bg_arr = time_arr[:n], bg_arr[:n]
+            ax.plot(time_arr, bg_arr, linewidth=2)
+            rise_idx = rise_indices[i]
+            if np.isfinite(rise_idx) and 0 <= int(rise_idx) < n:
+                ax.axvline(time_arr[int(rise_idx)], color="red", linestyle="--", alpha=0.8)
+            ax.grid(True)
+            ax.set_title(f"Background Intensity No.{i + 1}", fontsize=title_fs)
+            ax.set_xlabel("Time [s]", fontsize=label_fs)
+            ax.set_ylabel("Intensity", fontsize=label_fs)
+            ax.tick_params(axis="both", which="major", labelsize=tick_fs)
+        plt.tight_layout()
+        plt.savefig(_page_path(save_dir, "background_intensity_time_series.png", sample_num, part_number))
+        plt.close(fig)
 
 
 def plot_repellent_background_and_av_stacked(
@@ -1227,9 +1246,29 @@ def plot_repellent_background_and_av_stacked(
     day,
     sample_indices=None,
     rise_time_list=None,
+    _page_number=1,
+    _total_sample_num=None,
 ):
     sample_num = min(len(time_list), len(background_list), len(angular_velocity_list))
     if sample_num <= 0:
+        return
+
+    # This paired, one-column layout has bespoke GridSpec spacing, so recurse
+    # with aligned slices rather than duplicating its drawing code below.
+    if _total_sample_num is None and sample_num > PLOT_SAMPLES_PER_FILE:
+        for part_number, start, end in _sample_pages(sample_num):
+            plot_repellent_background_and_av_stacked(
+                time_list[start:end],
+                background_list[start:end],
+                angular_velocity_list[start:end],
+                day,
+                sample_indices=(
+                    sample_indices[start:end] if sample_indices is not None else list(range(start + 1, end + 1))
+                ),
+                rise_time_list=rise_time_list[start:end] if rise_time_list is not None else None,
+                _page_number=part_number,
+                _total_sample_num=sample_num,
+            )
         return
 
     save_dir = f"{param.save_dir_bef}/{day}/repellent_response/01_brightness_change"
@@ -1301,7 +1340,15 @@ def plot_repellent_background_and_av_stacked(
     # Reserve enough space for the enlarged bottom tick labels and x-axis
     # label; the previous 4.5% margin clipped "Time [s]" on this figure.
     fig.subplots_adjust(top=0.95, bottom=0.12, left=0.1, right=0.98)
-    plt.savefig(f"{save_dir}/background_intensity_and_angular_velocity_time_series.png", dpi=200)
+    plt.savefig(
+        _page_path(
+            save_dir,
+            "background_intensity_and_angular_velocity_time_series.png",
+            _total_sample_num or sample_num,
+            _page_number,
+        ),
+        dpi=200,
+    )
     plt.close(fig)
 
 
@@ -1497,91 +1544,50 @@ def plot_repellent_component_panels(
     label_fs = font_size + 4
     tick_fs = font_size + 2
 
-    rows = max(1, sample_num)
-    cols = 3  # x-y, x-t, y-t
-    fig, axs = plt.subplots(rows, cols, figsize=(3 * fig_size_x / 2, max(6, rows * 4)))
-    axs = np.atleast_2d(axs)
-
-    for i in range(rows):
-        x_arr = np.asarray(x_list[i], dtype=float)
-        y_arr = np.asarray(y_list[i], dtype=float)
-        t_arr = np.asarray(time_list[i], dtype=float)
-        x_overlay_arr = np.array([], dtype=float)
-        y_overlay_arr = np.array([], dtype=float)
-        flag_overlay = False
-        if (
-            overlay_x_list is not None
-            and overlay_y_list is not None
-            and i < len(overlay_x_list)
-            and i < len(overlay_y_list)
-        ):
-            x_overlay_arr = np.asarray(overlay_x_list[i], dtype=float)
-            y_overlay_arr = np.asarray(overlay_y_list[i], dtype=float)
-            flag_overlay = True
-        rise_time = np.nan
-        if rise_time_list is not None and i < len(rise_time_list):
-            rise_time = float(rise_time_list[i]) if np.isfinite(rise_time_list[i]) else np.nan
-        n = min(x_arr.size, y_arr.size, t_arr.size)
-        if flag_overlay:
-            n = min(n, x_overlay_arr.size, y_overlay_arr.size)
-        x_arr = x_arr[:n]
-        y_arr = y_arr[:n]
-        t_arr = t_arr[:n]
-        if flag_overlay:
-            x_overlay_arr = x_overlay_arr[:n]
-            y_overlay_arr = y_overlay_arr[:n]
-
-        # x-y
-        ax = axs[i, 0]
-        ax.plot(x_arr, y_arr, linewidth=1.8)
-        if flag_overlay:
-            ax.plot(x_overlay_arr, y_overlay_arr, color="orange", linewidth=1.8, alpha=0.9)
-        ax.grid(True)
-        ax.set_aspect("equal", "box")
-        if n > 0 and np.isfinite(x_arr).any() and np.isfinite(y_arr).any():
-            x_min = float(np.nanmin(x_arr))
-            x_max = float(np.nanmax(x_arr))
-            y_min = float(np.nanmin(y_arr))
-            y_max = float(np.nanmax(y_arr))
-            x_mid = 0.5 * (x_min + x_max)
-            y_mid = 0.5 * (y_min + y_max)
-            half = 0.55 * max(x_max - x_min, y_max - y_min, 1e-6)
-            ax.set_xlim(x_mid - half, x_mid + half)
-            ax.set_ylim(y_mid - half, y_mid + half)
-        ax.set_title(f"{mode_label} No.{i+1} | x-y", fontsize=title_fs)
-        ax.set_xlabel(r"x [$\mu$m]", fontsize=label_fs)
-        ax.set_ylabel(r"y [$\mu$m]", fontsize=label_fs)
-        ax.tick_params(axis="both", which="major", labelsize=tick_fs)
-
-        # x-t
-        ax = axs[i, 1]
-        ax.plot(t_arr, x_arr, linewidth=1.8)
-        if flag_overlay:
-            ax.plot(t_arr, x_overlay_arr, color="orange", linewidth=1.8, alpha=0.9)
-        if np.isfinite(rise_time):
-            ax.axvline(rise_time, color="red", linestyle="--", linewidth=1.6, alpha=0.85)
-        ax.grid(True)
-        ax.set_title(f"{mode_label} No.{i+1} | x-t", fontsize=title_fs)
-        ax.set_xlabel("Time [s]", fontsize=label_fs)
-        ax.set_ylabel(r"x [$\mu$m]", fontsize=label_fs)
-        ax.tick_params(axis="both", which="major", labelsize=tick_fs)
-
-        # y-t
-        ax = axs[i, 2]
-        ax.plot(t_arr, y_arr, linewidth=1.8)
-        if flag_overlay:
-            ax.plot(t_arr, y_overlay_arr, color="orange", linewidth=1.8, alpha=0.9)
-        if np.isfinite(rise_time):
-            ax.axvline(rise_time, color="red", linestyle="--", linewidth=1.6, alpha=0.85)
-        ax.grid(True)
-        ax.set_title(f"{mode_label} No.{i+1} | y-t", fontsize=title_fs)
-        ax.set_xlabel("Time [s]", fontsize=label_fs)
-        ax.set_ylabel(r"y [$\mu$m]", fontsize=label_fs)
-        ax.tick_params(axis="both", which="major", labelsize=tick_fs)
-
-    plt.tight_layout()
-    plt.savefig(f"{save_dir}/{save_name}")
-    plt.close(fig)
+    for part_number, start, end in _sample_pages(sample_num):
+        fig, axs = plt.subplots(end - start, 3, figsize=(3 * fig_size_x / 2, max(6, (end - start) * 4)))
+        axs = np.atleast_2d(axs)
+        for row, i in enumerate(range(start, end)):
+            t = np.asarray(time_list[i], dtype=float)
+            x = np.asarray(x_list[i], dtype=float)
+            y = np.asarray(y_list[i], dtype=float)
+            overlay = (
+                overlay_x_list is not None
+                and overlay_y_list is not None
+                and i < len(overlay_x_list)
+                and i < len(overlay_y_list)
+            )
+            ox = np.asarray(overlay_x_list[i], dtype=float) if overlay else None
+            oy = np.asarray(overlay_y_list[i], dtype=float) if overlay else None
+            n = min(t.size, x.size, y.size, ox.size, oy.size) if overlay else min(t.size, x.size, y.size)
+            t, x, y = t[:n], x[:n], y[:n]
+            if overlay:
+                ox, oy = ox[:n], oy[:n]
+            rise_time = rise_time_list[i] if rise_time_list is not None and i < len(rise_time_list) else np.nan
+            xy_ax, xt_ax, yt_ax = axs[row]
+            xy_ax.plot(x, y, linewidth=1.8)
+            if overlay:
+                xy_ax.plot(ox, oy, color="orange", linewidth=1.8, alpha=0.9)
+            xy_ax.grid(True)
+            xy_ax.set_aspect("equal", "box")
+            xy_ax.set_title(f"{mode_label} No.{i + 1} | x-y", fontsize=title_fs)
+            xy_ax.set_xlabel(r"x [$\mu$m]", fontsize=label_fs)
+            xy_ax.set_ylabel(r"y [$\mu$m]", fontsize=label_fs)
+            for ax, values, label, suffix in ((xt_ax, x, r"x [$\mu$m]", "x-t"), (yt_ax, y, r"y [$\mu$m]", "y-t")):
+                ax.plot(t, values, linewidth=1.8)
+                if overlay:
+                    ax.plot(t, ox if suffix == "x-t" else oy, color="orange", linewidth=1.8, alpha=0.9)
+                if np.isfinite(rise_time):
+                    ax.axvline(rise_time, color="red", linestyle="--", linewidth=1.6, alpha=0.85)
+                ax.grid(True)
+                ax.set_title(f"{mode_label} No.{i + 1} | {suffix}", fontsize=title_fs)
+                ax.set_xlabel("Time [s]", fontsize=label_fs)
+                ax.set_ylabel(label, fontsize=label_fs)
+            for ax in axs[row]:
+                ax.tick_params(axis="both", which="major", labelsize=tick_fs)
+        plt.tight_layout()
+        plt.savefig(_page_path(save_dir, save_name, sample_num, part_number))
+        plt.close(fig)
 
 
 def plot_repellent_time_list(time_list, day):
@@ -1593,29 +1599,26 @@ def plot_repellent_time_list(time_list, day):
     tick_fs = font_size + 2
 
     cols = 2
-    rows = max(1, math.ceil(sample_num / cols))
-    fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y))
-    axs = np.atleast_2d(axs)
-    for i in range(rows * cols):
-        row = i // cols
-        col = i % cols
-        ax = axs[row, col]
-        if i >= sample_num:
-            ax.axis("off")
-            continue
-        t_arr = np.asarray(time_list[i], dtype=float)
-        if t_arr.size == 0:
-            ax.axis("off")
-            continue
-        ax.plot(np.arange(t_arr.size), t_arr, linewidth=2)
-        ax.grid(True)
-        ax.set_title(f"Time List No.{i+1}", fontsize=title_fs)
-        ax.set_xlabel("Frame", fontsize=label_fs)
-        ax.set_ylabel("Time [s]", fontsize=label_fs)
-        ax.tick_params(axis="both", which="major", labelsize=tick_fs)
-    plt.tight_layout()
-    plt.savefig(f"{save_dir}/time_list.png")
-    plt.close(fig)
+    for part_number, start, end in _sample_pages(sample_num):
+        rows = max(1, math.ceil((end - start) / cols))
+        fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y * rows / 5))
+        axs = np.atleast_2d(axs)
+        for local_i in range(rows * cols):
+            ax = axs[local_i // cols, local_i % cols]
+            i = start + local_i
+            if i >= end or np.asarray(time_list[i]).size == 0:
+                ax.axis("off")
+                continue
+            t_arr = np.asarray(time_list[i], dtype=float)
+            ax.plot(np.arange(t_arr.size), t_arr, linewidth=2)
+            ax.grid(True)
+            ax.set_title(f"Time List No.{i + 1}", fontsize=title_fs)
+            ax.set_xlabel("Frame", fontsize=label_fs)
+            ax.set_ylabel("Time [s]", fontsize=label_fs)
+            ax.tick_params(axis="both", which="major", labelsize=tick_fs)
+        plt.tight_layout()
+        plt.savefig(_page_path(save_dir, "time_list.png", sample_num, part_number))
+        plt.close(fig)
 
 
 def plot_repellent_angular_velocity_onecol(time_list, angle_list, angular_velocity_list, save_dir, rise_time_list=None):
@@ -1627,45 +1630,34 @@ def plot_repellent_angular_velocity_onecol(time_list, angle_list, angular_veloci
     tick_fs = font_size
 
     def _plot_panel(y_lists, save_name, y_label, title_prefix, use_abs=False):
-        rows = max(1, sample_num)
-        fig, axs = plt.subplots(rows, 1, figsize=(24, max(5.0, rows * 4.2)))
-        axs = np.atleast_1d(axs)
-        for i in range(rows):
-            ax = axs[i]
-            if i >= sample_num:
-                ax.axis("off")
-                continue
-
-            t_arr = np.asarray(time_list[i], dtype=float)
-            y_arr = np.asarray(y_lists[i], dtype=float)
-            if use_abs:
-                y_arr = np.abs(y_arr)
-            n = min(len(t_arr), len(y_arr))
-            t_arr = t_arr[:n]
-            y_arr = y_arr[:n]
-            if n <= 0:
-                ax.axis("off")
-                continue
-
-            ax.plot(t_arr, y_arr, linewidth=1.8)
-            rise_time = np.nan
-            if rise_time_list is not None and i < len(rise_time_list) and np.isfinite(rise_time_list[i]):
-                rise_time = float(rise_time_list[i])
-            if np.isfinite(rise_time):
-                ax.axvline(rise_time, color="red", linestyle="--", linewidth=1.6, alpha=0.85)
-            ax.grid(True)
-            ax.set_title(f"{title_prefix} No.{i + 1}", fontsize=title_fs)
-            ax.set_xlabel("Time [s]", fontsize=label_fs)
-            ax.set_ylabel(y_label, fontsize=label_fs)
-            if np.isfinite(t_arr).any():
-                t_min = float(np.nanmin(t_arr))
-                t_max = float(np.nanmax(t_arr))
-                if np.isfinite(t_min) and np.isfinite(t_max) and t_max > t_min:
-                    ax.set_xlim(t_min, t_max)
-            ax.tick_params(axis="both", which="major", labelsize=tick_fs)
-        plt.tight_layout()
-        plt.savefig(f"{save_dir}/{save_name}")
-        plt.close(fig)
+        for part_number, start, end in _sample_pages(sample_num):
+            rows = max(1, end - start)
+            fig, axs = plt.subplots(rows, 1, figsize=(24, max(5.0, rows * 4.2)))
+            axs = np.atleast_1d(axs)
+            for row, i in enumerate(range(start, end)):
+                ax = axs[row]
+                t_arr = np.asarray(time_list[i], dtype=float)
+                y_arr = np.asarray(y_lists[i], dtype=float)
+                y_arr = np.abs(y_arr) if use_abs else y_arr
+                n = min(len(t_arr), len(y_arr))
+                if n <= 0:
+                    ax.axis("off")
+                    continue
+                t_arr, y_arr = t_arr[:n], y_arr[:n]
+                ax.plot(t_arr, y_arr, linewidth=1.8)
+                rise_time = rise_time_list[i] if rise_time_list is not None and i < len(rise_time_list) else np.nan
+                if np.isfinite(rise_time):
+                    ax.axvline(rise_time, color="red", linestyle="--", linewidth=1.6, alpha=0.85)
+                ax.grid(True)
+                ax.set_title(f"{title_prefix} No.{i + 1}", fontsize=title_fs)
+                ax.set_xlabel("Time [s]", fontsize=label_fs)
+                ax.set_ylabel(y_label, fontsize=label_fs)
+                if np.isfinite(t_arr).any():
+                    ax.set_xlim(float(np.nanmin(t_arr)), float(np.nanmax(t_arr)))
+                ax.tick_params(axis="both", which="major", labelsize=tick_fs)
+            plt.tight_layout()
+            plt.savefig(_page_path(save_dir, save_name, sample_num, part_number))
+            plt.close(fig)
 
     _plot_panel(
         angle_list,
@@ -1705,45 +1697,34 @@ def plot_angular_velocity_switching_count(
     os.makedirs(save_dir, exist_ok=True)
 
     cols = 2
-    rows = max(1, math.ceil(sample_num / cols))
-    fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y * rows / 5))
-    axs = np.atleast_2d(axs)
-
-    for i in range(rows * cols):
-        row = i // cols
-        col = i % cols
-
-        if i >= sample_num:
-            axs[row, col].axis("off")
-            continue
-
-        t = np.asarray(time_list[i], dtype=float)
-        c = np.asarray(count_list[i], dtype=float)
-        n = min(len(t), len(c))
-
-        if n == 0:
-            axs[row, col].axis("off")
-            continue
-
-        t = t[:n]
-        c = c[:n]
-
-        axs[row, col].plot(t, c)
-        axs[row, col].grid(True)
-        axs[row, col].set_title(f"Switching Count Time-series No.{sample_indices[i]}", fontsize=font_size)
-        axs[row, col].set_xlabel("Time [s]", fontsize=font_size)
-        axs[row, col].set_ylabel("Switching Count [/1 s window]", fontsize=font_size)
-        axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
-
-        finite_t = t[np.isfinite(t)]
-        if finite_t.size > 0:
-            axs[row, col].set_xlim(0, finite_t[-1])
-
-        if rise_time_list is not None and i < len(rise_time_list):
-            rise_time = rise_time_list[i]
+    for part_number, start, end in _sample_pages(sample_num):
+        rows = max(1, math.ceil((end - start) / cols))
+        fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y * rows / 5))
+        axs = np.atleast_2d(axs)
+        for local_i in range(rows * cols):
+            ax = axs[local_i // cols, local_i % cols]
+            i = start + local_i
+            if i >= end:
+                ax.axis("off")
+                continue
+            t, c = np.asarray(time_list[i], dtype=float), np.asarray(count_list[i], dtype=float)
+            n = min(len(t), len(c))
+            if n == 0:
+                ax.axis("off")
+                continue
+            t, c = t[:n], c[:n]
+            ax.plot(t, c)
+            ax.grid(True)
+            ax.set_title(f"Switching Count Time-series No.{sample_indices[i]}", fontsize=font_size)
+            ax.set_xlabel("Time [s]", fontsize=font_size)
+            ax.set_ylabel("Switching Count [/1 s window]", fontsize=font_size)
+            ax.tick_params(axis="both", which="major", labelsize=font_size)
+            finite_t = t[np.isfinite(t)]
+            if finite_t.size:
+                ax.set_xlim(0, finite_t[-1])
+            rise_time = rise_time_list[i] if rise_time_list is not None and i < len(rise_time_list) else np.nan
             if rise_time is not None and np.isfinite(rise_time):
-                axs[row, col].axvline(rise_time, color="red", linestyle="--")
-
-    plt.tight_layout()
-    plt.savefig(f"{save_dir}/switching_count.png")
-    plt.close(fig)
+                ax.axvline(rise_time, color="red", linestyle="--")
+        plt.tight_layout()
+        plt.savefig(_page_path(save_dir, "switching_count.png", sample_num, part_number))
+        plt.close(fig)
