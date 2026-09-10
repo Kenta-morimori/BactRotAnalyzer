@@ -34,3 +34,20 @@ def test_component_panels_split_and_keep_original_sample_numbers(tmp_path, monke
     out_dir = tmp_path / "day" / "repellent_response" / "03_post_rise_analysis" / "centroid_coordinate"
     assert (out_dir / "components_part01.png").is_file()
     assert (out_dir / "components_part02.png").is_file()
+
+
+def test_coordinate_with_center_splits_into_pages(tmp_path, monkeypatch):
+    monkeypatch.setattr(param, "save_dir_bef", str(tmp_path))
+    monkeypatch.setattr(param, "get_config", lambda _day: (11, [], []))
+    monkeypatch.setattr(make_graph.read_csv, "get_timelist", lambda _day: [list(range(5)) for _ in range(11)])
+    values = [np.linspace(i, i + 1, 5) for i in range(11)]
+
+    make_graph.plot_coordinate_with_center(values, values, values, values, "day")
+
+    out_dir = tmp_path / "day" / "centroid_coordinate"
+    assert (out_dir / "trajectory_with_center_part01.png").is_file()
+    assert (out_dir / "trajectory_with_center_part02.png").is_file()
+    assert (out_dir / "x_centroid_center_part01.png").is_file()
+    assert (out_dir / "x_centroid_center_part02.png").is_file()
+    assert (out_dir / "y_centroid_center_part01.png").is_file()
+    assert (out_dir / "y_centroid_center_part02.png").is_file()

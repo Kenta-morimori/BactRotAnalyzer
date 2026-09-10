@@ -124,49 +124,39 @@ def plot_coordinate_with_center(x_list, y_list, center_x_list, center_y_list, da
     save_dir = f"{param.save_dir_bef}/{day}/centroid_coordinate"
     os.makedirs(save_dir, exist_ok=True)
 
-    cols = 5
-    rows = max(1, math.ceil(sample_num / cols))
-
-    # plot centroid coordinate
-    fig = plt.figure(figsize=(20, 4 * rows))
-    gs = gridspec.GridSpec(rows, cols, figure=fig, wspace=0.38, hspace=0.2)
     label = ["centroid", "center"]
-
     coef = 1.1
-    for i in range(sample_num):
-        row = i // cols
-        col = i % cols
-        ax = fig.add_subplot(gs[row, col])
-
-        ax.plot(x_list[i], y_list[i], label="centroid")
-        ax.plot(center_x_list[i], center_y_list[i], label="center", alpha=0.5)
-
-        # detect x_lim, y_lim
-        ax.set_xlim(
-            ((1 + coef) * min(x_list[i]) + (1 - coef) * max(x_list[i])) / 2,
-            ((1 - coef) * min(x_list[i]) + (1 + coef) * max(x_list[i])) / 2,
-        )
-        ax.set_ylim(
-            ((1 + coef) * min(y_list[i]) + (1 - coef) * max(y_list[i])) / 2,
-            ((1 - coef) * min(y_list[i]) + (1 + coef) * max(y_list[i])) / 2,
-        )
-        ax.set_aspect("equal", "box")
-
-        ax.grid(True)
-        ax.set_title(f"Trajectory No.{i+1}", fontsize=16)
-        ax.set_xlabel(r"x [$\mu$m]", fontsize=16)
-        ax.set_ylabel(r"y [$\mu$m]", fontsize=16)
-        ax.tick_params(axis="both", which="major", labelsize=16)
-    ax.legend(label, loc="upper left", bbox_to_anchor=(1, 1))
-    plt.savefig(f"{save_dir}/trajectory_with_center.png")
-    plt.close(fig)
+    cols = 5
+    for part_number, start, end in _sample_pages(sample_num):
+        rows = max(1, math.ceil((end - start) / cols))
+        fig = plt.figure(figsize=(20, 4 * rows))
+        gs = gridspec.GridSpec(rows, cols, figure=fig, wspace=0.38, hspace=0.2)
+        for local_i, i in enumerate(range(start, end)):
+            row, col = divmod(local_i, cols)
+            ax = fig.add_subplot(gs[row, col])
+            ax.plot(x_list[i], y_list[i], label="centroid")
+            ax.plot(center_x_list[i], center_y_list[i], label="center", alpha=0.5)
+            ax.set_xlim(
+                ((1 + coef) * min(x_list[i]) + (1 - coef) * max(x_list[i])) / 2,
+                ((1 - coef) * min(x_list[i]) + (1 + coef) * max(x_list[i])) / 2,
+            )
+            ax.set_ylim(
+                ((1 + coef) * min(y_list[i]) + (1 - coef) * max(y_list[i])) / 2,
+                ((1 - coef) * min(y_list[i]) + (1 + coef) * max(y_list[i])) / 2,
+            )
+            ax.set_aspect("equal", "box")
+            ax.grid(True)
+            ax.set_title(f"Trajectory No.{i + 1}", fontsize=16)
+            ax.set_xlabel(r"x [$\mu$m]", fontsize=16)
+            ax.set_ylabel(r"y [$\mu$m]", fontsize=16)
+            ax.tick_params(axis="both", which="major", labelsize=16)
+        fig.legend(label, loc="upper right")
+        plt.savefig(_page_path(save_dir, "trajectory_with_center.png", sample_num, part_number))
+        plt.close(fig)
 
     time_list = read_csv.get_timelist(day)
     cols = 2
-    rows = max(1, math.ceil(sample_num / cols))
     for axis_label in ["x", "y"]:
-        fig, axs = plt.subplots(rows, cols, figsize=(20, 4 * rows))
-        axs = np.atleast_2d(axs)
         plot_label = ["centroid", "center"]
         if axis_label == "x":
             xy_list = x_list
@@ -179,20 +169,27 @@ def plot_coordinate_with_center(x_list, y_list, center_x_list, center_y_list, da
             xy_plot_label = r"y [$\mu$m]"
             xy_save_label = "y_centroid_center.png"
 
-        for i in range(sample_num):
-            row = i // cols
-            col = i % cols
-            axs[row, col].plot(time_list[i], xy_list[i], label="centroid", alpha=0.7)
-            axs[row, col].plot(time_list[i][: len(xy_center_list[i])], xy_center_list[i], label="center", alpha=0.7)
-            axs[row, col].grid(True)
-            axs[row, col].set_title(f"Trajectory No.{i+1}", fontsize=font_size)
-            axs[row, col].set_xlabel("Time [s]", fontsize=18)
-            axs[row, col].set_ylabel(xy_plot_label, fontsize=font_size)
-            axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
-        axs[row, col].legend(plot_label, loc="upper left", bbox_to_anchor=(1, 1))
-        plt.tight_layout()
-        plt.savefig(f"{save_dir}/{xy_save_label}")
-        plt.close(fig)
+        for part_number, start, end in _sample_pages(sample_num):
+            rows = max(1, math.ceil((end - start) / cols))
+            fig, axs = plt.subplots(rows, cols, figsize=(20, 4 * rows))
+            axs = np.atleast_2d(axs)
+            for local_i in range(rows * cols):
+                ax = axs[local_i // cols, local_i % cols]
+                i = start + local_i
+                if i >= end:
+                    ax.axis("off")
+                    continue
+                ax.plot(time_list[i], xy_list[i], label="centroid", alpha=0.7)
+                ax.plot(time_list[i][: len(xy_center_list[i])], xy_center_list[i], label="center", alpha=0.7)
+                ax.grid(True)
+                ax.set_title(f"Trajectory No.{i + 1}", fontsize=font_size)
+                ax.set_xlabel("Time [s]", fontsize=18)
+                ax.set_ylabel(xy_plot_label, fontsize=font_size)
+                ax.tick_params(axis="both", which="major", labelsize=font_size)
+            fig.legend(plot_label, loc="upper right")
+            plt.tight_layout()
+            plt.savefig(_page_path(save_dir, xy_save_label, sample_num, part_number))
+            plt.close(fig)
 
 
 def plot_msd(msd, D_list, intercept_list, max_dist_list, day):
@@ -1133,48 +1130,46 @@ def dev_plot_fft_coordinates(X, Y, day):
     os.makedirs(save_dir, exist_ok=True)
 
     cols = 2
-    rows = max(1, math.ceil(sample_num / cols))
-
-    fig, axs = plt.subplots(rows, 2 * cols, figsize=(2 * fig_size_x, fig_size_y))
-    axs = np.atleast_2d(axs)
-    for i in range(sample_num):
-        x_freq_list, x_Amp_list = frequency_analysis.fft(X[i], 1 / FrameRate[i])
-        y_freq_list, y_Amp_list = frequency_analysis.fft(Y[i], 1 / FrameRate[i])
-        peak_candidates = []
-        if x_freq_list.size > 0 and x_Amp_list.size > 0 and np.isfinite(x_Amp_list).any():
-            peak_candidates.append(float(x_freq_list[int(np.nanargmax(x_Amp_list))]))
-        if y_freq_list.size > 0 and y_Amp_list.size > 0 and np.isfinite(y_Amp_list).any():
-            peak_candidates.append(float(y_freq_list[int(np.nanargmax(y_Amp_list))]))
-        if peak_candidates:
-            peak = max(peak_candidates)
-        else:
-            peak = 0.1
-
-        row = i // cols
-        col = i % cols
-        if x_freq_list.size == 0 or y_freq_list.size == 0:
-            axs[row, 2 * col].axis("off")
-            axs[row, 2 * col + 1].axis("off")
-            continue
-        axs[row, 2 * col].plot(x_freq_list, x_Amp_list)
-        axs[row, 2 * col + 1].plot(y_freq_list, y_Amp_list)
-        axs[row, 2 * col].set_xlim(0, x_freq_list[-1])
-        axs[row, 2 * col + 1].set_xlim(0, y_freq_list[-1])
-        xy = ["x", "y"]
-        for j in [0, 1]:
-            axs[row, 2 * col + j].grid(True)
-            axs[row, 2 * col + j].axvline(x=peak, color="r", alpha=0.6)
-            axs[row, 2 * col + j].set_title(
-                f"No.{i+1}_{xy[j]}  peak:{round(peak, 3)}  width_time:{round(param.n_rotations / peak, 3)}s",
-                fontsize=font_size,
-            )
-            axs[row, 2 * col + j].set_xlabel("Freqency [Hz]", fontsize=font_size)
-            axs[row, 2 * col + j].set_ylabel("Amp", fontsize=font_size)
-            _set_log_y_if_positive(axs[row, 2 * col + j], x_Amp_list if j == 0 else y_Amp_list)
-            axs[row, 2 * col + j].tick_params(axis="both", which="major", labelsize=font_size)
-    plt.tight_layout()
-    plt.savefig(f"{save_dir}/{save_name}")
-    plt.close(fig)
+    for part_number, start, end in _sample_pages(sample_num):
+        rows = max(1, math.ceil((end - start) / cols))
+        fig, axs = plt.subplots(rows, 2 * cols, figsize=(2 * fig_size_x, fig_size_y * rows / 5))
+        axs = np.atleast_2d(axs)
+        for local_i in range(rows * cols):
+            row, col = divmod(local_i, cols)
+            x_ax, y_ax = axs[row, 2 * col], axs[row, 2 * col + 1]
+            i = start + local_i
+            if i >= end:
+                x_ax.axis("off")
+                y_ax.axis("off")
+                continue
+            x_freq_list, x_Amp_list = frequency_analysis.fft(X[i], 1 / FrameRate[i])
+            y_freq_list, y_Amp_list = frequency_analysis.fft(Y[i], 1 / FrameRate[i])
+            peak_candidates = []
+            if x_freq_list.size > 0 and x_Amp_list.size > 0 and np.isfinite(x_Amp_list).any():
+                peak_candidates.append(float(x_freq_list[int(np.nanargmax(x_Amp_list))]))
+            if y_freq_list.size > 0 and y_Amp_list.size > 0 and np.isfinite(y_Amp_list).any():
+                peak_candidates.append(float(y_freq_list[int(np.nanargmax(y_Amp_list))]))
+            peak = max(peak_candidates) if peak_candidates else 0.1
+            if x_freq_list.size == 0 or y_freq_list.size == 0:
+                x_ax.axis("off")
+                y_ax.axis("off")
+                continue
+            for ax, freq, amp, xy in ((x_ax, x_freq_list, x_Amp_list, "x"), (y_ax, y_freq_list, y_Amp_list, "y")):
+                ax.plot(freq, amp)
+                ax.set_xlim(0, freq[-1])
+                ax.grid(True)
+                ax.axvline(x=peak, color="r", alpha=0.6)
+                ax.set_title(
+                    f"No.{i + 1}_{xy}  peak:{round(peak, 3)}  width_time:{round(param.n_rotations / peak, 3)}s",
+                    fontsize=font_size,
+                )
+                ax.set_xlabel("Freqency [Hz]", fontsize=font_size)
+                ax.set_ylabel("Amp", fontsize=font_size)
+                _set_log_y_if_positive(ax, amp)
+                ax.tick_params(axis="both", which="major", labelsize=font_size)
+        plt.tight_layout()
+        plt.savefig(_page_path(save_dir, save_name, sample_num, part_number))
+        plt.close(fig)
 
 
 def dev_plot_max_dist_stat(max_dists, max_dists_all, day):

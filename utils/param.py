@@ -42,7 +42,10 @@ def get_flag_use_brightness_data(day, default_flag=False):
 def get_config(day):
     config = _read_config(day)
     flag_use_tiff_log = get_flag_use_tiff_log(day)
-    sample_num = config.getint("Settings", "sample_num")
+    # TIFF-log datasets are defined by their explicitly ordered TIFF series.
+    # Keeping a second sample count in Settings made it possible for the time
+    # CSV and downstream analysis to disagree, causing index errors.
+    sample_num = len(get_tiffinfo_config(day)) if flag_use_tiff_log else config.getint("Settings", "sample_num")
     # Frame Rate, Total Time
     FrameRate_list = []
     total_time_list = []
