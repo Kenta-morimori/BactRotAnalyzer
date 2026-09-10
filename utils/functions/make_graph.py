@@ -24,24 +24,26 @@ fig_size_y = 23
 # module-level setting on purpose: all analysis entry points share it without
 # requiring changes to their config.ini files or command-line interfaces.
 PLOT_SAMPLES_PER_FILE = 10
+BACKGROUND_AV_SAMPLES_PER_FILE = 4
+BACKGROUND_AV_FIGURE_HEIGHT = 40
 
 
-def _sample_pages(sample_num):
+def _sample_pages(sample_num, samples_per_file=PLOT_SAMPLES_PER_FILE):
     """Yield ``(part_number, start, end)`` ranges for sample-panel figures."""
-    for start in range(0, sample_num, PLOT_SAMPLES_PER_FILE):
-        yield start // PLOT_SAMPLES_PER_FILE + 1, start, min(start + PLOT_SAMPLES_PER_FILE, sample_num)
+    for start in range(0, sample_num, samples_per_file):
+        yield start // samples_per_file + 1, start, min(start + samples_per_file, sample_num)
 
 
-def _page_save_name(filename, sample_num, part_number):
+def _page_save_name(filename, sample_num, part_number, samples_per_file=PLOT_SAMPLES_PER_FILE):
     """Preserve legacy names for one-page plots and suffix multi-page plots."""
-    if sample_num <= PLOT_SAMPLES_PER_FILE:
+    if sample_num <= samples_per_file:
         return filename
     stem, ext = os.path.splitext(filename)
     return f"{stem}_part{part_number:02d}{ext}"
 
 
-def _page_path(save_dir, filename, sample_num, part_number):
-    return os.path.join(save_dir, _page_save_name(filename, sample_num, part_number))
+def _page_path(save_dir, filename, sample_num, part_number, samples_per_file=PLOT_SAMPLES_PER_FILE):
+    return os.path.join(save_dir, _page_save_name(filename, sample_num, part_number, samples_per_file))
 
 
 def _set_log_y_if_positive(ax, *series) -> None:
@@ -1250,10 +1252,10 @@ def plot_repellent_background_and_av_stacked(
     if sample_num <= 0:
         return
 
-    # This paired, one-column layout has bespoke GridSpec spacing, so recurse
+    # This three-panel, one-column layout has bespoke GridSpec spacing, so recurse
     # with aligned slices rather than duplicating its drawing code below.
-    if _total_sample_num is None and sample_num > PLOT_SAMPLES_PER_FILE:
-        for part_number, start, end in _sample_pages(sample_num):
+    if _total_sample_num is None and sample_num > BACKGROUND_AV_SAMPLES_PER_FILE:
+        for part_number, start, end in _sample_pages(sample_num, BACKGROUND_AV_SAMPLES_PER_FILE):
             plot_repellent_background_and_av_stacked(
                 time_list[start:end],
                 background_list[start:end],
@@ -1276,14 +1278,16 @@ def plot_repellent_background_and_av_stacked(
     label_fs = font_size + 2
     tick_fs = font_size
 
-    nrows = sample_num * 4 - 1
+    # Every page reserves four sample slots.  This keeps the final, partial
+    # page at the same aspect ratio and per-panel height as full pages.
+    nrows = BACKGROUND_AV_SAMPLES_PER_FILE * 4 - 1
     height_ratios = []
-    for i in range(sample_num):
+    for i in range(BACKGROUND_AV_SAMPLES_PER_FILE):
         height_ratios.extend([1.0, 1.0, 0.75])
-        if i < sample_num - 1:
+        if i < BACKGROUND_AV_SAMPLES_PER_FILE - 1:
             # Spacer row between pairs to avoid title overlap.
             height_ratios.append(0.22)
-    fig = plt.figure(figsize=(24, max(10.0, sample_num * 9.0)))
+    fig = plt.figure(figsize=(24, BACKGROUND_AV_FIGURE_HEIGHT))
     gs = fig.add_gridspec(nrows=nrows, ncols=1, height_ratios=height_ratios, hspace=0.1)
 
     for i in range(sample_num):
@@ -1359,6 +1363,7 @@ def plot_repellent_background_and_av_stacked(
             "background_intensity_and_angular_velocity_time_series.png",
             _total_sample_num or sample_num,
             _page_number,
+            BACKGROUND_AV_SAMPLES_PER_FILE,
         ),
         dpi=200,
     )
