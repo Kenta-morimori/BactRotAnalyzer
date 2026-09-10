@@ -1,6 +1,7 @@
 import numpy as np
 
 import matplotlib
+from PIL import Image
 
 matplotlib.use("Agg")
 
@@ -51,3 +52,20 @@ def test_coordinate_with_center_splits_into_pages(tmp_path, monkeypatch):
     assert (out_dir / "x_centroid_center_part02.png").is_file()
     assert (out_dir / "y_centroid_center_part01.png").is_file()
     assert (out_dir / "y_centroid_center_part02.png").is_file()
+
+
+def test_background_av_plot_uses_four_samples_per_fixed_size_page(tmp_path, monkeypatch):
+    monkeypatch.setattr(param, "save_dir_bef", str(tmp_path))
+    values = [np.linspace(0, 1, 5) + i for i in range(5)]
+
+    make_graph.plot_repellent_background_and_av_stacked(
+        values, values, values, values, values, "day", sample_indices=list(range(1, 6))
+    )
+
+    out_dir = tmp_path / "day" / "repellent_response" / "01_brightness_change"
+    first_page = out_dir / "background_intensity_and_angular_velocity_time_series_part01.png"
+    second_page = out_dir / "background_intensity_and_angular_velocity_time_series_part02.png"
+    assert first_page.is_file()
+    assert second_page.is_file()
+    with Image.open(first_page) as first_image, Image.open(second_page) as second_image:
+        assert first_image.size == second_image.size
