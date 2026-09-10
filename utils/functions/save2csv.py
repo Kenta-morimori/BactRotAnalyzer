@@ -193,3 +193,23 @@ def save_angular_velocity_switching_count(
         data[f"No.{i+1}_count"] = c_arr.iloc[:n].reset_index(drop=True)
 
     pd.DataFrame(data).to_csv(csv_path, index=False)
+
+
+def save_angular_velocity_cw_rate(
+    time_list: Sequence[Sequence[float]],
+    cw_rate_list: Sequence[Sequence[float]],
+    day: str,
+) -> None:
+    """Save sliding-window clockwise rates to CSV."""
+    sample_num = min(len(time_list), len(cw_rate_list))
+    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/00_all_rotational_analysis/angular_velocity"
+    os.makedirs(save_dir, exist_ok=True)
+
+    data = {}
+    for i in range(sample_num):
+        t_arr = pd.Series(time_list[i], dtype="float64")
+        rate_arr = pd.Series(cw_rate_list[i], dtype="float64")
+        n = min(len(t_arr), len(rate_arr))
+        data[f"No.{i+1}_time"] = t_arr.iloc[:n].reset_index(drop=True)
+        data[f"No.{i+1}_cw_rate"] = rate_arr.iloc[:n].reset_index(drop=True)
+    pd.DataFrame(data).to_csv(f"{save_dir}/cw_rate.csv", index=False)

@@ -225,6 +225,56 @@ def calculate_angular_velocity_switching_count(
     return out_time, out_count
 
 
+def calculate_angular_velocity_cw_rate(
+    time_list: Sequence[Sequence[float]],
+    angular_velocity_list: Sequence[Sequence[float]],
+    window_width_sec: float = 1.0,
+) -> Tuple[List[List[float]], List[List[float]]]:
+    """Calculate the fraction of clockwise (negative) AV samples per time window."""
+    out_time: List[List[float]] = []
+    out_rate: List[List[float]] = []
+
+    for time_arr, av_arr in zip(time_list, angular_velocity_list):
+        t = np.asarray(time_arr, dtype=float)
+        av = np.asarray(av_arr, dtype=float)
+        n = min(len(t), len(av))
+        if n < 2:
+            out_time.append([])
+            out_rate.append([])
+            continue
+
+        valid_mask = np.isfinite(t[:n]) & np.isfinite(av[:n])
+        t = t[:n][valid_mask]
+        av = av[:n][valid_mask]
+        if len(t) < 2:
+            out_time.append([])
+            out_rate.append([])
+            continue
+
+        w_times: List[float] = []
+        w_rates: List[float] = []
+        end_idx = 1
+        for start_idx in range(len(t) - 1):
+            window_start = float(t[start_idx])
+            window_end = window_start + window_width_sec
+            if end_idx < start_idx + 1:
+                end_idx = start_idx + 1
+            while end_idx < len(t) and t[end_idx] <= window_end:
+                end_idx += 1
+
+            window_av = av[start_idx:end_idx]
+            if window_av.size < 2:
+                continue
+            w_times.append(window_start + window_width_sec / 2.0)
+            # AV == 0 is CCW; only negative samples are clockwise.
+            w_rates.append(float(np.count_nonzero(window_av < 0.0) / window_av.size))
+
+        out_time.append(w_times)
+        out_rate.append(w_rates)
+
+    return out_time, out_rate
+
+
 def detect_rise_index(
     values: Sequence[float],
     baseline_ratio: float = 0.5,
