@@ -956,7 +956,7 @@ def run_segment_rotational_analysis(
                 rot_df_manage.create_rot_df(tmp_day)
                 _write_dummy_angle_fft(tmp_day, len(valid_indices))
                 angle_list, angular_velocity_list = get_angular_velocity.get_angular_velocity(
-                    selected_x_list, selected_y_list, tmp_day
+                    selected_x_list, selected_y_list, tmp_day, time_list=selected_time_list
                 )
 
                 if run_fluctuation:
@@ -1088,16 +1088,19 @@ def estimate_rotation_center_like_standard(
         t_fft = time_arr[fft_mask]
         x_fft = x_arr[fft_mask]
         y_fft = y_arr[fft_mask]
+        (t_fft, x_fft, y_fft), _ = frequency_analysis.longest_continuous_segment(t_fft, x_fft, y_fft)
         total_duration_fft = float(t_fft[-1] - t_fft[0]) if len(t_fft) > 1 else 0.0
         if total_duration_fft <= 0:
-            total_duration_fft = total_duration_all
-            t_fft = t
-            x_fft = x
-            y_fft = y
+            (t_fft, x_fft, y_fft), _ = frequency_analysis.longest_continuous_segment(t, x, y)
+            total_duration_fft = float(t_fft[-1] - t_fft[0]) if len(t_fft) > 1 else total_duration_all
             fft_source = "all-time"
 
-        frame_rate_fft = max(1e-6, float(len(t_fft)) / total_duration_fft)
-        frame_rate_all = max(1e-6, float(len(t)) / total_duration_all)
+        fft_diffs = np.diff(t_fft)
+        fft_diffs = fft_diffs[np.isfinite(fft_diffs) & (fft_diffs > 0)]
+        all_diffs = np.diff(t)
+        all_diffs = all_diffs[np.isfinite(all_diffs) & (all_diffs > 0)]
+        frame_rate_fft = max(1e-6, 1.0 / float(np.median(fft_diffs))) if len(fft_diffs) else 1.0
+        frame_rate_all = max(1e-6, 1.0 / float(np.median(all_diffs))) if len(all_diffs) else 1.0
         x_freq, x_amp = frequency_analysis.fft(x_fft, 1.0 / frame_rate_fft)
         y_freq, y_amp = frequency_analysis.fft(y_fft, 1.0 / frame_rate_fft)
         freq_th = 5.0
@@ -1203,11 +1206,14 @@ def _estimate_window_frames_from_fft(
     t = time_arr[fft_mask]
     x = x_arr[fft_mask]
     y = y_arr[fft_mask]
+    (t, x, y), _ = frequency_analysis.longest_continuous_segment(t, x, y)
     total_duration = float(t[-1] - t[0]) if len(t) > 1 else 0.0
     if total_duration <= 0:
         return 3
 
-    frame_rate = max(1e-6, float(len(t)) / total_duration)
+    dt_values = np.diff(t)
+    dt_values = dt_values[np.isfinite(dt_values) & (dt_values > 0)]
+    frame_rate = max(1e-6, 1.0 / float(np.median(dt_values))) if len(dt_values) else 1.0
     x_freq, x_amp = frequency_analysis.fft(x, 1.0 / frame_rate)
     y_freq, y_amp = frequency_analysis.fft(y, 1.0 / frame_rate)
     freq_th = 5.0
@@ -1340,12 +1346,16 @@ def resolve_rotation_stop_indices(
     for i in range(n):
         m = len(time_list[i])
         rise_idx = _normalize_rise_index(float(rise_indices[i]), m)
-        manual_idx = manual_stop_indices[i] if manual_stop_indices is not None and i < len(manual_stop_indices) else None
+        manual_idx = (
+            manual_stop_indices[i] if manual_stop_indices is not None and i < len(manual_stop_indices) else None
+        )
         if manual_idx is not None:
             if manual_idx >= m:
                 raise ValueError(f"Manual stop-frame index for sample No.{i + 1} is outside the series: {manual_idx}")
             if manual_idx <= rise_idx:
-                raise ValueError(f"Manual stop-frame index for sample No.{i + 1} must be after the rise index: {manual_idx}")
+                raise ValueError(
+                    f"Manual stop-frame index for sample No.{i + 1} must be after the rise index: {manual_idx}"
+                )
             resolved.append(float(manual_idx))
             sources.append("manual")
         elif np.isfinite(automatic_stop_indices[i]):
@@ -2003,10 +2013,79 @@ def align_coordinate_series_to_time(
         x_arr = np.asarray(x_list[i], dtype=float)
         y_arr = np.asarray(y_list[i], dtype=float)
         t_arr = np.asarray(time_list[i], dtype=float)
-        m = min(len(x_arr), len(y_arr), len(t_arr))
-        x_aligned.append(x_arr[:m].tolist())
-        y_aligned.append(y_arr[:m].tolist())
+        # Keep the frame axis intact.  Missing centroid detections are data
+        # gaps, not a reason to shift later coordinates onto another frame.
+        x_out = np.full(len(t_arr), np.nan, dtype=float)
+        y_out = np.full(len(t_arr), np.nan, dtype=float)
+        x_out[: min(len(x_arr), len(t_arr))] = x_arr[: len(x_out)]
+        y_out[: min(len(y_arr), len(t_arr))] = y_arr[: len(y_out)]
+        x_aligned.append(x_out.tolist())
+        y_aligned.append(y_out.tolist())
     return x_aligned, y_aligned
+
+
+def apply_analysis_frame_ranges(
+    time_list: Sequence[Sequence[float]],
+    series_lists: Sequence[Sequence[Sequence[float]]],
+    frame_ranges: Sequence[Optional[Tuple[int, int]]],
+) -> Tuple[List[List[float]], List[List[List[float]]], List[Dict[str, object]]]:
+    """Synchronously select configured 1-based inclusive source-frame ranges.
+
+    Short series are padded with NaN before selection so every returned value
+    retains the same source-frame index as its corresponding timestamp.
+    """
+    if frame_ranges and len(frame_ranges) != len(time_list):
+        raise ValueError(
+            "RepellentResponse.analysis_frame_ranges must contain one range per time series. "
+            f"ranges={len(frame_ranges)}, samples={len(time_list)}"
+        )
+    normalized_ranges = list(frame_ranges) if frame_ranges else [None] * len(time_list)
+    selected_time: List[List[float]] = []
+    selected_series: List[List[List[float]]] = [[] for _ in series_lists]
+    range_rows: List[Dict[str, object]] = []
+
+    for sample_index, raw_time in enumerate(time_list):
+        t = np.asarray(raw_time, dtype=float)
+        source_count = len(t)
+        configured_range = normalized_ranges[sample_index]
+        if configured_range is None:
+            start_1based, end_1based = 1, source_count
+        else:
+            start_1based, end_1based = configured_range
+        if source_count == 0:
+            if configured_range is not None:
+                raise ValueError(f"No.{sample_index + 1} has no timestamps for configured frame range.")
+            start_1based, end_1based = 1, 0
+        elif end_1based > source_count:
+            raise ValueError(
+                f"No.{sample_index + 1} analysis frame range {start_1based}-{end_1based} "
+                f"exceeds available frames ({source_count})."
+            )
+        start = start_1based - 1
+        end = end_1based
+        selected_t = t[start:end]
+        selected_time.append(selected_t.tolist())
+
+        for series_index, all_samples in enumerate(series_lists):
+            raw_values = all_samples[sample_index] if sample_index < len(all_samples) else []
+            values = np.asarray(raw_values, dtype=float)
+            aligned = np.full(source_count, np.nan, dtype=float)
+            aligned[: min(source_count, len(values))] = values[:source_count]
+            selected_series[series_index].append(aligned[start:end].tolist())
+
+        range_rows.append(
+            {
+                "sample_no": sample_index + 1,
+                "source_start_frame_1based": start_1based,
+                "source_end_frame_1based": end_1based,
+                "source_start_index_0based": start,
+                "source_end_index_0based": end - 1,
+                "selected_frame_count": len(selected_t),
+                "start_time_sec": float(selected_t[0]) if len(selected_t) else np.nan,
+                "end_time_sec": float(selected_t[-1]) if len(selected_t) else np.nan,
+            }
+        )
+    return selected_time, selected_series, range_rows
 
 
 def copy_center_coordinate_to_segment(day: str, segment_subdir: str) -> None:
