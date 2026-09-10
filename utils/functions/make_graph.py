@@ -1238,13 +1238,15 @@ def plot_repellent_background_and_av_stacked(
     time_list,
     background_list,
     angular_velocity_list,
+    cw_rate_time_list,
+    cw_rate_list,
     day,
     sample_indices=None,
     rise_time_list=None,
     _page_number=1,
     _total_sample_num=None,
 ):
-    sample_num = min(len(time_list), len(background_list), len(angular_velocity_list))
+    sample_num = min(len(time_list), len(background_list), len(angular_velocity_list), len(cw_rate_time_list), len(cw_rate_list))
     if sample_num <= 0:
         return
 
@@ -1256,6 +1258,8 @@ def plot_repellent_background_and_av_stacked(
                 time_list[start:end],
                 background_list[start:end],
                 angular_velocity_list[start:end],
+                cw_rate_time_list[start:end],
+                cw_rate_list[start:end],
                 day,
                 sample_indices=(
                     sample_indices[start:end] if sample_indices is not None else list(range(start + 1, end + 1))
@@ -1272,24 +1276,27 @@ def plot_repellent_background_and_av_stacked(
     label_fs = font_size + 2
     tick_fs = font_size
 
-    nrows = sample_num * 3 - 1
+    nrows = sample_num * 4 - 1
     height_ratios = []
     for i in range(sample_num):
-        height_ratios.extend([1.0, 1.0])
+        height_ratios.extend([1.0, 1.0, 0.75])
         if i < sample_num - 1:
             # Spacer row between pairs to avoid title overlap.
             height_ratios.append(0.22)
-    fig = plt.figure(figsize=(24, max(10.0, sample_num * 7.2)))
+    fig = plt.figure(figsize=(24, max(10.0, sample_num * 9.0)))
     gs = fig.add_gridspec(nrows=nrows, ncols=1, height_ratios=height_ratios, hspace=0.1)
 
     for i in range(sample_num):
-        row_base = i * 3
+        row_base = i * 4
         ax_bg = fig.add_subplot(gs[row_base, 0])
         ax_av = fig.add_subplot(gs[row_base + 1, 0])
+        ax_cw = fig.add_subplot(gs[row_base + 2, 0])
 
         t_arr = np.asarray(time_list[i], dtype=float)
         bg_arr = np.asarray(background_list[i], dtype=float)
         av_arr = np.asarray(angular_velocity_list[i], dtype=float)
+        cw_t_arr = np.asarray(cw_rate_time_list[i], dtype=float)
+        cw_arr = np.asarray(cw_rate_list[i], dtype=float)
 
         n_bg = min(t_arr.size, bg_arr.size)
         n_av = min(t_arr.size, av_arr.size)
@@ -1297,6 +1304,9 @@ def plot_repellent_background_and_av_stacked(
         y_bg = bg_arr[:n_bg]
         t_av = t_arr[:n_av]
         y_av = av_arr[:n_av]
+        n_cw = min(cw_t_arr.size, cw_arr.size)
+        t_cw = cw_t_arr[:n_cw]
+        y_cw = cw_arr[:n_cw]
 
         sample_no = i + 1
         if sample_indices is not None and i < len(sample_indices):
@@ -1304,6 +1314,7 @@ def plot_repellent_background_and_av_stacked(
 
         ax_bg.plot(t_bg, y_bg, linewidth=1.8)
         ax_av.plot(t_av, y_av, linewidth=1.8)
+        ax_cw.plot(t_cw, y_cw, linewidth=1.8)
 
         rise_time = np.nan
         if rise_time_list is not None and i < len(rise_time_list) and np.isfinite(rise_time_list[i]):
@@ -1311,6 +1322,7 @@ def plot_repellent_background_and_av_stacked(
         if np.isfinite(rise_time):
             ax_bg.axvline(rise_time, color="red", linestyle="--", linewidth=1.6, alpha=0.85)
             ax_av.axvline(rise_time, color="red", linestyle="--", linewidth=1.6, alpha=0.85)
+            ax_cw.axvline(rise_time, color="red", linestyle="--", linewidth=1.6, alpha=0.85)
 
         if np.isfinite(t_arr).any():
             t_min = float(np.nanmin(t_arr))
@@ -1318,19 +1330,25 @@ def plot_repellent_background_and_av_stacked(
             if np.isfinite(t_min) and np.isfinite(t_max) and t_max > t_min:
                 ax_bg.set_xlim(t_min, t_max)
                 ax_av.set_xlim(t_min, t_max)
+                ax_cw.set_xlim(t_min, t_max)
 
         ax_bg.grid(True)
         ax_av.grid(True)
+        ax_cw.grid(True)
         ax_bg.set_title(f"No.{sample_no}", fontsize=title_fs, pad=4)
 
         ax_bg.set_ylabel("Intensity", fontsize=label_fs)
         ax_av.set_ylabel("AV [rad/s]", fontsize=label_fs)
-        ax_av.set_xlabel("Time [s]", fontsize=label_fs)
+        ax_cw.set_ylabel("CW rate", fontsize=label_fs)
+        ax_cw.set_xlabel("Time [s]", fontsize=label_fs)
+        ax_cw.set_ylim(0.0, 1.0)
 
         # Top panel is for paired viewing only: hide x ticks/labels.
         ax_bg.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
         ax_bg.tick_params(axis="y", which="major", labelsize=tick_fs)
-        ax_av.tick_params(axis="both", which="major", labelsize=tick_fs)
+        ax_av.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
+        ax_av.tick_params(axis="y", which="major", labelsize=tick_fs)
+        ax_cw.tick_params(axis="both", which="major", labelsize=tick_fs)
 
     # Reserve enough space for the enlarged bottom tick labels and x-axis
     # label; the previous 4.5% margin clipped "Time [s]" on this figure.

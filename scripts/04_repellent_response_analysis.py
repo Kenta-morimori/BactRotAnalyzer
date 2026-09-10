@@ -193,15 +193,6 @@ def main(
         else:
             bg_for_av.append([])
 
-    make_graph.plot_repellent_background_and_av_stacked(
-        time_list=all_rot["time_list"],
-        background_list=bg_for_av,
-        angular_velocity_list=all_rot["angular_velocity_list"],
-        day=day,
-        sample_indices=[idx + 1 for idx in all_rot["valid_indices"]],
-        rise_time_list=all_rise_time_for_av,
-    )
-
     switching_time_list, switching_count_list = repellent_response.calculate_angular_velocity_switching_count(
         time_list=all_rot["time_list"],
         angular_velocity_list=all_rot["angular_velocity_list"],
@@ -211,6 +202,22 @@ def main(
         switching_time_list,
         switching_count_list,
         day,
+    )
+    cw_rate_time_list, cw_rate_list = repellent_response.calculate_angular_velocity_cw_rate(
+        time_list=all_rot["time_list"],
+        angular_velocity_list=all_rot["angular_velocity_list"],
+        window_width_sec=1.0,
+    )
+    save2csv.save_angular_velocity_cw_rate(cw_rate_time_list, cw_rate_list, day)
+    make_graph.plot_repellent_background_and_av_stacked(
+        time_list=all_rot["time_list"],
+        background_list=bg_for_av,
+        angular_velocity_list=all_rot["angular_velocity_list"],
+        cw_rate_time_list=cw_rate_time_list,
+        cw_rate_list=cw_rate_list,
+        day=day,
+        sample_indices=[idx + 1 for idx in all_rot["valid_indices"]],
+        rise_time_list=all_rise_time_for_av,
     )
     make_graph.plot_angular_velocity_switching_count(
         switching_time_list,
