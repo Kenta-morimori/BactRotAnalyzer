@@ -1236,19 +1236,22 @@ def plot_repellent_background_intensity(time_list, background_list, rise_indices
         plt.close(fig)
 
 
-def plot_repellent_background_and_av_stacked(
+def _plot_repellent_background_and_av_metric_stacked(
     time_list,
     background_list,
     angular_velocity_list,
-    cw_rate_time_list,
-    cw_rate_list,
+    metric_time_list,
+    metric_list,
     day,
+    metric_label,
+    output_filename,
+    metric_ylim=None,
     sample_indices=None,
     rise_time_list=None,
     _page_number=1,
     _total_sample_num=None,
 ):
-    sample_num = min(len(time_list), len(background_list), len(angular_velocity_list), len(cw_rate_time_list), len(cw_rate_list))
+    sample_num = min(len(time_list), len(background_list), len(angular_velocity_list), len(metric_time_list), len(metric_list))
     if sample_num <= 0:
         return
 
@@ -1256,13 +1259,16 @@ def plot_repellent_background_and_av_stacked(
     # with aligned slices rather than duplicating its drawing code below.
     if _total_sample_num is None and sample_num > BACKGROUND_AV_SAMPLES_PER_FILE:
         for part_number, start, end in _sample_pages(sample_num, BACKGROUND_AV_SAMPLES_PER_FILE):
-            plot_repellent_background_and_av_stacked(
+            _plot_repellent_background_and_av_metric_stacked(
                 time_list[start:end],
                 background_list[start:end],
                 angular_velocity_list[start:end],
-                cw_rate_time_list[start:end],
-                cw_rate_list[start:end],
+                metric_time_list[start:end],
+                metric_list[start:end],
                 day,
+                metric_label,
+                output_filename,
+                metric_ylim,
                 sample_indices=(
                     sample_indices[start:end] if sample_indices is not None else list(range(start + 1, end + 1))
                 ),
@@ -1294,13 +1300,13 @@ def plot_repellent_background_and_av_stacked(
         row_base = i * 4
         ax_bg = fig.add_subplot(gs[row_base, 0])
         ax_av = fig.add_subplot(gs[row_base + 1, 0])
-        ax_cw = fig.add_subplot(gs[row_base + 2, 0])
+        ax_metric = fig.add_subplot(gs[row_base + 2, 0])
 
         t_arr = np.asarray(time_list[i], dtype=float)
         bg_arr = np.asarray(background_list[i], dtype=float)
         av_arr = np.asarray(angular_velocity_list[i], dtype=float)
-        cw_t_arr = np.asarray(cw_rate_time_list[i], dtype=float)
-        cw_arr = np.asarray(cw_rate_list[i], dtype=float)
+        metric_t_arr = np.asarray(metric_time_list[i], dtype=float)
+        metric_arr = np.asarray(metric_list[i], dtype=float)
 
         n_bg = min(t_arr.size, bg_arr.size)
         n_av = min(t_arr.size, av_arr.size)
@@ -1308,9 +1314,9 @@ def plot_repellent_background_and_av_stacked(
         y_bg = bg_arr[:n_bg]
         t_av = t_arr[:n_av]
         y_av = av_arr[:n_av]
-        n_cw = min(cw_t_arr.size, cw_arr.size)
-        t_cw = cw_t_arr[:n_cw]
-        y_cw = cw_arr[:n_cw]
+        n_metric = min(metric_t_arr.size, metric_arr.size)
+        t_metric = metric_t_arr[:n_metric]
+        y_metric = metric_arr[:n_metric]
 
         sample_no = i + 1
         if sample_indices is not None and i < len(sample_indices):
@@ -1318,15 +1324,15 @@ def plot_repellent_background_and_av_stacked(
 
         ax_bg.plot(t_bg, y_bg, linewidth=1.8)
         ax_av.plot(t_av, y_av, linewidth=1.8)
-        ax_cw.plot(t_cw, y_cw, linewidth=1.8)
+        ax_metric.plot(t_metric, y_metric, linewidth=1.8)
 
         rise_time = np.nan
         if rise_time_list is not None and i < len(rise_time_list) and np.isfinite(rise_time_list[i]):
             rise_time = float(rise_time_list[i])
         if np.isfinite(rise_time):
-            ax_bg.axvline(rise_time, color="red", linestyle="--", linewidth=1.6, alpha=0.85)
-            ax_av.axvline(rise_time, color="red", linestyle="--", linewidth=1.6, alpha=0.85)
-            ax_cw.axvline(rise_time, color="red", linestyle="--", linewidth=1.6, alpha=0.85)
+            ax_bg.axvline(rise_time, color="red", linestyle="--", linewidth=2.5, alpha=0.85)
+            ax_av.axvline(rise_time, color="red", linestyle="--", linewidth=2.5, alpha=0.85)
+            ax_metric.axvline(rise_time, color="red", linestyle="--", linewidth=2.5, alpha=0.85)
 
         if np.isfinite(t_arr).any():
             t_min = float(np.nanmin(t_arr))
@@ -1334,25 +1340,26 @@ def plot_repellent_background_and_av_stacked(
             if np.isfinite(t_min) and np.isfinite(t_max) and t_max > t_min:
                 ax_bg.set_xlim(t_min, t_max)
                 ax_av.set_xlim(t_min, t_max)
-                ax_cw.set_xlim(t_min, t_max)
+                ax_metric.set_xlim(t_min, t_max)
 
         ax_bg.grid(True)
         ax_av.grid(True)
-        ax_cw.grid(True)
+        ax_metric.grid(True)
         ax_bg.set_title(f"No.{sample_no}", fontsize=title_fs, pad=4)
 
         ax_bg.set_ylabel("Intensity", fontsize=label_fs)
         ax_av.set_ylabel("AV [rad/s]", fontsize=label_fs)
-        ax_cw.set_ylabel("CW rate", fontsize=label_fs)
-        ax_cw.set_xlabel("Time [s]", fontsize=label_fs)
-        ax_cw.set_ylim(0.0, 1.0)
+        ax_metric.set_ylabel(metric_label, fontsize=label_fs)
+        ax_metric.set_xlabel("Time [s]", fontsize=label_fs)
+        if metric_ylim is not None:
+            ax_metric.set_ylim(*metric_ylim)
 
         # Top panel is for paired viewing only: hide x ticks/labels.
         ax_bg.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
         ax_bg.tick_params(axis="y", which="major", labelsize=tick_fs)
         ax_av.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
         ax_av.tick_params(axis="y", which="major", labelsize=tick_fs)
-        ax_cw.tick_params(axis="both", which="major", labelsize=tick_fs)
+        ax_metric.tick_params(axis="both", which="major", labelsize=tick_fs)
 
     # Reserve enough space for the enlarged bottom tick labels and x-axis
     # label; the previous 4.5% margin clipped "Time [s]" on this figure.
@@ -1360,7 +1367,7 @@ def plot_repellent_background_and_av_stacked(
     plt.savefig(
         _page_path(
             save_dir,
-            "background_intensity_and_angular_velocity_time_series.png",
+            output_filename,
             _total_sample_num or sample_num,
             _page_number,
             BACKGROUND_AV_SAMPLES_PER_FILE,
@@ -1368,6 +1375,55 @@ def plot_repellent_background_and_av_stacked(
         dpi=200,
     )
     plt.close(fig)
+
+
+def plot_repellent_background_and_av_stacked(
+    time_list,
+    background_list,
+    angular_velocity_list,
+    cw_rate_time_list,
+    cw_rate_list,
+    day,
+    sample_indices=None,
+    rise_time_list=None,
+):
+    _plot_repellent_background_and_av_metric_stacked(
+        time_list,
+        background_list,
+        angular_velocity_list,
+        cw_rate_time_list,
+        cw_rate_list,
+        day,
+        "CW rate",
+        "background_intensity_and_angular_velocity_time_series.png",
+        metric_ylim=(0.0, 1.0),
+        sample_indices=sample_indices,
+        rise_time_list=rise_time_list,
+    )
+
+
+def plot_repellent_background_av_and_switching_count_stacked(
+    time_list,
+    background_list,
+    angular_velocity_list,
+    switching_time_list,
+    switching_count_list,
+    day,
+    sample_indices=None,
+    rise_time_list=None,
+):
+    _plot_repellent_background_and_av_metric_stacked(
+        time_list,
+        background_list,
+        angular_velocity_list,
+        switching_time_list,
+        switching_count_list,
+        day,
+        "Switches / 1 s",
+        "background_intensity_and_angular_velocity_and_switching_count_time_series.png",
+        sample_indices=sample_indices,
+        rise_time_list=rise_time_list,
+    )
 
 
 def plot_repellent_post_rise_centroid(time_list, x_list, y_list, day):
@@ -1742,7 +1798,7 @@ def plot_angular_velocity_switching_count(
                 ax.set_xlim(0, finite_t[-1])
             rise_time = rise_time_list[i] if rise_time_list is not None and i < len(rise_time_list) else np.nan
             if rise_time is not None and np.isfinite(rise_time):
-                ax.axvline(rise_time, color="red", linestyle="--")
+                ax.axvline(rise_time, color="red", linestyle="--", linewidth=2.5, alpha=0.85)
         plt.tight_layout()
         plt.savefig(_page_path(save_dir, "switching_count.png", sample_num, part_number))
         plt.close(fig)
