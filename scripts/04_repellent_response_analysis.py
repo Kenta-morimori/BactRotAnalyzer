@@ -203,6 +203,16 @@ def main(
         switching_count_list,
         day,
     )
+    make_graph.plot_repellent_background_av_and_switching_count_stacked(
+        time_list=all_rot["time_list"],
+        background_list=bg_for_av,
+        angular_velocity_list=all_rot["angular_velocity_list"],
+        switching_time_list=switching_time_list,
+        switching_count_list=switching_count_list,
+        day=day,
+        sample_indices=[idx + 1 for idx in all_rot["valid_indices"]],
+        rise_time_list=all_rise_time_for_av,
+    )
     cw_rate_time_list, cw_rate_list = repellent_response.calculate_angular_velocity_cw_rate(
         time_list=all_rot["time_list"],
         angular_velocity_list=all_rot["angular_velocity_list"],

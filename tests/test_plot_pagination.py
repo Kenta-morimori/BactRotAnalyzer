@@ -69,3 +69,20 @@ def test_background_av_plot_uses_four_samples_per_fixed_size_page(tmp_path, monk
     assert second_page.is_file()
     with Image.open(first_page) as first_image, Image.open(second_page) as second_image:
         assert first_image.size == second_image.size
+
+
+def test_background_av_switching_count_plot_uses_fixed_size_pages(tmp_path, monkeypatch):
+    monkeypatch.setattr(param, "save_dir_bef", str(tmp_path))
+    values = [np.linspace(0, 1, 5) + i for i in range(5)]
+
+    make_graph.plot_repellent_background_av_and_switching_count_stacked(
+        values, values, values, values, values, "day", sample_indices=list(range(1, 6)), rise_time_list=[0.5] * 5
+    )
+
+    out_dir = tmp_path / "day" / "repellent_response" / "01_brightness_change"
+    first_page = out_dir / "background_intensity_and_angular_velocity_and_switching_count_time_series_part01.png"
+    second_page = out_dir / "background_intensity_and_angular_velocity_and_switching_count_time_series_part02.png"
+    assert first_page.is_file()
+    assert second_page.is_file()
+    with Image.open(first_page) as first_image, Image.open(second_page) as second_image:
+        assert first_image.size == second_image.size
