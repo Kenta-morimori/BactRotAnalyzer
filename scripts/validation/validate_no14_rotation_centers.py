@@ -51,6 +51,14 @@ def estimate_window_center(time, x, y, frame_index, window_width_sec):
     return float(center_x), float(center_y), len(points), fit_ok, points
 
 
+def extract_centroid_from_avi_frame(frame, px2um_x, px2um_y):
+    """Extract this validation's centroid directly from the displayed AVI frame."""
+    x_px, y_px, _ = get_centroid_coordinate.contours(frame)
+    if not np.isfinite(x_px) or not np.isfinite(y_px):
+        return np.nan, np.nan
+    return float(x_px * px2um_x), float(y_px * px2um_y)
+
+
 def _draw_text(image, text, line, color=(255, 255, 255)):
     cv2.putText(image, text, (6, 18 + line * 17), cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1, cv2.LINE_AA)
 
@@ -67,19 +75,13 @@ def _draw_candidate(frame, points_um, center_x, center_y, fit_ok, window_width_s
     panel = frame.copy()
     pixel_points = _um_to_pixel(points_um, px2um_x, px2um_y)
     if len(pixel_points) >= 2:
-        cv2.polylines(panel, [pixel_points.reshape(-1, 1, 2)], False, (0, 220, 255), 1, cv2.LINE_AA)
+        cv2.polylines(panel, [pixel_points.reshape(-1, 1, 2)], False, (255, 0, 0), 1, cv2.LINE_AA)
     if len(pixel_points) >= 1:
-        cv2.circle(panel, tuple(pixel_points[-1]), 3, (0, 0, 255), -1, cv2.LINE_AA)
+        cv2.circle(panel, tuple(pixel_points[-1]), 3, (255, 0, 0), -1, cv2.LINE_AA)
     if fit_ok:
         center_px = _um_to_pixel([[center_x, center_y]], px2um_x, px2um_y)[0]
-        cv2.drawMarker(panel, tuple(center_px), (0, 255, 0), cv2.MARKER_CROSS, 12, 2, cv2.LINE_AA)
-        status = "fit OK"
-        status_color = (0, 255, 0)
-    else:
-        status = "fit unavailable"
-        status_color = (0, 0, 255)
+        cv2.circle(panel, tuple(center_px), 4, (0, 0, 255), -1, cv2.LINE_AA)
     _draw_text(panel, f"window {window_width_sec:.1f} s", 0)
-    _draw_text(panel, status, 1, status_color)
     return panel
 
 
@@ -101,24 +103,15 @@ def load_no14_pre_rise_inputs(day, sample_no=DEFAULT_SAMPLE_NO):
     range_path = output_root / "00_time_list" / "analysis_frame_ranges.csv"
     rise_path = output_root / "01_brightness_change" / "rise_summary.csv"
     time_path = output_root / "00_all_rotational_analysis" / "time_list.csv"
-    raw_centroid_path = Path(param.save_dir_bef) / day / "centroid_coordinate.csv"
-    for path in (range_path, rise_path, time_path, raw_centroid_path):
+    for path in (range_path, rise_path, time_path):
         if not path.is_file():
             raise FileNotFoundError(f"Required analysis output not found: {path}")
 
-    range_row = pd.read_csv(range_path).query("sample_no == @sample_no")
-    if len(range_row) != 1:
-        raise ValueError(f"Expected exactly one frame-range row for No.{sample_no}")
-    range_row = range_row.iloc[0]
-    source_start = int(range_row["source_start_index_0based"])
-    source_end = int(range_row["source_end_index_0based"])
+    frame_ranges = param.get_analysis_frame_ranges_config(day)
+    configured_range = frame_ranges[sample_index] if sample_index < len(frame_ranges) else None
+    source_start = configured_range[0] - 1 if configured_range is not None else 0
 
     time = pd.read_csv(time_path)[f"No.{sample_no}"].dropna().to_numpy(dtype=float)
-    raw = pd.read_csv(raw_centroid_path)
-    x = raw[f"x_{sample_no}"].to_numpy(dtype=float)[source_start : source_end + 1]
-    y = raw[f"y_{sample_no}"].to_numpy(dtype=float)[source_start : source_end + 1]
-    n = min(len(time), len(x), len(y))
-    time, x, y = time[:n], x[:n], y[:n]
 
     rise_row = pd.read_csv(rise_path).query("sample_no == @sample_no")
     if len(rise_row) != 1 or not np.isfinite(rise_row.iloc[0]["rise_time"]):
@@ -132,7 +125,7 @@ def load_no14_pre_rise_inputs(day, sample_no=DEFAULT_SAMPLE_NO):
     avi_path = Path(param.input_dir_bef) / day / f"{sample_name}.avi"
     if not avi_path.is_file():
         raise FileNotFoundError(f"Source AVI not found: {avi_path}")
-    return time[:pre_end], x[:pre_end], y[:pre_end], source_start, avi_path
+    return time[:pre_end], source_start, avi_path
 
 
 def create_validation_video(
@@ -140,7 +133,7 @@ def create_validation_video(
 ):
     if frame_stride < 1:
         raise ValueError("frame_stride must be positive")
-    time, x, y, source_start, avi_path = load_no14_pre_rise_inputs(day, sample_no)
+    time, source_start, avi_path = load_no14_pre_rise_inputs(day, sample_no)
     px2um_x, px2um_y = param.get_px2um_config(day)
     output_dir = Path(param.save_dir_bef) / day / "validation" / "no14_rotation_center_windows"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -164,11 +157,14 @@ def create_validation_video(
         raise RuntimeError(f"Could not open output video: {video_path}")
 
     rows = []
+    x = np.full(len(time), np.nan, dtype=float)
+    y = np.full(len(time), np.nan, dtype=float)
     try:
         for local_index in range(len(time)):
             frame = initial_frame if local_index == 0 else cap.read()[1]
             if frame is None:
                 raise RuntimeError(f"AVI ended before analysis frame {local_index}")
+            x[local_index], y[local_index] = extract_centroid_from_avi_frame(frame, px2um_x, px2um_y)
             if local_index % frame_stride != 0:
                 continue
 

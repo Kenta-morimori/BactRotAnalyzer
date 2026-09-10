@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import cv2
 
 
 SCRIPT_PATH = Path(__file__).parents[1] / "scripts" / "validation" / "validate_no14_rotation_centers.py"
@@ -38,3 +39,13 @@ def test_window_center_reports_missing_for_insufficient_or_nan_points():
     assert np.isnan(cx)
     assert np.isnan(cy)
     assert count == len(points) == 2
+
+
+def test_validation_centroid_is_extracted_from_the_displayed_avi_frame():
+    frame = np.zeros((80, 80, 3), dtype=np.uint8)
+    cv2.circle(frame, (30, 45), 10, (255, 255, 255), -1)
+
+    x_um, y_um = validation.extract_centroid_from_avi_frame(frame, 0.02, 0.02)
+
+    assert x_um == pytest.approx(30 * 0.02, abs=0.03)
+    assert y_um == pytest.approx(45 * 0.02, abs=0.03)
