@@ -4,6 +4,8 @@ import subprocess
 import sys
 from typing import Optional
 
+import numpy as np
+
 os.environ.setdefault("MPLBACKEND", "Agg")
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
@@ -18,6 +20,8 @@ def main(
     sigma_threshold: float,
     min_consecutive: int,
     post_rise_center_mode: int,
+    stop_activity_ratio: float,
+    stop_min_duration_rotations: float,
     output_suffix: Optional[str],
 ):
     base_save_dir = param.save_dir_bef
@@ -35,19 +39,31 @@ def main(
 
     # Keep time-list generation aligned with existing implementation.
     time_list = repellent_response.ensure_time_list(day)
-    save2csv.save_repellent_time_list(time_list, day)
-    make_graph.plot_repellent_time_list(time_list, day)
 
     # Reuse existing centroid / angular-velocity pipeline.
     centroid_csv = f"{param.save_dir_bef}/{day}/centroid_coordinate.csv"
     base_centroid_csv = f"{base_save_dir}/{day}/centroid_coordinate.csv"
-    if not os.path.isfile(centroid_csv):
-        if os.path.isfile(base_centroid_csv):
-            os.makedirs(os.path.dirname(centroid_csv), exist_ok=True)
-            import shutil
+    centroid_sample_count = 0
+    if os.path.isfile(centroid_csv):
+        existing_x_list, existing_y_list = input_data.input_centroid_coordinate(day)
+        centroid_sample_count = min(len(existing_x_list), len(existing_y_list))
 
-            shutil.copy2(base_centroid_csv, centroid_csv)
-        else:
+    # A previous run may have produced a centroid CSV for fewer TIFF series.
+    # Regenerate it so every configured TIFF series has a coordinate pair.
+    if centroid_sample_count != len(time_list):
+        if os.path.isfile(base_centroid_csv):
+            # Do not reuse a stale base output unless it has the expected
+            # number of samples.
+            param.save_dir_bef = base_save_dir
+            base_x_list, base_y_list = input_data.input_centroid_coordinate(day)
+            param.save_dir_bef = base_save_dir if output_suffix in (None, "") else f"{base_save_dir}/{output_suffix}"
+            if min(len(base_x_list), len(base_y_list)) == len(time_list):
+                os.makedirs(os.path.dirname(centroid_csv), exist_ok=True)
+                import shutil
+
+                shutil.copy2(base_centroid_csv, centroid_csv)
+                centroid_sample_count = len(time_list)
+        if centroid_sample_count != len(time_list):
             try:
                 script_path = os.path.join(
                     os.path.dirname(os.path.dirname(__file__)),
@@ -63,6 +79,17 @@ def main(
 
     # Phase 1: background intensity and rise-point detection.
     background_list = repellent_response.get_background_intensity_time_series(day)
+    time_list, selected_series, range_rows = repellent_response.apply_analysis_frame_ranges(
+        time_list=time_list,
+        series_lists=[x_list, y_list, background_list],
+        frame_ranges=param.get_analysis_frame_ranges_config(day),
+    )
+    x_list, y_list, background_list = selected_series
+    # The canonical outputs/<day>/time_list.csv remains the raw TIFF timeline;
+    # every repellent-response artifact below uses this selected timeline.
+    save2csv.save_repellent_time_list(time_list, day)
+    save2csv.save_repellent_analysis_frame_ranges(range_rows, day)
+    make_graph.plot_repellent_time_list(time_list, day)
     rise_results = repellent_response.detect_rise_points(
         background_list=background_list,
         baseline_ratio=baseline_ratio,
@@ -89,6 +116,31 @@ def main(
         y_raw_list=all_y_before_list,
         rise_indices=rise_indices,
     )
+    automatic_stop_indices = repellent_response.detect_rotation_stop_indices(
+        time_list=all_comp_time_list,
+        x_raw_list=all_x_before_list,
+        y_raw_list=all_y_before_list,
+        rise_indices=rise_indices,
+        activity_ratio=stop_activity_ratio,
+        min_duration_rotations=stop_min_duration_rotations,
+    )
+    stop_indices, stop_sources = repellent_response.resolve_rotation_stop_indices(
+        time_list=all_comp_time_list,
+        rise_indices=rise_indices,
+        automatic_stop_indices=automatic_stop_indices,
+        manual_stop_indices=param.get_manual_stop_frame_indices_config(day),
+    )
+    for i, result in enumerate(rise_results):
+        stop_idx = stop_indices[i] if i < len(stop_indices) else float("nan")
+        result["rotation_stop_index"] = stop_idx
+        result["rotation_stop_source"] = stop_sources[i] if i < len(stop_sources) else "none"
+        if np.isfinite(stop_idx) and i < len(all_comp_time_list):
+            sample_time = all_comp_time_list[i]
+            index = int(stop_idx)
+            result["rotation_stop_time"] = sample_time[index] if index < len(sample_time) else float("nan")
+        else:
+            result["rotation_stop_time"] = float("nan")
+    save2csv.save_repellent_rise_summary(rise_results, day)
     all_x_center_list, all_y_center_list = repellent_response.apply_post_rise_center_strategy(
         time_list=all_comp_time_list,
         x_raw_list=all_x_before_list,
@@ -97,6 +149,7 @@ def main(
         center_y_standard_list=all_center_y_standard_list,
         rise_indices=rise_indices,
         post_rise_center_mode=post_rise_center_mode,
+        stop_indices=stop_indices,
     )
     all_x_corr_list, all_y_corr_list = repellent_response.subtract_center_from_raw(
         x_raw_list=all_x_before_list,
@@ -149,15 +202,6 @@ def main(
         else:
             bg_for_av.append([])
 
-    make_graph.plot_repellent_background_and_av_stacked(
-        time_list=all_rot["time_list"],
-        background_list=bg_for_av,
-        angular_velocity_list=all_rot["angular_velocity_list"],
-        day=day,
-        sample_indices=[idx + 1 for idx in all_rot["valid_indices"]],
-        rise_time_list=all_rise_time_for_av,
-    )
-
     switching_time_list, switching_count_list = repellent_response.calculate_angular_velocity_switching_count(
         time_list=all_rot["time_list"],
         angular_velocity_list=all_rot["angular_velocity_list"],
@@ -167,6 +211,32 @@ def main(
         switching_time_list,
         switching_count_list,
         day,
+    )
+    make_graph.plot_repellent_background_av_and_switching_count_stacked(
+        time_list=all_rot["time_list"],
+        background_list=bg_for_av,
+        angular_velocity_list=all_rot["angular_velocity_list"],
+        switching_time_list=switching_time_list,
+        switching_count_list=switching_count_list,
+        day=day,
+        sample_indices=[idx + 1 for idx in all_rot["valid_indices"]],
+        rise_time_list=all_rise_time_for_av,
+    )
+    cw_rate_time_list, cw_rate_list = repellent_response.calculate_angular_velocity_cw_rate(
+        time_list=all_rot["time_list"],
+        angular_velocity_list=all_rot["angular_velocity_list"],
+        window_width_sec=1.0,
+    )
+    save2csv.save_angular_velocity_cw_rate(cw_rate_time_list, cw_rate_list, day)
+    make_graph.plot_repellent_background_and_av_stacked(
+        time_list=all_rot["time_list"],
+        background_list=bg_for_av,
+        angular_velocity_list=all_rot["angular_velocity_list"],
+        cw_rate_time_list=cw_rate_time_list,
+        cw_rate_list=cw_rate_list,
+        day=day,
+        sample_indices=[idx + 1 for idx in all_rot["valid_indices"]],
+        rise_time_list=all_rise_time_for_av,
     )
     make_graph.plot_angular_velocity_switching_count(
         switching_time_list,
@@ -399,6 +469,8 @@ if __name__ == "__main__":
     parser.add_argument("--sigma-threshold", type=float, default=3.0)
     parser.add_argument("--min-consecutive", type=int, default=3)
     parser.add_argument("--post-rise-center-mode", type=int, choices=[1, 2, 3], default=param.post_rise_center_mode)
+    parser.add_argument("--stop-activity-ratio", type=float, default=param.stop_activity_ratio)
+    parser.add_argument("--stop-min-duration-rotations", type=float, default=param.stop_min_duration_rotations)
     parser.add_argument("--output-suffix", type=str, default=None)
 
     args = parser.parse_args()
@@ -409,5 +481,7 @@ if __name__ == "__main__":
         sigma_threshold=args.sigma_threshold,
         min_consecutive=args.min_consecutive,
         post_rise_center_mode=args.post_rise_center_mode,
+        stop_activity_ratio=args.stop_activity_ratio,
+        stop_min_duration_rotations=args.stop_min_duration_rotations,
         output_suffix=args.output_suffix,
     )

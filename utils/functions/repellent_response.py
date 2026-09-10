@@ -225,6 +225,56 @@ def calculate_angular_velocity_switching_count(
     return out_time, out_count
 
 
+def calculate_angular_velocity_cw_rate(
+    time_list: Sequence[Sequence[float]],
+    angular_velocity_list: Sequence[Sequence[float]],
+    window_width_sec: float = 1.0,
+) -> Tuple[List[List[float]], List[List[float]]]:
+    """Calculate the fraction of clockwise (negative) AV samples per time window."""
+    out_time: List[List[float]] = []
+    out_rate: List[List[float]] = []
+
+    for time_arr, av_arr in zip(time_list, angular_velocity_list):
+        t = np.asarray(time_arr, dtype=float)
+        av = np.asarray(av_arr, dtype=float)
+        n = min(len(t), len(av))
+        if n < 2:
+            out_time.append([])
+            out_rate.append([])
+            continue
+
+        valid_mask = np.isfinite(t[:n]) & np.isfinite(av[:n])
+        t = t[:n][valid_mask]
+        av = av[:n][valid_mask]
+        if len(t) < 2:
+            out_time.append([])
+            out_rate.append([])
+            continue
+
+        w_times: List[float] = []
+        w_rates: List[float] = []
+        end_idx = 1
+        for start_idx in range(len(t) - 1):
+            window_start = float(t[start_idx])
+            window_end = window_start + window_width_sec
+            if end_idx < start_idx + 1:
+                end_idx = start_idx + 1
+            while end_idx < len(t) and t[end_idx] <= window_end:
+                end_idx += 1
+
+            window_av = av[start_idx:end_idx]
+            if window_av.size < 2:
+                continue
+            w_times.append(window_start + window_width_sec / 2.0)
+            # AV == 0 is CCW; only negative samples are clockwise.
+            w_rates.append(float(np.count_nonzero(window_av < 0.0) / window_av.size))
+
+        out_time.append(w_times)
+        out_rate.append(w_rates)
+
+    return out_time, out_rate
+
+
 def detect_rise_index(
     values: Sequence[float],
     baseline_ratio: float = 0.5,
@@ -906,7 +956,7 @@ def run_segment_rotational_analysis(
                 rot_df_manage.create_rot_df(tmp_day)
                 _write_dummy_angle_fft(tmp_day, len(valid_indices))
                 angle_list, angular_velocity_list = get_angular_velocity.get_angular_velocity(
-                    selected_x_list, selected_y_list, tmp_day
+                    selected_x_list, selected_y_list, tmp_day, time_list=selected_time_list
                 )
 
                 if run_fluctuation:
@@ -1038,16 +1088,19 @@ def estimate_rotation_center_like_standard(
         t_fft = time_arr[fft_mask]
         x_fft = x_arr[fft_mask]
         y_fft = y_arr[fft_mask]
+        (t_fft, x_fft, y_fft), _ = frequency_analysis.longest_continuous_segment(t_fft, x_fft, y_fft)
         total_duration_fft = float(t_fft[-1] - t_fft[0]) if len(t_fft) > 1 else 0.0
         if total_duration_fft <= 0:
-            total_duration_fft = total_duration_all
-            t_fft = t
-            x_fft = x
-            y_fft = y
+            (t_fft, x_fft, y_fft), _ = frequency_analysis.longest_continuous_segment(t, x, y)
+            total_duration_fft = float(t_fft[-1] - t_fft[0]) if len(t_fft) > 1 else total_duration_all
             fft_source = "all-time"
 
-        frame_rate_fft = max(1e-6, float(len(t_fft)) / total_duration_fft)
-        frame_rate_all = max(1e-6, float(len(t)) / total_duration_all)
+        fft_diffs = np.diff(t_fft)
+        fft_diffs = fft_diffs[np.isfinite(fft_diffs) & (fft_diffs > 0)]
+        all_diffs = np.diff(t)
+        all_diffs = all_diffs[np.isfinite(all_diffs) & (all_diffs > 0)]
+        frame_rate_fft = max(1e-6, 1.0 / float(np.median(fft_diffs))) if len(fft_diffs) else 1.0
+        frame_rate_all = max(1e-6, 1.0 / float(np.median(all_diffs))) if len(all_diffs) else 1.0
         x_freq, x_amp = frequency_analysis.fft(x_fft, 1.0 / frame_rate_fft)
         y_freq, y_amp = frequency_analysis.fft(y_fft, 1.0 / frame_rate_fft)
         freq_th = 5.0
@@ -1153,11 +1206,14 @@ def _estimate_window_frames_from_fft(
     t = time_arr[fft_mask]
     x = x_arr[fft_mask]
     y = y_arr[fft_mask]
+    (t, x, y), _ = frequency_analysis.longest_continuous_segment(t, x, y)
     total_duration = float(t[-1] - t[0]) if len(t) > 1 else 0.0
     if total_duration <= 0:
         return 3
 
-    frame_rate = max(1e-6, float(len(t)) / total_duration)
+    dt_values = np.diff(t)
+    dt_values = dt_values[np.isfinite(dt_values) & (dt_values > 0)]
+    frame_rate = max(1e-6, 1.0 / float(np.median(dt_values))) if len(dt_values) else 1.0
     x_freq, x_amp = frequency_analysis.fft(x, 1.0 / frame_rate)
     y_freq, y_amp = frequency_analysis.fft(y, 1.0 / frame_rate)
     freq_th = 5.0
@@ -1197,6 +1253,120 @@ def _rolling_stat(arr: np.ndarray, window: int, stat: Literal["mean", "median"])
     return out.to_numpy(dtype=float)
 
 
+def detect_rotation_stop_indices(
+    time_list: Sequence[Sequence[float]],
+    x_raw_list: Sequence[Sequence[float]],
+    y_raw_list: Sequence[Sequence[float]],
+    rise_indices: Sequence[float],
+    activity_ratio: float = param.stop_activity_ratio,
+    min_duration_rotations: float = param.stop_min_duration_rotations,
+) -> List[float]:
+    """Return the first post-rise frame of sustained low rotational activity.
+
+    Activity is the RMS spatial spread in a one-rotation trailing window.  Its
+    pre-rise median is the per-sample reference, so absolute coordinate units
+    and bead sizes do not affect the threshold.  Windows with insufficient
+    finite points are ignored rather than treated as stationary.
+    """
+    if not 0.0 < activity_ratio < 1.0:
+        raise ValueError("activity_ratio must be between 0 and 1.")
+    if min_duration_rotations <= 0.0:
+        raise ValueError("min_duration_rotations must be positive.")
+
+    n = min(len(time_list), len(x_raw_list), len(y_raw_list), len(rise_indices))
+    stop_indices: List[float] = []
+    for i in range(n):
+        t = np.asarray(time_list[i], dtype=float)
+        x = np.asarray(x_raw_list[i], dtype=float)
+        y = np.asarray(y_raw_list[i], dtype=float)
+        m = min(len(t), len(x), len(y))
+        if m <= 0:
+            stop_indices.append(float("nan"))
+            continue
+
+        t, x, y = t[:m], x[:m], y[:m]
+        rise_idx = _normalize_rise_index(float(rise_indices[i]), m)
+        window = _estimate_window_frames_from_fft(t, x, y, rise_idx=rise_idx)
+        # A sparse acquisition can contain a long missing interval after
+        # stopping.  Require enough actual observations to measure spread, but
+        # do not require every frame in the nominal one-rotation window.
+        min_finite = max(param.min_ref_centroid_num, int(np.ceil(window * 0.2)))
+        activity = np.full(m, np.nan, dtype=float)
+        for end in range(window - 1, m):
+            sl = slice(end - window + 1, end + 1)
+            finite = np.isfinite(x[sl]) & np.isfinite(y[sl])
+            if np.count_nonzero(finite) < min_finite:
+                continue
+            x_win, y_win = x[sl][finite], y[sl][finite]
+            activity[end] = float(np.sqrt(np.var(x_win) + np.var(y_win)))
+
+        baseline = activity[window - 1 : rise_idx]
+        baseline = baseline[np.isfinite(baseline) & (baseline > 0.0)]
+        if baseline.size == 0:
+            stop_indices.append(float("nan"))
+            continue
+
+        threshold = float(np.median(baseline) * activity_ratio)
+        duration = max(1, int(np.ceil(window * min_duration_rotations)))
+        post_start = max(rise_idx + window - 1, window - 1)
+        low_run = 0
+        low_start = -1
+        detected = float("nan")
+        for idx in range(post_start, m):
+            if not np.isfinite(activity[idx]):
+                # Missing observations cannot establish a stop, but also
+                # should not discard a low-activity run observed on both
+                # sides of a gap.
+                continue
+            if activity[idx] < threshold:
+                if low_run == 0:
+                    low_start = idx
+                low_run += 1
+                if low_run >= duration:
+                    detected = float(low_start)
+                    break
+            else:
+                low_run = 0
+                low_start = -1
+        stop_indices.append(detected)
+
+    return stop_indices
+
+
+def resolve_rotation_stop_indices(
+    time_list: Sequence[Sequence[float]],
+    rise_indices: Sequence[float],
+    automatic_stop_indices: Sequence[float],
+    manual_stop_indices: Optional[Sequence[Optional[int]]] = None,
+) -> Tuple[List[float], List[str]]:
+    """Prefer valid manual stop indices, with automatic detection as fallback."""
+    n = min(len(time_list), len(rise_indices), len(automatic_stop_indices))
+    resolved: List[float] = []
+    sources: List[str] = []
+    for i in range(n):
+        m = len(time_list[i])
+        rise_idx = _normalize_rise_index(float(rise_indices[i]), m)
+        manual_idx = (
+            manual_stop_indices[i] if manual_stop_indices is not None and i < len(manual_stop_indices) else None
+        )
+        if manual_idx is not None:
+            if manual_idx >= m:
+                raise ValueError(f"Manual stop-frame index for sample No.{i + 1} is outside the series: {manual_idx}")
+            if manual_idx <= rise_idx:
+                raise ValueError(
+                    f"Manual stop-frame index for sample No.{i + 1} must be after the rise index: {manual_idx}"
+                )
+            resolved.append(float(manual_idx))
+            sources.append("manual")
+        elif np.isfinite(automatic_stop_indices[i]):
+            resolved.append(float(automatic_stop_indices[i]))
+            sources.append("auto")
+        else:
+            resolved.append(float("nan"))
+            sources.append("none")
+    return resolved, sources
+
+
 def apply_post_rise_center_strategy(
     time_list: Sequence[Sequence[float]],
     x_raw_list: Sequence[Sequence[float]],
@@ -1205,6 +1375,7 @@ def apply_post_rise_center_strategy(
     center_y_standard_list: Sequence[Sequence[float]],
     rise_indices: Sequence[float],
     post_rise_center_mode: int = 2,
+    stop_indices: Optional[Sequence[float]] = None,
 ) -> Tuple[List[List[float]], List[List[float]]]:
     n = min(
         len(time_list),
@@ -1259,6 +1430,25 @@ def apply_post_rise_center_strategy(
                 cy_slide = _fill_center_nan_with_previous(cy_slide.tolist())
                 cx_final[rise_idx:] = cx_slide[rise_idx:]
                 cy_final[rise_idx:] = cy_slide[rise_idx:]
+
+        if stop_indices is not None and i < len(stop_indices) and np.isfinite(stop_indices[i]):
+            stop_idx = _normalize_rise_index(float(stop_indices[i]), m)
+            if stop_idx > rise_idx:
+                # Fit directly to the final complete pre-stop rotation.  The
+                # standard-center series is forward-looking, so using its last
+                # values would contaminate this snapshot with stationary data.
+                window = _estimate_window_frames_from_fft(t, x_raw, y_raw, rise_idx=rise_idx)
+                ref_start = max(rise_idx, stop_idx - window)
+                ref_x = x_raw[ref_start:stop_idx]
+                ref_y = y_raw[ref_start:stop_idx]
+                finite = np.isfinite(ref_x) & np.isfinite(ref_y)
+                if np.count_nonzero(finite) >= param.min_ref_centroid_num:
+                    frozen_x, frozen_y, _, _, _ = get_centroid_coordinate.calculate_ellipse_properties(
+                        ref_x[finite].reshape(-1, 1), ref_y[finite].reshape(-1, 1)
+                    )
+                    if np.isfinite(frozen_x) and np.isfinite(frozen_y):
+                        cx_final[stop_idx:] = float(frozen_x)
+                        cy_final[stop_idx:] = float(frozen_y)
 
         out_center_x_list.append(cx_final.tolist())
         out_center_y_list.append(cy_final.tolist())
@@ -1609,6 +1799,7 @@ def add_rise_time_to_results(
     time_list: Sequence[Sequence[float]],
 ) -> None:
     flag_use_manual_rise_time = param.get_flag_use_manual_rise_time(day, default_flag=False)
+    manual_override_list: List[bool] = [False] * len(results)
 
     if flag_use_manual_rise_time:
         manual_rise_time_list = param.get_manual_rise_time_sec_config(day)
@@ -1620,7 +1811,13 @@ def add_rise_time_to_results(
             )
 
         for i, result in enumerate(results):
-            manual_rise_time = float(manual_rise_time_list[i])
+            manual_rise_time = manual_rise_time_list[i]
+            # None, NaN, auto, and blank config values deliberately preserve
+            # the automatic detection for that individual sample.
+            if manual_rise_time is None:
+                continue
+            manual_rise_time = float(manual_rise_time)
+            manual_override_list[i] = True
 
             if i >= len(time_list):
                 result["rise_index"] = np.nan
@@ -1656,9 +1853,9 @@ def add_rise_time_to_results(
             result["num_frames"] = float(len(t))
             result["sample_no"] = float(i + 1)
 
-        return
-
     for i, result in enumerate(results):
+        if manual_override_list[i]:
+            continue
         if i >= len(time_list):
             result["rise_time"] = np.nan
             continue
@@ -1816,10 +2013,79 @@ def align_coordinate_series_to_time(
         x_arr = np.asarray(x_list[i], dtype=float)
         y_arr = np.asarray(y_list[i], dtype=float)
         t_arr = np.asarray(time_list[i], dtype=float)
-        m = min(len(x_arr), len(y_arr), len(t_arr))
-        x_aligned.append(x_arr[:m].tolist())
-        y_aligned.append(y_arr[:m].tolist())
+        # Keep the frame axis intact.  Missing centroid detections are data
+        # gaps, not a reason to shift later coordinates onto another frame.
+        x_out = np.full(len(t_arr), np.nan, dtype=float)
+        y_out = np.full(len(t_arr), np.nan, dtype=float)
+        x_out[: min(len(x_arr), len(t_arr))] = x_arr[: len(x_out)]
+        y_out[: min(len(y_arr), len(t_arr))] = y_arr[: len(y_out)]
+        x_aligned.append(x_out.tolist())
+        y_aligned.append(y_out.tolist())
     return x_aligned, y_aligned
+
+
+def apply_analysis_frame_ranges(
+    time_list: Sequence[Sequence[float]],
+    series_lists: Sequence[Sequence[Sequence[float]]],
+    frame_ranges: Sequence[Optional[Tuple[int, int]]],
+) -> Tuple[List[List[float]], List[List[List[float]]], List[Dict[str, object]]]:
+    """Synchronously select configured 1-based inclusive source-frame ranges.
+
+    Short series are padded with NaN before selection so every returned value
+    retains the same source-frame index as its corresponding timestamp.
+    """
+    if frame_ranges and len(frame_ranges) != len(time_list):
+        raise ValueError(
+            "RepellentResponse.analysis_frame_ranges must contain one range per time series. "
+            f"ranges={len(frame_ranges)}, samples={len(time_list)}"
+        )
+    normalized_ranges = list(frame_ranges) if frame_ranges else [None] * len(time_list)
+    selected_time: List[List[float]] = []
+    selected_series: List[List[List[float]]] = [[] for _ in series_lists]
+    range_rows: List[Dict[str, object]] = []
+
+    for sample_index, raw_time in enumerate(time_list):
+        t = np.asarray(raw_time, dtype=float)
+        source_count = len(t)
+        configured_range = normalized_ranges[sample_index]
+        if configured_range is None:
+            start_1based, end_1based = 1, source_count
+        else:
+            start_1based, end_1based = configured_range
+        if source_count == 0:
+            if configured_range is not None:
+                raise ValueError(f"No.{sample_index + 1} has no timestamps for configured frame range.")
+            start_1based, end_1based = 1, 0
+        elif end_1based > source_count:
+            raise ValueError(
+                f"No.{sample_index + 1} analysis frame range {start_1based}-{end_1based} "
+                f"exceeds available frames ({source_count})."
+            )
+        start = start_1based - 1
+        end = end_1based
+        selected_t = t[start:end]
+        selected_time.append(selected_t.tolist())
+
+        for series_index, all_samples in enumerate(series_lists):
+            raw_values = all_samples[sample_index] if sample_index < len(all_samples) else []
+            values = np.asarray(raw_values, dtype=float)
+            aligned = np.full(source_count, np.nan, dtype=float)
+            aligned[: min(source_count, len(values))] = values[:source_count]
+            selected_series[series_index].append(aligned[start:end].tolist())
+
+        range_rows.append(
+            {
+                "sample_no": sample_index + 1,
+                "source_start_frame_1based": start_1based,
+                "source_end_frame_1based": end_1based,
+                "source_start_index_0based": start,
+                "source_end_index_0based": end - 1,
+                "selected_frame_count": len(selected_t),
+                "start_time_sec": float(selected_t[0]) if len(selected_t) else np.nan,
+                "end_time_sec": float(selected_t[-1]) if len(selected_t) else np.nan,
+            }
+        )
+    return selected_time, selected_series, range_rows
 
 
 def copy_center_coordinate_to_segment(day: str, segment_subdir: str) -> None:

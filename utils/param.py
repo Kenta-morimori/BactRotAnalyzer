@@ -1,5 +1,7 @@
 import configparser
+import math
 import os
+import re
 
 import pandas as pd
 
@@ -42,7 +44,10 @@ def get_flag_use_brightness_data(day, default_flag=False):
 def get_config(day):
     config = _read_config(day)
     flag_use_tiff_log = get_flag_use_tiff_log(day)
-    sample_num = config.getint("Settings", "sample_num")
+    # TIFF-log datasets are defined by their explicitly ordered TIFF series.
+    # Keeping a second sample count in Settings made it possible for the time
+    # CSV and downstream analysis to disagree, causing index errors.
+    sample_num = len(get_tiffinfo_config(day)) if flag_use_tiff_log else config.getint("Settings", "sample_num")
     # Frame Rate, Total Time
     FrameRate_list = []
     total_time_list = []
@@ -124,13 +129,93 @@ def get_manual_rise_time_sec_config(day):
     values = []
     for item in raw_value.split(","):
         item = item.strip()
-        if item == "":
+        if item == "" or item.lower() in {"none", "nan", "auto"}:
+            values.append(None)
             continue
         try:
-            values.append(float(item))
+            value = float(item)
         except ValueError as exc:
             raise ValueError(f"Invalid float in {section}.{option}: '{item}'") from exc
+        values.append(value if math.isfinite(value) else None)
 
+    return values
+
+
+def get_manual_stop_frame_indices_config(day):
+    """Read optional per-sample zero-based stop-frame indices.
+
+    ``auto`` delegates that sample to the activity-based stop detector.  A
+    shorter list also leaves remaining samples to automatic detection.
+    """
+    config = _read_config(day)
+    section = "RepellentResponse"
+    option = "manual_stop_frame_indices"
+    if not config.has_section(section) or not config.has_option(section, option):
+        return []
+
+    raw_value = config.get(section, option, fallback="").strip()
+    if raw_value == "":
+        return []
+
+    values = []
+    for item in raw_value.split(","):
+        item = item.strip()
+        if item == "" or item.lower() == "auto":
+            values.append(None)
+            continue
+        try:
+            value = int(item)
+        except ValueError as exc:
+            raise ValueError(f"Invalid stop-frame index in {section}.{option}: '{item}'") from exc
+        if value < 0:
+            raise ValueError(f"Stop-frame index in {section}.{option} must be non-negative: '{item}'")
+        values.append(value)
+    return values
+
+
+def get_analysis_frame_ranges_config(day):
+    """Return optional per-sample 1-based inclusive analysis frame ranges.
+
+    ``None`` means that the complete series is analyzed.  When the option is
+    present its length is deliberately strict: silently shifting a range to a
+    different sample would invalidate the experiment.
+    """
+    config = _read_config(day)
+    section = "RepellentResponse"
+    option = "analysis_frame_ranges"
+    if not config.has_section(section) or not config.has_option(section, option):
+        return []
+
+    raw_value = config.get(section, option, fallback="").strip()
+    if raw_value == "":
+        return []
+
+    values = []
+    for item in raw_value.split(","):
+        item = item.strip()
+        if item == "" or item.lower() in {"none", "nan", "auto"}:
+            values.append(None)
+            continue
+        match = re.fullmatch(r"(\d+)\s*-\s*(\d+)", item)
+        if match is None:
+            raise ValueError(
+                f"Invalid frame range in {section}.{option}: '{item}'. " "Use 'start-end' (1-based, inclusive) or auto."
+            )
+        start, end = (int(match.group(1)), int(match.group(2)))
+        if start < 1 or end < 1 or start > end:
+            raise ValueError(
+                f"Invalid frame range in {section}.{option}: '{item}'. "
+                "Frame numbers must be positive and start must not exceed end."
+            )
+        values.append((start, end))
+
+    sample_num = (
+        len(get_tiffinfo_config(day)) if get_flag_use_tiff_log(day) else config.getint("Settings", "sample_num")
+    )
+    if len(values) != sample_num:
+        raise ValueError(
+            f"{section}.{option} must contain one value per sample. " f"ranges={len(values)}, samples={sample_num}"
+        )
     return values
 
 
@@ -191,6 +276,12 @@ bg_roi_offset_um_downward = 10.0  # Downward offset from centroid in micrometers
 # 2: use rolling median of the raw coordinates after rise
 # 3: use the constant post-rise mean center
 post_rise_center_mode = 2
+
+# Freeze the post-rise rotation center once rotation has stopped.  The activity
+# threshold is expressed as a fraction of the pre-rise activity level, and the
+# duration is expressed in estimated rotations.
+stop_activity_ratio = 0.20
+stop_min_duration_rotations = 1.0
 
 # fluctuation analysis
 # SD_window_width_list = [0.1, 0.5, 1.0]

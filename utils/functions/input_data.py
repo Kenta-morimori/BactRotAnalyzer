@@ -28,7 +28,9 @@ def input_centroid_coordinate(day):
     column_list = df.columns.tolist()
 
     for i, column_name in enumerate(column_list):
-        col_data = df[column_name].dropna()
+        # Preserve missing frames so each coordinate remains aligned with its
+        # original TIFF/AVI frame and the matching time-series entry.
+        col_data = pd.to_numeric(df[column_name], errors="coerce")
         if i % 2 == 0:
             x_list.append(col_data)
         else:
