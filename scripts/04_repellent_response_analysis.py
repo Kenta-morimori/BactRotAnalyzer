@@ -45,13 +45,27 @@ def main(
     # Reuse existing centroid / angular-velocity pipeline.
     centroid_csv = f"{param.save_dir_bef}/{day}/centroid_coordinate.csv"
     base_centroid_csv = f"{base_save_dir}/{day}/centroid_coordinate.csv"
-    if not os.path.isfile(centroid_csv):
-        if os.path.isfile(base_centroid_csv):
-            os.makedirs(os.path.dirname(centroid_csv), exist_ok=True)
-            import shutil
+    centroid_sample_count = 0
+    if os.path.isfile(centroid_csv):
+        existing_x_list, existing_y_list = input_data.input_centroid_coordinate(day)
+        centroid_sample_count = min(len(existing_x_list), len(existing_y_list))
 
-            shutil.copy2(base_centroid_csv, centroid_csv)
-        else:
+    # A previous run may have produced a centroid CSV for fewer TIFF series.
+    # Regenerate it so every configured TIFF series has a coordinate pair.
+    if centroid_sample_count != len(time_list):
+        if os.path.isfile(base_centroid_csv):
+            # Do not reuse a stale base output unless it has the expected
+            # number of samples.
+            param.save_dir_bef = base_save_dir
+            base_x_list, base_y_list = input_data.input_centroid_coordinate(day)
+            param.save_dir_bef = base_save_dir if output_suffix in (None, "") else f"{base_save_dir}/{output_suffix}"
+            if min(len(base_x_list), len(base_y_list)) == len(time_list):
+                os.makedirs(os.path.dirname(centroid_csv), exist_ok=True)
+                import shutil
+
+                shutil.copy2(base_centroid_csv, centroid_csv)
+                centroid_sample_count = len(time_list)
+        if centroid_sample_count != len(time_list):
             try:
                 script_path = os.path.join(
                     os.path.dirname(os.path.dirname(__file__)),
