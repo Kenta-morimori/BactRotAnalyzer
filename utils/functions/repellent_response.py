@@ -1739,6 +1739,7 @@ def add_rise_time_to_results(
     time_list: Sequence[Sequence[float]],
 ) -> None:
     flag_use_manual_rise_time = param.get_flag_use_manual_rise_time(day, default_flag=False)
+    manual_override_list: List[bool] = [False] * len(results)
 
     if flag_use_manual_rise_time:
         manual_rise_time_list = param.get_manual_rise_time_sec_config(day)
@@ -1750,7 +1751,13 @@ def add_rise_time_to_results(
             )
 
         for i, result in enumerate(results):
-            manual_rise_time = float(manual_rise_time_list[i])
+            manual_rise_time = manual_rise_time_list[i]
+            # None, NaN, auto, and blank config values deliberately preserve
+            # the automatic detection for that individual sample.
+            if manual_rise_time is None:
+                continue
+            manual_rise_time = float(manual_rise_time)
+            manual_override_list[i] = True
 
             if i >= len(time_list):
                 result["rise_index"] = np.nan
@@ -1786,9 +1793,9 @@ def add_rise_time_to_results(
             result["num_frames"] = float(len(t))
             result["sample_no"] = float(i + 1)
 
-        return
-
     for i, result in enumerate(results):
+        if manual_override_list[i]:
+            continue
         if i >= len(time_list):
             result["rise_time"] = np.nan
             continue

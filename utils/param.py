@@ -1,4 +1,5 @@
 import configparser
+import math
 import os
 
 import pandas as pd
@@ -127,12 +128,14 @@ def get_manual_rise_time_sec_config(day):
     values = []
     for item in raw_value.split(","):
         item = item.strip()
-        if item == "":
+        if item == "" or item.lower() in {"none", "nan", "auto"}:
+            values.append(None)
             continue
         try:
-            values.append(float(item))
+            value = float(item)
         except ValueError as exc:
             raise ValueError(f"Invalid float in {section}.{option}: '{item}'") from exc
+        values.append(value if math.isfinite(value) else None)
 
     return values
 
