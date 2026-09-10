@@ -39,8 +39,6 @@ def main(
 
     # Keep time-list generation aligned with existing implementation.
     time_list = repellent_response.ensure_time_list(day)
-    save2csv.save_repellent_time_list(time_list, day)
-    make_graph.plot_repellent_time_list(time_list, day)
 
     # Reuse existing centroid / angular-velocity pipeline.
     centroid_csv = f"{param.save_dir_bef}/{day}/centroid_coordinate.csv"
@@ -81,6 +79,17 @@ def main(
 
     # Phase 1: background intensity and rise-point detection.
     background_list = repellent_response.get_background_intensity_time_series(day)
+    time_list, selected_series, range_rows = repellent_response.apply_analysis_frame_ranges(
+        time_list=time_list,
+        series_lists=[x_list, y_list, background_list],
+        frame_ranges=param.get_analysis_frame_ranges_config(day),
+    )
+    x_list, y_list, background_list = selected_series
+    # The canonical outputs/<day>/time_list.csv remains the raw TIFF timeline;
+    # every repellent-response artifact below uses this selected timeline.
+    save2csv.save_repellent_time_list(time_list, day)
+    save2csv.save_repellent_analysis_frame_ranges(range_rows, day)
+    make_graph.plot_repellent_time_list(time_list, day)
     rise_results = repellent_response.detect_rise_points(
         background_list=background_list,
         baseline_ratio=baseline_ratio,

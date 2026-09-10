@@ -172,6 +172,12 @@ def save_repellent_time_list(time_list, day):
     pd.DataFrame(data).to_csv(csv_save_dir, index=False)
 
 
+def save_repellent_analysis_frame_ranges(range_rows, day):
+    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/00_time_list"
+    os.makedirs(save_dir, exist_ok=True)
+    pd.DataFrame(range_rows).to_csv(f"{save_dir}/analysis_frame_ranges.csv", index=False)
+
+
 def save_angular_velocity_switching_count(
     time_list: Sequence[Sequence[float]],
     count_list: Sequence[Sequence[float]],

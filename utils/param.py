@@ -1,6 +1,7 @@
 import configparser
 import math
 import os
+import re
 
 import pandas as pd
 
@@ -169,6 +170,52 @@ def get_manual_stop_frame_indices_config(day):
         if value < 0:
             raise ValueError(f"Stop-frame index in {section}.{option} must be non-negative: '{item}'")
         values.append(value)
+    return values
+
+
+def get_analysis_frame_ranges_config(day):
+    """Return optional per-sample 1-based inclusive analysis frame ranges.
+
+    ``None`` means that the complete series is analyzed.  When the option is
+    present its length is deliberately strict: silently shifting a range to a
+    different sample would invalidate the experiment.
+    """
+    config = _read_config(day)
+    section = "RepellentResponse"
+    option = "analysis_frame_ranges"
+    if not config.has_section(section) or not config.has_option(section, option):
+        return []
+
+    raw_value = config.get(section, option, fallback="").strip()
+    if raw_value == "":
+        return []
+
+    values = []
+    for item in raw_value.split(","):
+        item = item.strip()
+        if item == "" or item.lower() in {"none", "nan", "auto"}:
+            values.append(None)
+            continue
+        match = re.fullmatch(r"(\d+)\s*-\s*(\d+)", item)
+        if match is None:
+            raise ValueError(
+                f"Invalid frame range in {section}.{option}: '{item}'. " "Use 'start-end' (1-based, inclusive) or auto."
+            )
+        start, end = (int(match.group(1)), int(match.group(2)))
+        if start < 1 or end < 1 or start > end:
+            raise ValueError(
+                f"Invalid frame range in {section}.{option}: '{item}'. "
+                "Frame numbers must be positive and start must not exceed end."
+            )
+        values.append((start, end))
+
+    sample_num = (
+        len(get_tiffinfo_config(day)) if get_flag_use_tiff_log(day) else config.getint("Settings", "sample_num")
+    )
+    if len(values) != sample_num:
+        raise ValueError(
+            f"{section}.{option} must contain one value per sample. " f"ranges={len(values)}, samples={sample_num}"
+        )
     return values
 
 

@@ -1,7 +1,60 @@
 import numpy as np
+import pandas as pd
 
 from utils import param
 from utils.functions import get_angular_velocity, make_graph, save2csv
+
+
+CONTINUITY_GAP_FACTOR = 1.5
+
+
+def longest_continuous_segment(time, *series):
+    """Return the longest finite, regularly sampled segment and its metadata."""
+    arrays = [np.asarray(time, dtype=float)] + [np.asarray(values, dtype=float) for values in series]
+    if not arrays:
+        return tuple(), {
+            "start_index": np.nan,
+            "end_index": np.nan,
+            "sample_count": 0,
+            "effective_frame_rate_hz": np.nan,
+        }
+    n = min(len(values) for values in arrays)
+    arrays = [values[:n] for values in arrays]
+    valid = np.isfinite(arrays[0])
+    for values in arrays[1:]:
+        valid &= np.isfinite(values)
+    indices = np.flatnonzero(valid)
+    if len(indices) == 0:
+        empty = tuple(np.asarray([], dtype=float) for _ in arrays)
+        return empty, {"start_index": np.nan, "end_index": np.nan, "sample_count": 0, "effective_frame_rate_hz": np.nan}
+
+    valid_time = arrays[0][indices]
+    positive_diffs = np.diff(valid_time)
+    positive_diffs = positive_diffs[np.isfinite(positive_diffs) & (positive_diffs > 0)]
+    nominal_dt = float(np.median(positive_diffs)) if len(positive_diffs) else np.nan
+    split = np.zeros(len(indices), dtype=bool)
+    if len(indices) > 1:
+        diffs = np.diff(valid_time)
+        split[1:] = (~np.isfinite(diffs)) | (diffs <= 0)
+        if np.isfinite(nominal_dt):
+            split[1:] |= diffs > nominal_dt * CONTINUITY_GAP_FACTOR
+    starts = np.flatnonzero(split)
+    starts = np.r_[0, starts]
+    ends = np.r_[starts[1:], len(indices)]
+    best_start, best_end = max(zip(starts, ends), key=lambda item: item[1] - item[0])
+    chosen_indices = indices[best_start:best_end]
+    chosen = tuple(values[chosen_indices] for values in arrays)
+    chosen_diffs = np.diff(chosen[0])
+    chosen_diffs = chosen_diffs[np.isfinite(chosen_diffs) & (chosen_diffs > 0)]
+    effective_rate = 1.0 / float(np.median(chosen_diffs)) if len(chosen_diffs) else np.nan
+    return chosen, {
+        "start_index": int(chosen_indices[0]),
+        "end_index": int(chosen_indices[-1]),
+        "sample_count": int(len(chosen_indices)),
+        "start_time_sec": float(chosen[0][0]),
+        "end_time_sec": float(chosen[0][-1]),
+        "effective_frame_rate_hz": effective_rate,
+    }
 
 
 def fft(data_bef, dt):
@@ -21,17 +74,41 @@ def fft(data_bef, dt):
     return freq[1 : N // 2], Amp[1 : N // 2]
 
 
-def fft_angle(angle_list, day):
+def _save_fft_timebase_metadata(save_dir, save_name, metadata):
+    pd.DataFrame(metadata).to_csv(f"{save_dir}/{save_name}_timebase.csv", index=False)
+
+
+def fft_angle(angle_list, day, time_list=None):
     sample_num, FrameRate_list, _ = param.get_config(day)
     freq_list, Amp_list = [], []
-    # FFT
+    metadata = []
     for i in range(sample_num):
         if param.flag_get_angle_with_cell_direcetion:
             # normalize angle to -π~π
             angle = get_angular_velocity.normalized_angle(angle_list[i])
         else:
             angle = angle_list[i]
-        freq, Amp = fft(angle, 1 / FrameRate_list[i])
+        if time_list is not None and i < len(time_list):
+            (segment_time, segment_angle), meta = longest_continuous_segment(time_list[i], angle)
+            dt = (
+                1.0 / meta["effective_frame_rate_hz"]
+                if np.isfinite(meta["effective_frame_rate_hz"])
+                else 1 / FrameRate_list[i]
+            )
+        else:
+            segment_angle = angle
+            meta = {
+                "start_index": 0,
+                "end_index": len(angle) - 1,
+                "sample_count": len(angle),
+                "start_time_sec": np.nan,
+                "end_time_sec": np.nan,
+                "effective_frame_rate_hz": FrameRate_list[i],
+            }
+            dt = 1 / FrameRate_list[i]
+        meta["sample_no"] = i + 1
+        metadata.append(meta)
+        freq, Amp = fft(segment_angle, dt)
         freq_list.append(freq)
         Amp_list.append(Amp)
     # plot
@@ -39,18 +116,37 @@ def fft_angle(angle_list, day):
     save_name = "angle_FFT"
     make_graph.plot_fft(freq_list, Amp_list, save_dir, save_name, day, flag_add_peak=True)
     save2csv.save_fft(save_dir, save_name, freq_list, Amp_list)
+    _save_fft_timebase_metadata(save_dir, save_name, metadata)
 
 
-def fft_angular_velocity(angular_velocity_list, day):
+def fft_angular_velocity(angular_velocity_list, day, time_list=None):
     sample_num, FrameRate_list, _ = param.get_config(day)
     freq_list, Amp_list = [], []
-    # FFT
+    metadata = []
     for i in range(sample_num):
-        # Nan --> Mean value
-        if np.any(np.isnan(angular_velocity_list[i])):
-            mean = np.nanmean(angular_velocity_list[i])
-            angular_velocity_list[i] = np.where(np.isnan(angular_velocity_list[i]), mean, angular_velocity_list[i])
-        freq, Amp = fft(angular_velocity_list[i], 1 / FrameRate_list[i])
+        av = np.asarray(angular_velocity_list[i], dtype=float)
+        if time_list is not None and i < len(time_list):
+            av_time = np.asarray(time_list[i], dtype=float)[1 : len(av) + 1]
+            (segment_time, segment_av), meta = longest_continuous_segment(av_time, av)
+            dt = (
+                1.0 / meta["effective_frame_rate_hz"]
+                if np.isfinite(meta["effective_frame_rate_hz"])
+                else 1 / FrameRate_list[i]
+            )
+        else:
+            segment_av = av[np.isfinite(av)]
+            meta = {
+                "start_index": 0,
+                "end_index": len(av) - 1,
+                "sample_count": len(segment_av),
+                "start_time_sec": np.nan,
+                "end_time_sec": np.nan,
+                "effective_frame_rate_hz": FrameRate_list[i],
+            }
+            dt = 1 / FrameRate_list[i]
+        meta["sample_no"] = i + 1
+        metadata.append(meta)
+        freq, Amp = fft(segment_av, dt)
         freq_list.append(freq)
         Amp_list.append(Amp)
     # plot
@@ -58,6 +154,7 @@ def fft_angular_velocity(angular_velocity_list, day):
     save_name = "angular_velocity_FFT"
     make_graph.plot_fft(freq_list, Amp_list, save_dir, save_name, day)
     save2csv.save_fft(save_dir, save_name, freq_list, Amp_list)
+    _save_fft_timebase_metadata(save_dir, save_name, metadata)
 
 
 def fft_sd_list(df, day, flag_std=False):
