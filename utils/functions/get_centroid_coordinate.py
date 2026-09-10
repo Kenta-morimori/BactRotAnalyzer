@@ -32,14 +32,14 @@ def contours(img):
         return np.nan, np.nan, None
     max_contour = max(contours, key=cv2.contourArea)
 
-    # Centroid coordinates were taken as the mean of the contours.
-    if max_contour is not None:
+    # A contour with fewer than five points cannot provide either a reliable
+    # object region or the minimum input required by cv2.fitEllipse.
+    if max_contour is not None and len(max_contour) >= 5:
         mean_x = np.mean(max_contour[:, 0, 0].astype(float))
         mean_y = np.mean(max_contour[:, 0, 1].astype(float))
         ellipse = cv2.fitEllipse(max_contour)
         return mean_x, mean_y, ellipse
-    else:
-        return np.nan, np.nan, None
+    return np.nan, np.nan, None
 
 
 # Save centroid coordinates (cannot be written in save2csv.py due to subprocess)
