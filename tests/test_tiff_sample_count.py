@@ -2,9 +2,10 @@ import configparser
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from utils import param
-from utils.functions import repellent_response
+from utils.functions import input_data, repellent_response, save2csv
 
 
 def test_tiff_log_uses_tiff_data_length_not_settings_sample_num(tmp_path, monkeypatch):
@@ -68,3 +69,44 @@ def test_manual_rise_time_tokens_and_per_sample_fallback(tmp_path, monkeypatch):
     assert results[1]["rise_index"] == 2.0
     assert results[1]["rise_time"] == 40.0
     assert np.isnan(results[1]["baseline_mean"])
+
+
+def test_tiff_config_order_resolves_avi_and_writes_mapping(tmp_path, monkeypatch):
+    input_root = tmp_path / "data"
+    output_root = tmp_path / "outputs"
+    day_dir = input_root / "day"
+    day_dir.mkdir(parents=True)
+    config = configparser.ConfigParser()
+    config["Settings"] = {"flag_use_tiff_log": "True"}
+    config["Tiff_info"] = {"tiff_data": "chronological_first, chronological_second"}
+    with (day_dir / "config.ini").open("w", encoding="utf-8") as config_file:
+        config.write(config_file)
+    # Deliberately create in the opposite filesystem order.
+    (day_dir / "chronological_second.avi").touch()
+    (day_dir / "chronological_first.avi").touch()
+    monkeypatch.setattr(param, "input_dir_bef", str(input_root))
+    monkeypatch.setattr(param, "save_dir_bef", str(output_root))
+
+    paths = input_data.get_ordered_avi_paths("day")
+    assert [path.split("/")[-1] for path in paths] == ["chronological_first.avi", "chronological_second.avi"]
+
+    rows = input_data.get_tiff_avi_sample_map("day")
+    save2csv.save_repellent_avi_tiff_sample_map(rows, "day")
+    saved = pd.read_csv(output_root / "day" / "repellent_response" / "00_time_list" / "avi_tiff_sample_map.csv")
+    assert saved["tiff_data"].tolist() == ["chronological_first", "chronological_second"]
+    assert saved["avi_filename"].tolist() == ["chronological_first.avi", "chronological_second.avi"]
+
+    (day_dir / "unexpected.avi").touch()
+    with pytest.raises(ValueError, match="unexpected"):
+        input_data.get_ordered_avi_paths("day")
+
+    (day_dir / "unexpected.avi").unlink()
+    (day_dir / "chronological_second.avi").unlink()
+    with pytest.raises(ValueError, match="missing"):
+        input_data.get_ordered_avi_paths("day")
+
+    config["Tiff_info"] = {"tiff_data": "chronological_first, chronological_first"}
+    with (day_dir / "config.ini").open("w", encoding="utf-8") as config_file:
+        config.write(config_file)
+    with pytest.raises(ValueError, match="duplicate"):
+        input_data.get_ordered_avi_paths("day")

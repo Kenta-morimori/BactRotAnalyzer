@@ -39,6 +39,7 @@ def main(
 
     # Keep time-list generation aligned with existing implementation.
     time_list = repellent_response.ensure_time_list(day)
+    save2csv.save_repellent_avi_tiff_sample_map(input_data.get_tiff_avi_sample_map(day), day)
 
     # Reuse existing centroid / angular-velocity pipeline.
     centroid_csv = f"{param.save_dir_bef}/{day}/centroid_coordinate.csv"
@@ -179,6 +180,7 @@ def main(
         x_list=all_x_corr_list,
         y_list=all_y_corr_list,
         run_fluctuation=False,
+        write_time_list=False,
     )
     all_rise_time_for_av = []
     for idx in all_rot["valid_indices"]:
@@ -194,6 +196,7 @@ def main(
         angular_velocity_list=all_rot["angular_velocity_list"],
         original_sample_indices=all_rot["valid_indices"],
         rise_time_list=all_rise_time_for_av,
+        write_time_list=False,
     )
     bg_for_av = []
     for idx in all_rot["valid_indices"]:

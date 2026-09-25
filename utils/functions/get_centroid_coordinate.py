@@ -1,8 +1,6 @@
 import csv
-import glob
 import math
 import os
-import re
 
 # import statistics
 import sys
@@ -18,6 +16,7 @@ from utils.features import ROTATION_FEATURES
 from utils.functions import (
     clean_data,
     frequency_analysis,
+    input_data,
     make_graph,
     read_csv,
     rot_df_manage,
@@ -433,12 +432,7 @@ def main(day):
     save_dir = f"{param.save_dir_bef}/{day}"
     px2um_x, px2um_y = param.get_px2um_config(day)
 
-    file_name_list_bef = glob.glob(f"{input_dir}/*.avi")
-    file_name_list_aft = sorted(file_name_list_bef, key=lambda x: int(re.findall(r"\d+", os.path.basename(x))[-1]))
-
-    if len(file_name_list_aft) == 0:
-        print("Error: No .avi files found in the input directory. Please check the path and file existence.")
-        sys.exit(1)
+    file_name_list_aft = input_data.get_ordered_avi_paths(day)
 
     x_list_bef, y_list_bef, angle_list = [], [], []
     for file_name in file_name_list_aft:

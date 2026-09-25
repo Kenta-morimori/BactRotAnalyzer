@@ -916,6 +916,7 @@ def run_segment_rotational_analysis(
     x_list: Sequence[Sequence[float]],
     y_list: Sequence[Sequence[float]],
     run_fluctuation: bool = False,
+    write_time_list: bool = True,
 ) -> RotationalAnalysisResult:
     target_dir = f"{param.save_dir_bef}/{day}/repellent_response/{segment_subdir}"
     os.makedirs(target_dir, exist_ok=True)
@@ -980,10 +981,11 @@ def run_segment_rotational_analysis(
     )
     map_df.to_csv(f"{target_dir}/sample_index_map.csv", index=False)
 
-    time_data = {}
-    for i, t_series in enumerate(selected_time_list):
-        time_data[f"No.{i + 1}"] = pd.Series(np.asarray(t_series, dtype=float), dtype="float64")
-    pd.DataFrame(time_data).to_csv(f"{target_dir}/time_list.csv", index=False)
+    if write_time_list:
+        time_data = {}
+        for i, t_series in enumerate(selected_time_list):
+            time_data[f"No.{i + 1}"] = pd.Series(np.asarray(t_series, dtype=float), dtype="float64")
+        pd.DataFrame(time_data).to_csv(f"{target_dir}/time_list.csv", index=False)
     return RotationalAnalysisResult(
         valid_indices=valid_indices,
         time_list=selected_time_list,
@@ -1088,19 +1090,16 @@ def estimate_rotation_center_like_standard(
         t_fft = time_arr[fft_mask]
         x_fft = x_arr[fft_mask]
         y_fft = y_arr[fft_mask]
-        (t_fft, x_fft, y_fft), _ = frequency_analysis.longest_continuous_segment(t_fft, x_fft, y_fft)
         total_duration_fft = float(t_fft[-1] - t_fft[0]) if len(t_fft) > 1 else 0.0
         if total_duration_fft <= 0:
-            (t_fft, x_fft, y_fft), _ = frequency_analysis.longest_continuous_segment(t, x, y)
-            total_duration_fft = float(t_fft[-1] - t_fft[0]) if len(t_fft) > 1 else total_duration_all
+            total_duration_fft = total_duration_all
+            t_fft = t
+            x_fft = x
+            y_fft = y
             fft_source = "all-time"
 
-        fft_diffs = np.diff(t_fft)
-        fft_diffs = fft_diffs[np.isfinite(fft_diffs) & (fft_diffs > 0)]
-        all_diffs = np.diff(t)
-        all_diffs = all_diffs[np.isfinite(all_diffs) & (all_diffs > 0)]
-        frame_rate_fft = max(1e-6, 1.0 / float(np.median(fft_diffs))) if len(fft_diffs) else 1.0
-        frame_rate_all = max(1e-6, 1.0 / float(np.median(all_diffs))) if len(all_diffs) else 1.0
+        frame_rate_fft = max(1e-6, float(len(t_fft)) / total_duration_fft)
+        frame_rate_all = max(1e-6, float(len(t)) / total_duration_all)
         x_freq, x_amp = frequency_analysis.fft(x_fft, 1.0 / frame_rate_fft)
         y_freq, y_amp = frequency_analysis.fft(y_fft, 1.0 / frame_rate_fft)
         freq_th = 5.0
@@ -1206,14 +1205,11 @@ def _estimate_window_frames_from_fft(
     t = time_arr[fft_mask]
     x = x_arr[fft_mask]
     y = y_arr[fft_mask]
-    (t, x, y), _ = frequency_analysis.longest_continuous_segment(t, x, y)
     total_duration = float(t[-1] - t[0]) if len(t) > 1 else 0.0
     if total_duration <= 0:
         return 3
 
-    dt_values = np.diff(t)
-    dt_values = dt_values[np.isfinite(dt_values) & (dt_values > 0)]
-    frame_rate = max(1e-6, 1.0 / float(np.median(dt_values))) if len(dt_values) else 1.0
+    frame_rate = max(1e-6, float(len(t)) / total_duration)
     x_freq, x_amp = frequency_analysis.fft(x, 1.0 / frame_rate)
     y_freq, y_amp = frequency_analysis.fft(y, 1.0 / frame_rate)
     freq_th = 5.0
@@ -1668,6 +1664,7 @@ def save_segment_angular_velocity_outputs(
     angular_velocity_list: Sequence[Sequence[float]],
     original_sample_indices: Optional[Sequence[int]] = None,
     rise_time_list: Optional[Sequence[float]] = None,
+    write_time_list: bool = True,
 ) -> None:
     save_dir = f"{param.save_dir_bef}/{day}/repellent_response/{segment_subdir}/angular_velocity"
     os.makedirs(save_dir, exist_ok=True)
@@ -1683,12 +1680,13 @@ def save_segment_angular_velocity_outputs(
 
     pd.DataFrame(angle_df).to_csv(f"{save_dir}/angle_time-series.csv", index=False)
     pd.DataFrame(av_df).to_csv(f"{save_dir}/angular-velocity_time-series.csv", index=False)
-    time_df = {}
-    for i in range(n):
-        time_df[f"No.{i + 1}"] = pd.Series(np.asarray(time_list[i], dtype=float), dtype="float64")
-    pd.DataFrame(time_df).to_csv(
-        f"{param.save_dir_bef}/{day}/repellent_response/{segment_subdir}/time_list.csv", index=False
-    )
+    if write_time_list:
+        time_df = {}
+        for i in range(n):
+            time_df[f"No.{i + 1}"] = pd.Series(np.asarray(time_list[i], dtype=float), dtype="float64")
+        pd.DataFrame(time_df).to_csv(
+            f"{param.save_dir_bef}/{day}/repellent_response/{segment_subdir}/time_list.csv", index=False
+        )
 
     if original_sample_indices is not None:
         map_df = pd.DataFrame(
@@ -2098,30 +2096,8 @@ def copy_center_coordinate_to_segment(day: str, segment_subdir: str) -> None:
 
 def cleanup_legacy_repellent_outputs(day: str) -> None:
     root = f"{param.save_dir_bef}/{day}/repellent_response"
-    legacy_files = [
-        f"{root}/background_intensity_time_series.csv",
-        f"{root}/background_intensity_time_series.png",
-        f"{root}/post_rise_centroid_time_series.csv",
-        f"{root}/rise_summary.csv",
-        f"{root}/03_post_rise_analysis/centroid_coordinate/trajectory.png",
-        f"{root}/03_post_rise_analysis/centroid_coordinate/x_coordinate.png",
-        f"{root}/03_post_rise_analysis/centroid_coordinate/y_coordinate.png",
-        f"{root}/03_post_rise_analysis/centroid_coordinate/x_centroid_before.png",
-        f"{root}/03_post_rise_analysis/centroid_coordinate/x_rotation_center.png",
-        f"{root}/03_post_rise_analysis/centroid_coordinate/x_centroid_corrected.png",
-        f"{root}/03_post_rise_analysis/centroid_coordinate/x_components.png",
-    ]
-    legacy_dirs = [
-        f"{root}/00_all_rotational_analysis",
-        f"{root}/02_pre_rise_fluctuation",
-        f"{root}/03_post_rise_analysis",
-        f"{root}/center_coordinate",
-        f"{root}/pre_rise_fluctuation",
-    ]
-
-    for path in legacy_files:
-        if os.path.isfile(path):
-            os.remove(path)
-    for path in legacy_dirs:
-        if os.path.isdir(path):
-            shutil.rmtree(path)
+    # Every artifact below this root is generated by this script.  Starting
+    # from an empty response directory prevents old one-page plots from being
+    # mistaken for current paginated results.
+    if os.path.isdir(root):
+        shutil.rmtree(root)

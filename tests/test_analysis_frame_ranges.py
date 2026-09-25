@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from utils import param
-from utils.functions import frequency_analysis, repellent_response
+from utils.functions import frequency_analysis, get_angular_velocity, repellent_response
 
 
 def _write_config(path, ranges):
@@ -70,3 +70,39 @@ def test_longest_continuous_segment_excludes_timestamp_gap():
     assert metadata["start_index"] == 0
     assert metadata["end_index"] == 9
     assert metadata["effective_frame_rate_hz"] == pytest.approx(10.0)
+
+
+def test_cleanup_removes_stale_response_outputs(tmp_path, monkeypatch):
+    root = tmp_path / "outputs" / "day" / "repellent_response"
+    stale = root / "01_brightness_change" / "background_intensity_time_series.png"
+    stale.parent.mkdir(parents=True)
+    stale.touch()
+    monkeypatch.setattr(param, "save_dir_bef", str(tmp_path / "outputs"))
+
+    repellent_response.cleanup_legacy_repellent_outputs("day")
+
+    assert not root.exists()
+
+
+def test_angular_velocity_is_missing_across_timestamp_jump(monkeypatch):
+    monkeypatch.setattr(param, "get_config", lambda _day: (1, [100.0], [1.03]))
+    monkeypatch.setattr(param, "flag_get_angle_with_cell_direcetion", False)
+    monkeypatch.setattr(param, "flag_correct_av_outlier", False)
+    monkeypatch.setattr(param, "flag_evaluate_angular_velocity_abs", False)
+    monkeypatch.setattr(param, "flag_eval_switching_with_averaged_av", False)
+    monkeypatch.setattr(get_angular_velocity.make_graph, "plot_angular_velocity", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(get_angular_velocity.save2csv, "save_angle_angular_velocity", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(get_angular_velocity.rot_df_manage, "update_rot_df", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(get_angular_velocity.frequency_analysis, "fft_angle", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(get_angular_velocity.frequency_analysis, "fft_angular_velocity", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(get_angular_velocity.make_evaluate_switching, "evaluate_switching", lambda *_args, **_kwargs: ([], []))
+
+    angle = np.arange(5, dtype=float) * 0.1
+    _, av = get_angular_velocity.get_angular_velocity(
+        [np.cos(angle)], [np.sin(angle)], "day", time_list=[[0.0, 0.01, 0.02, 1.02, 1.03]]
+    )
+
+    assert np.isfinite(av[0][0])
+    assert np.isfinite(av[0][1])
+    assert np.isnan(av[0][2])
+    assert np.isfinite(av[0][3])
