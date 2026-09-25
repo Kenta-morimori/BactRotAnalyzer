@@ -126,7 +126,7 @@ def get_manual_rise_time_sec_config(day):
     if raw_value == "":
         return []
 
-    values = []
+    values: list[float | None] = []
     for item in raw_value.split(","):
         item = item.strip()
         if item == "" or item.lower() in {"none", "nan", "auto"}:
@@ -157,7 +157,7 @@ def get_manual_stop_frame_indices_config(day):
     if raw_value == "":
         return []
 
-    values = []
+    values: list[int | None] = []
     for item in raw_value.split(","):
         item = item.strip()
         if item == "" or item.lower() == "auto":
@@ -190,7 +190,7 @@ def get_analysis_frame_ranges_config(day):
     if raw_value == "":
         return []
 
-    values = []
+    values: list[tuple[int, int] | None] = []
     for item in raw_value.split(","):
         item = item.strip()
         if item == "" or item.lower() in {"none", "nan", "auto"}:

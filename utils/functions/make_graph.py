@@ -1635,9 +1635,14 @@ def plot_repellent_component_panels(
             )
             ox = np.asarray(overlay_x_list[i], dtype=float) if overlay else None
             oy = np.asarray(overlay_y_list[i], dtype=float) if overlay else None
-            n = min(t.size, x.size, y.size, ox.size, oy.size) if overlay else min(t.size, x.size, y.size)
+            if overlay:
+                assert ox is not None and oy is not None
+                n = min(t.size, x.size, y.size, ox.size, oy.size)
+            else:
+                n = min(t.size, x.size, y.size)
             t, x, y = t[:n], x[:n], y[:n]
             if overlay:
+                assert ox is not None and oy is not None
                 ox, oy = ox[:n], oy[:n]
             rise_time = rise_time_list[i] if rise_time_list is not None and i < len(rise_time_list) else np.nan
             xy_ax, xt_ax, yt_ax = axs[row]

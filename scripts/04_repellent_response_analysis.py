@@ -2,7 +2,7 @@ import argparse
 import os
 import subprocess
 import sys
-from typing import Optional
+from typing import Optional, cast
 
 import numpy as np
 
@@ -132,9 +132,10 @@ def main(
         manual_stop_indices=param.get_manual_stop_frame_indices_config(day),
     )
     for i, result in enumerate(rise_results):
+        result_metadata = cast(dict[str, object], result)
         stop_idx = stop_indices[i] if i < len(stop_indices) else float("nan")
         result["rotation_stop_index"] = stop_idx
-        result["rotation_stop_source"] = stop_sources[i] if i < len(stop_sources) else "none"
+        result_metadata["rotation_stop_source"] = stop_sources[i] if i < len(stop_sources) else "none"
         if np.isfinite(stop_idx) and i < len(all_comp_time_list):
             sample_time = all_comp_time_list[i]
             index = int(stop_idx)
