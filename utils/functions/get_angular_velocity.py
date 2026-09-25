@@ -50,13 +50,16 @@ def normalized_angle(angle_bef):
     return angle_aft
 
 
-def get_angular_velocity(x_list, y_list, day):
+def get_angular_velocity(x_list, y_list, day, time_list=None):
     sample_num, FrameRate, _ = param.get_config(day)
     angle_list, angular_velocity_list = [], []
     angular_velocity_list_bef_corr = []
 
     if param.flag_get_angle_with_cell_direcetion:
         angle_list = read_csv.read_angle(day)
+
+    if time_list is None:
+        time_list = read_csv.get_timelist(day)
 
     for i in range(sample_num):
         # obtain angle
@@ -66,11 +69,27 @@ def get_angular_velocity(x_list, y_list, day):
             # center is zero
             x_arr, y_arr = np.array(x_list[i]), np.array(y_list[i])
             angle = np.arctan2(y_arr, x_arr)
-            angle_list.append(angle)
 
-        # obtain angular velocitiy
-        add_angular_velocity = np.array([])
+        # Obtain angular velocity from measured frame-to-frame timestamps.
+        # A long timestamp jump represents unobserved motion, so do not turn
+        # it into a fictitious slow rotation across the gap.
+        sample_time = np.asarray(time_list[i], dtype=float) if i < len(time_list) else np.asarray([], dtype=float)
+        n = min(len(angle), len(sample_time))
+        angle = np.asarray(angle[:n], dtype=float)
+        add_angular_velocity = np.full(max(0, n - 1), np.nan, dtype=float)
+        dt_arr = np.diff(sample_time[:n])
+        valid_dt = dt_arr[np.isfinite(dt_arr) & (dt_arr > 0)]
+        nominal_dt = float(np.median(valid_dt)) if len(valid_dt) else np.nan
         for j in range(1, len(angle)):
+            dt = dt_arr[j - 1]
+            if (
+                not np.isfinite(dt)
+                or dt <= 0
+                or (np.isfinite(nominal_dt) and dt > nominal_dt * frequency_analysis.CONTINUITY_GAP_FACTOR)
+                or not np.isfinite(angle[j])
+                or not np.isfinite(angle[j - 1])
+            ):
+                continue
             angle_diff = angle[j] - angle[j - 1]
             # 角度変化から回転方向を設定
             if angle_diff > np.pi:
@@ -78,16 +97,20 @@ def get_angular_velocity(x_list, y_list, day):
             elif angle_diff < -np.pi:
                 angle_diff += 2 * np.pi
             # CCWを正にするために-1をかける
-            add_angular_velocity = np.append(add_angular_velocity, -1 * angle_diff * FrameRate[i])
+            add_angular_velocity[j - 1] = -1 * angle_diff / dt
 
         # correct angular velocity
         add_angular_velocity_bef_corr = np.array(copy.deepcopy(add_angular_velocity))
         if param.flag_correct_av_outlier:
             add_angular_velocity = np.array(clean_data.correct_angular_velocity_outlier(add_angular_velocity, i, day))
         if param.flag_evaluate_angular_velocity_abs:
+            if not param.flag_get_angle_with_cell_direcetion:
+                angle_list.append(angle)
             angular_velocity_list.append(np.abs(add_angular_velocity))
             angular_velocity_list_bef_corr.append(np.abs(add_angular_velocity_bef_corr))
         else:
+            if not param.flag_get_angle_with_cell_direcetion:
+                angle_list.append(angle)
             angular_velocity_list.append(add_angular_velocity)
             angular_velocity_list_bef_corr.append(add_angular_velocity_bef_corr)
 
@@ -111,8 +134,8 @@ def get_angular_velocity(x_list, y_list, day):
     )
 
     # FFT
-    frequency_analysis.fft_angle(angle_list, day)
-    frequency_analysis.fft_angular_velocity(angular_velocity_list, day)
+    frequency_analysis.fft_angle(angle_list, day, time_list=time_list)
+    frequency_analysis.fft_angular_velocity(angular_velocity_list, day, time_list=time_list)
 
     # evaluate switching
     if param.flag_eval_switching_with_averaged_av:

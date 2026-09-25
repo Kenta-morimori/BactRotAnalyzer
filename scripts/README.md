@@ -74,10 +74,10 @@ python3 scripts/04_repellent_response_analysis.py --day repellent-response/20260
 
 Generated outputs are saved in `outputs/{day}/repellent_response/`:
 
-- `00_time_list/`: Time list and visualization  
-- `01_brightness_change/`: Background intensity and rise detection results  
-- `00_all_rotational_analysis/`: All-time rotational analysis, including centroid coordinates, rotation center, and angular velocity  
-- `02_pre_rise_fluctuation/`: Pre-rise rotational and fluctuation analyses  
+- `00_time_list/`: Time list and visualization
+- `01_brightness_change/`: Background intensity and rise detection results
+- `00_all_rotational_analysis/`: All-time rotational analysis, including centroid coordinates, rotation center, and angular velocity
+- `02_pre_rise_fluctuation/`: Pre-rise rotational and fluctuation analyses
 - `03_post_rise_analysis/`: Post-rise centroid and angular velocity analysis
 
 ## 日本語版
@@ -157,8 +157,8 @@ python3 scripts/04_repellent_response_analysis.py --day repellent-response/20260
 
 生成された出力は `outputs/{day}/repellent_response/` に保存されます。
 
-- `00_time_list/`: 時刻リストと可視化  
-- `01_brightness_change/`: 背景輝度と rise検出結果  
-- `00_all_rotational_analysis/`: 全時間の回転解析（重心座標、回転中心、角速度を含む）  
-- `02_pre_rise_fluctuation/`: pre-rise の回転解析と揺らぎ解析  
+- `00_time_list/`: 時刻リストと可視化
+- `01_brightness_change/`: 背景輝度と rise検出結果
+- `00_all_rotational_analysis/`: 全時間の回転解析（重心座標、回転中心、角速度を含む）
+- `02_pre_rise_fluctuation/`: pre-rise の回転解析と揺らぎ解析
 - `03_post_rise_analysis/`: post-rise の重心座標と角速度解析
