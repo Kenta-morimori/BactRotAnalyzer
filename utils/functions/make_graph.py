@@ -1251,7 +1251,9 @@ def _plot_repellent_background_and_av_metric_stacked(
     _page_number=1,
     _total_sample_num=None,
 ):
-    sample_num = min(len(time_list), len(background_list), len(angular_velocity_list), len(metric_time_list), len(metric_list))
+    sample_num = min(
+        len(time_list), len(background_list), len(angular_velocity_list), len(metric_time_list), len(metric_list)
+    )
     if sample_num <= 0:
         return
 

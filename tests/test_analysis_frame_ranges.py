@@ -95,7 +95,9 @@ def test_angular_velocity_is_missing_across_timestamp_jump(monkeypatch):
     monkeypatch.setattr(get_angular_velocity.rot_df_manage, "update_rot_df", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(get_angular_velocity.frequency_analysis, "fft_angle", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(get_angular_velocity.frequency_analysis, "fft_angular_velocity", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(get_angular_velocity.make_evaluate_switching, "evaluate_switching", lambda *_args, **_kwargs: ([], []))
+    monkeypatch.setattr(
+        get_angular_velocity.make_evaluate_switching, "evaluate_switching", lambda *_args, **_kwargs: ([], [])
+    )
 
     angle = np.arange(5, dtype=float) * 0.1
     _, av = get_angular_velocity.get_angular_velocity(
@@ -110,7 +112,9 @@ def test_angular_velocity_is_missing_across_timestamp_jump(monkeypatch):
 
 def test_all_time_angular_velocity_can_skip_duplicate_time_csv(tmp_path, monkeypatch):
     monkeypatch.setattr(param, "save_dir_bef", str(tmp_path / "outputs"))
-    monkeypatch.setattr(repellent_response.make_graph, "plot_repellent_angular_velocity_onecol", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        repellent_response.make_graph, "plot_repellent_angular_velocity_onecol", lambda *_args, **_kwargs: None
+    )
 
     repellent_response.save_segment_angular_velocity_outputs(
         day="day",

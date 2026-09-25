@@ -1,5 +1,5 @@
-import os
 import glob
+import os
 import re
 import subprocess
 
@@ -46,7 +46,12 @@ def get_tiff_avi_sample_map(day):
     paths = get_ordered_avi_paths(day)
     if not param.get_flag_use_tiff_log(day):
         return [
-            {"sample_no": index + 1, "tiff_data": "", "avi_filename": os.path.basename(path), "mapping_status": "sorted"}
+            {
+                "sample_no": index + 1,
+                "tiff_data": "",
+                "avi_filename": os.path.basename(path),
+                "mapping_status": "sorted",
+            }
             for index, path in enumerate(paths)
         ]
     names = param.get_tiffinfo_config(day)

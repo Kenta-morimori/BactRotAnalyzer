@@ -4,7 +4,6 @@ import pandas as pd
 from utils import param
 from utils.functions import get_angular_velocity, make_graph, save2csv
 
-
 CONTINUITY_GAP_FACTOR = 1.5
 
 

@@ -6,6 +6,8 @@ profile = "black"
 
 [tool.ruff]
 line-length = 120
+
+[tool.ruff.lint]
 ignore = ["E203", "E402"]
 
 [tool.mypy]

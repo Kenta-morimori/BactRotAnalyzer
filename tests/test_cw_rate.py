@@ -30,7 +30,9 @@ def test_cw_rate_csv_has_time_and_rate_columns(tmp_path, monkeypatch):
 
     save2csv.save_angular_velocity_cw_rate([[0.5, 1.0]], [[0.25, 0.5]], "day")
 
-    output_path = tmp_path / "day" / "repellent_response" / "00_all_rotational_analysis" / "angular_velocity" / "cw_rate.csv"
+    output_path = (
+        tmp_path / "day" / "repellent_response" / "00_all_rotational_analysis" / "angular_velocity" / "cw_rate.csv"
+    )
     output = pd.read_csv(output_path)
     assert output.columns.tolist() == ["No.1_time", "No.1_cw_rate"]
     assert output["No.1_cw_rate"].tolist() == [0.25, 0.5]

@@ -44,9 +44,7 @@ def test_continued_rotation_and_missing_data_do_not_trigger_stop():
 
     cx_std = np.linspace(1.0, 2.0, len(time))
     cy_std = np.linspace(2.0, 3.0, len(time))
-    without_stop = repellent_response.apply_post_rise_center_strategy(
-        [time], [x], [y], [cx_std], [cy_std], [rise_idx]
-    )
+    without_stop = repellent_response.apply_post_rise_center_strategy([time], [x], [y], [cx_std], [cy_std], [rise_idx])
     with_undetected_stop = repellent_response.apply_post_rise_center_strategy(
         [time], [x], [y], [cx_std], [cy_std], [rise_idx], stop_indices=[continuous]
     )
@@ -62,9 +60,7 @@ def test_continued_rotation_and_missing_data_do_not_trigger_stop():
 def test_manual_stop_index_overrides_automatic_detection_and_is_validated():
     time, x, y, rise_idx, _ = _rotating_then_stopped_series(stopped=False)
     manual_idx = 1200
-    stops, sources = repellent_response.resolve_rotation_stop_indices(
-        [time], [rise_idx], [float("nan")], [manual_idx]
-    )
+    stops, sources = repellent_response.resolve_rotation_stop_indices([time], [rise_idx], [float("nan")], [manual_idx])
     assert stops == [float(manual_idx)]
     assert sources == ["manual"]
 

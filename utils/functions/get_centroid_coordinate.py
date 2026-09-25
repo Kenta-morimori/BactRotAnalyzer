@@ -428,7 +428,6 @@ def dev_get_max_dists(x_list, y_list, day, split_time=0.5):
 
 def main(day):
     sample_num, _, _ = param.get_config(day)
-    input_dir = f"{param.input_dir_bef}/{day}"
     save_dir = f"{param.save_dir_bef}/{day}"
     px2um_x, px2um_y = param.get_px2um_config(day)
 
