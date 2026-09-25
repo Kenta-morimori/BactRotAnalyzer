@@ -106,3 +106,21 @@ def test_angular_velocity_is_missing_across_timestamp_jump(monkeypatch):
     assert np.isfinite(av[0][1])
     assert np.isnan(av[0][2])
     assert np.isfinite(av[0][3])
+
+
+def test_all_time_angular_velocity_can_skip_duplicate_time_csv(tmp_path, monkeypatch):
+    monkeypatch.setattr(param, "save_dir_bef", str(tmp_path / "outputs"))
+    monkeypatch.setattr(repellent_response.make_graph, "plot_repellent_angular_velocity_onecol", lambda *_args, **_kwargs: None)
+
+    repellent_response.save_segment_angular_velocity_outputs(
+        day="day",
+        segment_subdir="00_all_rotational_analysis",
+        time_list=[[0.0, 0.1, 0.2]],
+        angle_list=[[0.0, 0.1, 0.2]],
+        angular_velocity_list=[[1.0, 1.0]],
+        write_time_list=False,
+    )
+
+    root = tmp_path / "outputs" / "day" / "repellent_response" / "00_all_rotational_analysis"
+    assert (root / "angular_velocity" / "angle_time-series.csv").is_file()
+    assert not (root / "time_list.csv").exists()
