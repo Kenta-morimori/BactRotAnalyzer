@@ -108,3 +108,62 @@ def test_tiff_config_order_resolves_avi_and_writes_mapping(tmp_path, monkeypatch
         config.write(config_file)
     with pytest.raises(ValueError, match="duplicate"):
         input_data.get_ordered_avi_paths("day")
+
+
+def test_centroid_provenance_requires_matching_config_order(tmp_path, monkeypatch):
+    input_root = tmp_path / "data"
+    output_root = tmp_path / "outputs"
+    day_dir = input_root / "day"
+    day_dir.mkdir(parents=True)
+    config = configparser.ConfigParser()
+    config["Settings"] = {"flag_use_tiff_log": "True"}
+    config["Tiff_info"] = {"tiff_data": "sample_b, sample_a"}
+    with (day_dir / "config.ini").open("w", encoding="utf-8") as config_file:
+        config.write(config_file)
+    (day_dir / "sample_a.avi").touch()
+    (day_dir / "sample_b.avi").touch()
+    monkeypatch.setattr(param, "input_dir_bef", str(input_root))
+    monkeypatch.setattr(param, "save_dir_bef", str(output_root))
+
+    assert not input_data.centroid_coordinate_sample_map_matches("day")
+    input_data.save_centroid_coordinate_sample_map("day")
+    assert input_data.centroid_coordinate_sample_map_matches("day")
+
+    map_path = output_root / "day" / "centroid_coordinate_sample_map.csv"
+    saved = pd.read_csv(map_path)
+    saved.loc[0, "avi_filename"] = "sample_a.avi"
+    saved.to_csv(map_path, index=False)
+    assert not input_data.centroid_coordinate_sample_map_matches("day")
+
+
+def test_simple_centroid_fallback_uses_config_order(tmp_path, monkeypatch):
+    input_root = tmp_path / "data"
+    output_root = tmp_path / "outputs"
+    day_dir = input_root / "day"
+    day_dir.mkdir(parents=True)
+    config = configparser.ConfigParser()
+    config["Settings"] = {"flag_use_tiff_log": "True", "px2um_x": "1", "px2um_y": "1"}
+    config["Tiff_info"] = {"tiff_data": "sample_b, sample_a"}
+    with (day_dir / "config.ini").open("w", encoding="utf-8") as config_file:
+        config.write(config_file)
+    (day_dir / "sample_a.avi").touch()
+    (day_dir / "sample_b.avi").touch()
+    monkeypatch.setattr(param, "input_dir_bef", str(input_root))
+    monkeypatch.setattr(param, "save_dir_bef", str(output_root))
+
+    opened = []
+
+    class EmptyCapture:
+        def __init__(self, path):
+            opened.append(path)
+
+        def read(self):
+            return False, None
+
+        def release(self):
+            return None
+
+    monkeypatch.setattr(repellent_response.cv2, "VideoCapture", EmptyCapture)
+    repellent_response.generate_centroid_coordinate_simple("day")
+
+    assert [path.split("/")[-1] for path in opened] == ["sample_b.avi", "sample_a.avi"]

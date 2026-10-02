@@ -66,6 +66,34 @@ def get_tiff_avi_sample_map(day):
     ]
 
 
+def get_centroid_coordinate_sample_map_path(day):
+    """Return the provenance sidecar path for ``centroid_coordinate.csv``."""
+    return f"{param.save_dir_bef}/{day}/centroid_coordinate_sample_map.csv"
+
+
+def save_centroid_coordinate_sample_map(day):
+    """Record the config/AVI order used to generate centroid columns."""
+    map_path = get_centroid_coordinate_sample_map_path(day)
+    os.makedirs(os.path.dirname(map_path), exist_ok=True)
+    pd.DataFrame(get_tiff_avi_sample_map(day)).to_csv(map_path, index=False)
+
+
+def centroid_coordinate_sample_map_matches(day):
+    """Return whether an existing centroid cache has current input provenance."""
+    map_path = get_centroid_coordinate_sample_map_path(day)
+    if not os.path.isfile(map_path):
+        return False
+
+    try:
+        saved = pd.read_csv(map_path).fillna("")
+        expected = pd.DataFrame(get_tiff_avi_sample_map(day)).fillna("")
+    except (OSError, ValueError, pd.errors.ParserError):
+        return False
+
+    required_columns = ["sample_no", "tiff_data", "avi_filename", "mapping_status"]
+    return list(saved.columns) == required_columns and saved.equals(expected)
+
+
 def input_centroid_coordinate(day):
     save_dir = f"{param.save_dir_bef}/{day}"
     csv_dir = f"{save_dir}/centroid_coordinate.csv"

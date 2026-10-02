@@ -50,10 +50,11 @@ def normalized_angle(angle_bef):
     return angle_aft
 
 
-def get_angular_velocity(x_list, y_list, day, time_list=None):
+def get_angular_velocity(x_list, y_list, day, time_list=None, return_signed_angular_velocity=False):
     sample_num, FrameRate, _ = param.get_config(day)
     angle_list, angular_velocity_list = [], []
     angular_velocity_list_bef_corr = []
+    signed_angular_velocity_list = []
 
     if param.flag_get_angle_with_cell_direcetion:
         angle_list = read_csv.read_angle(day)
@@ -103,6 +104,9 @@ def get_angular_velocity(x_list, y_list, day, time_list=None):
         add_angular_velocity_bef_corr = np.array(copy.deepcopy(add_angular_velocity))
         if param.flag_correct_av_outlier:
             add_angular_velocity = np.array(clean_data.correct_angular_velocity_outlier(add_angular_velocity, i, day))
+        # Keep the corrected signed series even when the configured display
+        # and legacy CSV use absolute angular velocity.
+        signed_angular_velocity_list.append(np.asarray(add_angular_velocity, dtype=float))
         if param.flag_evaluate_angular_velocity_abs:
             if not param.flag_get_angle_with_cell_direcetion:
                 angle_list.append(angle)
@@ -196,4 +200,6 @@ def get_angular_velocity(x_list, y_list, day, time_list=None):
     rot_df_manage.update_rot_df(ROTATION_FEATURES.cw_ratio, cw_ratio_list, day)
     rot_df_manage.update_rot_df(ROTATION_FEATURES.switching_count, switching_count_list, day)
 
+    if return_signed_angular_velocity:
+        return angle_list, angular_velocity_list, signed_angular_velocity_list
     return angle_list, angular_velocity_list

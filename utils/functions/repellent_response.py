@@ -1,8 +1,6 @@
 import configparser
-import glob
 import math
 import os
-import re
 import shutil
 import tempfile
 import threading
@@ -35,6 +33,7 @@ class RotationalAnalysisResult(TypedDict):
     time_list: List[List[float]]
     angle_list: List[List[float]]
     angular_velocity_list: List[List[float]]
+    signed_angular_velocity_list: List[List[float]]
 
 
 def _safe_extract_number(filename: str) -> float:
@@ -177,48 +176,15 @@ def calculate_angular_velocity_switching_count(
     out_count: List[List[float]] = []
 
     for time_arr, av_arr in zip(time_list, angular_velocity_list):
-        t = np.asarray(time_arr, dtype=float)
-        av = np.asarray(av_arr, dtype=float)
-
-        n = min(len(t), len(av))
-        if n < 2:
-            out_time.append([])
-            out_count.append([])
-            continue
-
-        t = t[:n]
-        av = av[:n]
-
-        valid_mask = np.isfinite(t) & np.isfinite(av)
-        t = t[valid_mask]
-        av = av[valid_mask]
-
-        if len(t) < 2:
-            out_time.append([])
-            out_count.append([])
-            continue
-
+        t, av = _align_interval_times_and_av(time_arr, av_arr)
         w_times: List[float] = []
         w_counts: List[float] = []
 
-        end_idx = 1
-        for start_idx in range(len(t) - 1):
-            window_start = float(t[start_idx])
-            window_end = window_start + window_width_sec
-
-            if end_idx < start_idx + 1:
-                end_idx = start_idx + 1
-            while end_idx < len(t) and t[end_idx] <= window_end:
-                end_idx += 1
-
-            if end_idx - start_idx < 2:
-                continue
-
-            window_av = av[start_idx:end_idx]
-            switch_count = _count_sign_switches(window_av)
-
-            w_times.append(window_start + window_width_sec / 2.0)
-            w_counts.append(float(switch_count))
+        for window_start in t[np.isfinite(t)]:
+            window_mask = (t >= window_start) & (t <= window_start + window_width_sec) & np.isfinite(av)
+            w_times.append(float(window_start + window_width_sec / 2.0))
+            # Zero or one finite AV sample has no possible sign transition.
+            w_counts.append(float(_count_sign_switches(av[window_mask])))
         out_time.append(w_times)
         out_count.append(w_counts)
 
@@ -235,44 +201,32 @@ def calculate_angular_velocity_cw_rate(
     out_rate: List[List[float]] = []
 
     for time_arr, av_arr in zip(time_list, angular_velocity_list):
-        t = np.asarray(time_arr, dtype=float)
-        av = np.asarray(av_arr, dtype=float)
-        n = min(len(t), len(av))
-        if n < 2:
-            out_time.append([])
-            out_rate.append([])
-            continue
-
-        valid_mask = np.isfinite(t[:n]) & np.isfinite(av[:n])
-        t = t[:n][valid_mask]
-        av = av[:n][valid_mask]
-        if len(t) < 2:
-            out_time.append([])
-            out_rate.append([])
-            continue
-
+        t, av = _align_interval_times_and_av(time_arr, av_arr)
         w_times: List[float] = []
         w_rates: List[float] = []
-        end_idx = 1
-        for start_idx in range(len(t) - 1):
-            window_start = float(t[start_idx])
-            window_end = window_start + window_width_sec
-            if end_idx < start_idx + 1:
-                end_idx = start_idx + 1
-            while end_idx < len(t) and t[end_idx] <= window_end:
-                end_idx += 1
 
-            window_av = av[start_idx:end_idx]
-            if window_av.size < 2:
-                continue
-            w_times.append(window_start + window_width_sec / 2.0)
-            # AV == 0 is CCW; only negative samples are clockwise.
-            w_rates.append(float(np.count_nonzero(window_av < 0.0) / window_av.size))
+        for window_start in t[np.isfinite(t)]:
+            window_mask = (t >= window_start) & (t <= window_start + window_width_sec) & np.isfinite(av)
+            window_av = av[window_mask]
+            w_times.append(float(window_start + window_width_sec / 2.0))
+            if window_av.size == 0:
+                w_rates.append(float("nan"))
+            else:
+                # AV == 0 is CCW; only negative samples are clockwise.
+                w_rates.append(float(np.count_nonzero(window_av < 0.0) / window_av.size))
 
         out_time.append(w_times)
         out_rate.append(w_rates)
 
     return out_time, out_rate
+
+
+def _align_interval_times_and_av(time_arr: Sequence[float], av_arr: Sequence[float]) -> Tuple[np.ndarray, np.ndarray]:
+    """Align interval AV with its start timestamps without compacting NaNs."""
+    t = np.asarray(time_arr, dtype=float)
+    av = np.asarray(av_arr, dtype=float)
+    n = min(t.size, av.size)
+    return t[:n], av[:n]
 
 
 def detect_rise_index(
@@ -935,6 +889,7 @@ def run_segment_rotational_analysis(
             time_list=[],
             angle_list=[],
             angular_velocity_list=[],
+            signed_angular_velocity_list=[],
         )
 
     tmp_day = f"repellent_tmp_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
@@ -956,8 +911,14 @@ def run_segment_rotational_analysis(
                 _save_centroid_coordinate_csv(tmp_day, selected_x_list, selected_y_list)
                 rot_df_manage.create_rot_df(tmp_day)
                 _write_dummy_angle_fft(tmp_day, len(valid_indices))
-                angle_list, angular_velocity_list = get_angular_velocity.get_angular_velocity(
-                    selected_x_list, selected_y_list, tmp_day, time_list=selected_time_list
+                angle_list, angular_velocity_list, signed_angular_velocity_list = (
+                    get_angular_velocity.get_angular_velocity(
+                        selected_x_list,
+                        selected_y_list,
+                        tmp_day,
+                        time_list=selected_time_list,
+                        return_signed_angular_velocity=True,
+                    )
                 )
 
                 if run_fluctuation:
@@ -991,6 +952,7 @@ def run_segment_rotational_analysis(
         time_list=selected_time_list,
         angle_list=[np.asarray(a, dtype=float).tolist() for a in angle_list],
         angular_velocity_list=[np.asarray(v, dtype=float).tolist() for v in angular_velocity_list],
+        signed_angular_velocity_list=[np.asarray(v, dtype=float).tolist() for v in signed_angular_velocity_list],
     )
 
 
@@ -1944,24 +1906,15 @@ def _extract_centroid_from_frame(frame) -> Tuple[float, float]:
     return float(mean_x), float(mean_y)
 
 
-def _sort_avi_paths(avi_paths: Sequence[str]) -> List[str]:
-    def _key(path: str) -> float:
-        numbers = re.findall(r"\d+", os.path.basename(path))
-        if not numbers:
-            return math.inf
-        return int(numbers[-1])
-
-    return sorted(avi_paths, key=_key)
-
-
 def generate_centroid_coordinate_simple(day: str) -> str:
-    input_dir = f"{param.input_dir_bef}/{day}"
     save_path = f"{param.save_dir_bef}/{day}/centroid_coordinate.csv"
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
-    avi_paths = _sort_avi_paths(glob.glob(f"{input_dir}/*.avi"))
-    if len(avi_paths) == 0:
-        raise FileNotFoundError(f"No .avi file found in {input_dir}")
+    # This is a fallback for the standard extractor, not a different input
+    # policy.  In particular, TIFF-log datasets must retain config order.
+    from utils.functions import input_data
+
+    avi_paths = input_data.get_ordered_avi_paths(day)
 
     try:
         px2um_x, px2um_y = param.get_px2um_config(day)
@@ -1996,6 +1949,7 @@ def generate_centroid_coordinate_simple(day: str) -> str:
         data[f"x_{i+1}"] = pd.Series(x_list[i], dtype="float64")
         data[f"y_{i+1}"] = pd.Series(y_list[i], dtype="float64")
     pd.DataFrame(data).to_csv(save_path, index=False)
+    input_data.save_centroid_coordinate_sample_map(day)
     return save_path
 
 
@@ -2096,8 +2050,30 @@ def copy_center_coordinate_to_segment(day: str, segment_subdir: str) -> None:
 
 def cleanup_legacy_repellent_outputs(day: str) -> None:
     root = f"{param.save_dir_bef}/{day}/repellent_response"
-    # Every artifact below this root is generated by this script.  Starting
-    # from an empty response directory prevents old one-page plots from being
-    # mistaken for current paginated results.
-    if os.path.isdir(root):
-        shutil.rmtree(root)
+    # These directories are owned by this analysis.  Do not remove the root
+    # itself: users may keep notes or other manual artifacts alongside them.
+    generated_dirs = [
+        "00_time_list",
+        "01_brightness_change",
+        "00_all_rotational_analysis",
+        "02_pre_rise_fluctuation",
+        "03_post_rise_analysis",
+        # Legacy generated locations from earlier layouts.
+        "center_coordinate",
+        "pre_rise_fluctuation",
+    ]
+    for directory in generated_dirs:
+        path = os.path.join(root, directory)
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+
+    legacy_files = [
+        "background_intensity_time_series.csv",
+        "background_intensity_time_series.png",
+        "post_rise_centroid_time_series.csv",
+        "rise_summary.csv",
+    ]
+    for filename in legacy_files:
+        path = os.path.join(root, filename)
+        if os.path.isfile(path):
+            os.remove(path)

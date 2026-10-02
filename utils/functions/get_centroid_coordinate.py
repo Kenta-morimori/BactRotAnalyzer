@@ -528,6 +528,7 @@ def main(day):
     make_graph.plot_coordinate(center_x_arr, center_y_arr, day, "center")
     make_graph.plot_coordinate_with_center(x_arr_bef, y_arr_bef, center_x_arr, center_y_arr, day)
     save_centorid_cordinate(save_dir, x_list_aft, y_list_aft)
+    input_data.save_centroid_coordinate_sample_map(day)
     make_graph.plot_coordinate(x_list_aft, y_list_aft, day, "centroid")
 
     # save long_axis, short_axis

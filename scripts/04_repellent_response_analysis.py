@@ -1,5 +1,6 @@
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 from typing import Optional, cast
@@ -44,27 +45,32 @@ def main(
     # Reuse existing centroid / angular-velocity pipeline.
     centroid_csv = f"{param.save_dir_bef}/{day}/centroid_coordinate.csv"
     base_centroid_csv = f"{base_save_dir}/{day}/centroid_coordinate.csv"
-    centroid_sample_count = 0
+    centroid_cache_is_valid = False
     if os.path.isfile(centroid_csv):
         existing_x_list, existing_y_list = input_data.input_centroid_coordinate(day)
-        centroid_sample_count = min(len(existing_x_list), len(existing_y_list))
+        centroid_cache_is_valid = min(len(existing_x_list), len(existing_y_list)) == len(
+            time_list
+        ) and input_data.centroid_coordinate_sample_map_matches(day)
 
-    # A previous run may have produced a centroid CSV for fewer TIFF series.
-    # Regenerate it so every configured TIFF series has a coordinate pair.
-    if centroid_sample_count != len(time_list):
+    # A centroid CSV without matching AVI/TIFF provenance is not safe to
+    # reuse: same column count does not prove the same sample order.
+    if not centroid_cache_is_valid:
         if os.path.isfile(base_centroid_csv):
-            # Do not reuse a stale base output unless it has the expected
-            # number of samples.
+            # A separate output suffix may reuse the base cache only together
+            # with its matching provenance sidecar.
             param.save_dir_bef = base_save_dir
             base_x_list, base_y_list = input_data.input_centroid_coordinate(day)
+            base_centroid_map = input_data.get_centroid_coordinate_sample_map_path(day)
+            base_cache_is_valid = min(len(base_x_list), len(base_y_list)) == len(
+                time_list
+            ) and input_data.centroid_coordinate_sample_map_matches(day)
             param.save_dir_bef = base_save_dir if output_suffix in (None, "") else f"{base_save_dir}/{output_suffix}"
-            if min(len(base_x_list), len(base_y_list)) == len(time_list):
+            if base_cache_is_valid:
                 os.makedirs(os.path.dirname(centroid_csv), exist_ok=True)
-                import shutil
-
                 shutil.copy2(base_centroid_csv, centroid_csv)
-                centroid_sample_count = len(time_list)
-        if centroid_sample_count != len(time_list):
+                shutil.copy2(base_centroid_map, input_data.get_centroid_coordinate_sample_map_path(day))
+                centroid_cache_is_valid = True
+        if not centroid_cache_is_valid:
             try:
                 script_path = os.path.join(
                     os.path.dirname(os.path.dirname(__file__)),
@@ -208,13 +214,14 @@ def main(
 
     switching_time_list, switching_count_list = repellent_response.calculate_angular_velocity_switching_count(
         time_list=all_rot["time_list"],
-        angular_velocity_list=all_rot["angular_velocity_list"],
+        angular_velocity_list=all_rot["signed_angular_velocity_list"],
         window_width_sec=1.0,
     )
     save2csv.save_angular_velocity_switching_count(
         switching_time_list,
         switching_count_list,
         day,
+        original_sample_indices=all_rot["valid_indices"],
     )
     make_graph.plot_repellent_background_av_and_switching_count_stacked(
         time_list=all_rot["time_list"],
@@ -228,10 +235,15 @@ def main(
     )
     cw_rate_time_list, cw_rate_list = repellent_response.calculate_angular_velocity_cw_rate(
         time_list=all_rot["time_list"],
-        angular_velocity_list=all_rot["angular_velocity_list"],
+        angular_velocity_list=all_rot["signed_angular_velocity_list"],
         window_width_sec=1.0,
     )
-    save2csv.save_angular_velocity_cw_rate(cw_rate_time_list, cw_rate_list, day)
+    save2csv.save_angular_velocity_cw_rate(
+        cw_rate_time_list,
+        cw_rate_list,
+        day,
+        original_sample_indices=all_rot["valid_indices"],
+    )
     make_graph.plot_repellent_background_and_av_stacked(
         time_list=all_rot["time_list"],
         background_list=bg_for_av,
