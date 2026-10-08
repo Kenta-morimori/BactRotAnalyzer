@@ -10,11 +10,10 @@ os.environ.setdefault("MPLBACKEND", "Agg")
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from issue38_paths import FIGURES, TABLES, ensure_output_dirs
-
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
+from issue38_paths import FIGURES, TABLES, ensure_output_dirs
 
 from utils import param  # noqa: E402
 from utils.functions import (  # noqa: E402
@@ -79,26 +78,42 @@ def plot_timeseries(data: pd.DataFrame, width: float, path: Path) -> None:
     colors = {"centroid": "#455468", "center": "#d95f02", "raw": "#0072b2"}
     for row, axis_name in enumerate("xy"):
         axis = axes[row]
-        values = np.r_[data[f"{axis_name}_um"].to_numpy(float),
-                       data[f"center_{axis_name}_um"].to_numpy(float)]
+        values = np.r_[data[f"{axis_name}_um"].to_numpy(float), data[f"center_{axis_name}_um"].to_numpy(float)]
         lo, hi = np.nanmin(values), np.nanmax(values)
         padding = 0.045 * (hi - lo)
         lo, hi = lo - padding, hi + padding
-        axis.plot(time, data[f"{axis_name}_um"], color=colors["centroid"], alpha=0.38,
-                  lw=0.45, rasterized=True, label="centroid")
+        axis.plot(
+            time,
+            data[f"{axis_name}_um"],
+            color=colors["centroid"],
+            alpha=0.38,
+            lw=0.45,
+            rasterized=True,
+            label="centroid",
+        )
         raw = data[f"raw_center_{axis_name}_um"].to_numpy(float)
         raw_plot = np.where(np.isfinite(raw) & (raw >= lo) & (raw <= hi), raw, np.nan)
-        axis.plot(time, raw_plot, color=colors["raw"], lw=0.6, alpha=0.7,
-                  label="uncorrected fit")
+        axis.plot(time, raw_plot, color=colors["raw"], lw=0.6, alpha=0.7, label="uncorrected fit")
         fitted = time <= cutoff
-        axis.plot(time[fitted], data.loc[fitted, f"center_{axis_name}_um"],
-                  color=colors["center"], lw=1.7, label="corrected center")
+        axis.plot(
+            time[fitted],
+            data.loc[fitted, f"center_{axis_name}_um"],
+            color=colors["center"],
+            lw=1.7,
+            label="corrected center",
+        )
         held = time > cutoff
         if held.any():
             first = np.flatnonzero(held)[0]
             bridge = np.r_[first - 1, np.flatnonzero(held)]
-            axis.plot(time[bridge], data.iloc[bridge][f"center_{axis_name}_um"],
-                      color=colors["center"], lw=1.7, ls="--", label="terminal hold")
+            axis.plot(
+                time[bridge],
+                data.iloc[bridge][f"center_{axis_name}_um"],
+                color=colors["center"],
+                lw=1.7,
+                ls="--",
+                label="terminal hold",
+            )
         axis.axvspan(cutoff, time[-1], color="#d95f02", alpha=0.06, lw=0)
         axis.axvline(RISE_TIME_SEC, color="#7b3294", lw=1.1, ls=":")
         axis.set_ylim(lo, hi)
@@ -116,7 +131,7 @@ def plot_timeseries(data: pd.DataFrame, width: float, path: Path) -> None:
 def main() -> None:
     ensure_output_dirs()
     full_time = read_csv.get_timelist(DAY)[SAMPLE_NO - 1]
-    frame = raw_centroid.load(DAY, SAMPLE_NO, full_time).iloc[START_FRAME - 1:END_FRAME].copy()
+    frame = raw_centroid.load(DAY, SAMPLE_NO, full_time).iloc[START_FRAME - 1 : END_FRAME].copy()
     time = frame.time_sec.to_numpy(float)
     x = frame.x_um.to_numpy(float)
     y = frame.y_um.to_numpy(float)

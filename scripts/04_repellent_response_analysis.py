@@ -10,7 +10,13 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from utils import param  # noqa
-from utils.functions import input_data, make_graph, raw_centroid, repellent_response, save2csv  # noqa
+from utils.functions import (  # noqa
+    input_data,
+    make_graph,
+    raw_centroid,
+    repellent_response,
+    save2csv,
+)
 
 
 def main(

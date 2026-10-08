@@ -19,7 +19,6 @@ import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
 
-
 REPO = Path(__file__).resolve().parents[2]
 DATA = REPO / "data/repellent-response/23"
 OUTPUT = REPO / "outputs/repellent-response/23"
@@ -194,7 +193,7 @@ def evaluate_windows(track: Track, stride: int, source: str = "stage") -> pd.Dat
             part = fit_ellipse(xx[keep], yy[keep])
             if part is not None:
                 jackknife.append(part.center)
-        jackknife = np.array(jackknife) if jackknife else np.empty((0, 2))
+        jackknife_array = np.array(jackknife) if jackknife else np.empty((0, 2))
         jackknife_max = float(np.max(np.linalg.norm(jackknife - ellipse.center, axis=1))) if len(jackknife) else np.nan
         distances = ellipse_distance(xx, yy, ellipse)
         saved_distances = ellipse_distance(xx, yy, translated_ellipse(ellipse, saved))
@@ -224,8 +223,8 @@ def evaluate_windows(track: Track, stride: int, source: str = "stage") -> pd.Dat
             "max_gap_deg": gap,
             "normalized_condition": ellipse.condition,
             "jackknife_valid_fits": len(jackknife),
-            "jackknife_sd_x_over_radius": np.std(jackknife[:, 0]) / radius if len(jackknife) else np.nan,
-            "jackknife_sd_y_over_radius": np.std(jackknife[:, 1]) / radius if len(jackknife) else np.nan,
+            "jackknife_sd_x_over_radius": np.std(jackknife_array[:, 0]) / radius if len(jackknife) else np.nan,
+            "jackknife_sd_y_over_radius": np.std(jackknife_array[:, 1]) / radius if len(jackknife) else np.nan,
             "jackknife_max_over_radius": jackknife_max / radius,
             "saved_vs_refit_over_radius": np.linalg.norm(saved - ellipse.center) / radius,
             "initial_center_correction_over_radius": initial_correction / radius,
@@ -286,12 +285,12 @@ def video_check(track: Track, dest: Path) -> pd.DataFrame:
             test[f"{source}_error_{axis}"] = test[f"{prefix}_{axis}"] - (slope * test[f"avi_local_{axis}_px"] + offset)
     df.to_csv(dest / f"no{track.sample:02d}_avi_registration.csv", index=False)
     fig, axes = plt.subplots(2, 1, figsize=(10, 5), sharex=True, layout="constrained")
-    for axis, coordinate in zip(axes, "xy"):
-        axis.scatter(df.time_sec, df[f"stage_avi_error_{coordinate}"], s=10, label="stage")
-        axis.scatter(df.time_sec, df[f"initial_avi_error_{coordinate}"], s=10, label="initial")
-        axis.axhline(0, color="black", lw=0.7)
-        axis.set_ylabel(f"{coordinate} residual")
-        axis.legend(fontsize=8)
+    for plot_axis, coordinate in zip(axes, "xy"):
+        plot_axis.scatter(df.time_sec, df[f"stage_avi_error_{coordinate}"], s=10, label="stage")
+        plot_axis.scatter(df.time_sec, df[f"initial_avi_error_{coordinate}"], s=10, label="initial")
+        plot_axis.axhline(0, color="black", lw=0.7)
+        plot_axis.set_ylabel(f"{coordinate} residual")
+        plot_axis.legend(fontsize=8)
     axes[-1].set_xlabel("TIFF time (s)")
     fig.suptitle(f"No.{track.sample} — AVI contour against reconstructed centroid (registered crop)")
     fig.savefig(dest / f"no{track.sample:02d}_avi_registration.png", dpi=150)

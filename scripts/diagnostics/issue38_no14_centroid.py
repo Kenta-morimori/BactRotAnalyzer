@@ -8,12 +8,11 @@ os.environ.setdefault("MPLBACKEND", "Agg")
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from issue38_paths import FIGURES, TABLES, ensure_output_dirs
-
 import cv2  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
+from issue38_paths import FIGURES, TABLES, ensure_output_dirs
 
 from utils.functions import raw_centroid, read_csv  # noqa: E402
 from utils.functions.get_centroid_coordinate import contours  # noqa: E402
@@ -35,16 +34,20 @@ def legacy_series():
         OUTPUT / "repellent_response/00_all_rotational_analysis/center_coordinate/center_coordinate.csv"
     )
     a, b = START - 1, END
-    initial = np.column_stack([
-        initial_relative[f"{axis}_{SAMPLE}"].to_numpy(float)[a:b]
-        + initial_center[f"No.{SAMPLE}_{axis}"].to_numpy(float)[a:b]
-        for axis in "xy"
-    ])
-    stage = np.column_stack([
-        stage_relative[f"No.{SAMPLE}_{axis}"].to_numpy(float)[: b - a]
-        + stage_center[f"No.{SAMPLE}_{axis}"].to_numpy(float)[: b - a]
-        for axis in "xy"
-    ])
+    initial = np.column_stack(
+        [
+            initial_relative[f"{axis}_{SAMPLE}"].to_numpy(float)[a:b]
+            + initial_center[f"No.{SAMPLE}_{axis}"].to_numpy(float)[a:b]
+            for axis in "xy"
+        ]
+    )
+    stage = np.column_stack(
+        [
+            stage_relative[f"No.{SAMPLE}_{axis}"].to_numpy(float)[: b - a]
+            + stage_center[f"No.{SAMPLE}_{axis}"].to_numpy(float)[: b - a]
+            for axis in "xy"
+        ]
+    )
     return initial, stage
 
 
@@ -98,8 +101,14 @@ def plot_outputs(frame: pd.DataFrame, comparison: pd.DataFrame, numbers: list[in
 
     fig, axis = plt.subplots(figsize=(7, 7))
     axis.plot(frame.x_um, frame.y_um, lw=0.5, color="black", alpha=0.5)
-    axis.scatter(frame.x_um.iloc[np.array(numbers) - 1], frame.y_um.iloc[np.array(numbers) - 1],
-                 c=frame.time_sec.iloc[np.array(numbers) - 1], cmap="viridis", s=28, zorder=3)
+    axis.scatter(
+        frame.x_um.iloc[np.array(numbers) - 1],
+        frame.y_um.iloc[np.array(numbers) - 1],
+        c=frame.time_sec.iloc[np.array(numbers) - 1],
+        cmap="viridis",
+        s=28,
+        zorder=3,
+    )
     axis.set_aspect("equal", adjustable="box")
     axis.set_xlabel("AVI local x (um)")
     axis.set_ylabel("AVI local y (um)")
@@ -119,15 +128,22 @@ def plot_outputs(frame: pd.DataFrame, comparison: pd.DataFrame, numbers: list[in
             x, y, _ = contours(image)
             saved = frame.iloc[number - 1]
             error = np.hypot(x - saved.x_px, y - saved.y_px)
-            overlays.append({"source_frame_1based": number, "time_sec": saved.time_sec,
-                             "saved_x_px": saved.x_px, "saved_y_px": saved.y_px,
-                             "remeasured_x_px": x, "remeasured_y_px": y,
-                             "error_px": error})
+            overlays.append(
+                {
+                    "source_frame_1based": number,
+                    "time_sec": saved.time_sec,
+                    "saved_x_px": saved.x_px,
+                    "saved_y_px": saved.y_px,
+                    "remeasured_x_px": x,
+                    "remeasured_y_px": y,
+                    "error_px": error,
+                }
+            )
             axis.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
             axis.plot(saved.x_px, saved.y_px, marker="+", color="red", ms=10, mew=1.5)
             axis.set_title(f"frame {number}, {saved.time_sec:.2f}s", fontsize=9)
             axis.set_axis_off()
-        for axis in axes.ravel()[len(numbers):]:
+        for axis in axes.ravel()[len(numbers) :]:
             axis.set_axis_off()
     finally:
         capture.release()
@@ -144,25 +160,37 @@ def main() -> None:
     if len(frame) != 18432 or not frame.detected.all():
         raise ValueError("No.14 frame count or detection flags need manual review")
     initial, stage = legacy_series()
-    canonical = frame[["x_um", "y_um"]].to_numpy(float)[START - 1:END]
+    canonical = frame[["x_um", "y_um"]].to_numpy(float)[START - 1 : END]
     if len(initial) != len(stage) or len(initial) != len(canonical):
         raise ValueError("Legacy series do not match selected source frames")
-    selected_time = frame.time_sec.to_numpy(float)[START - 1:END]
-    stage_time = pd.read_csv(
-        OUTPUT / "repellent_response/00_all_rotational_analysis/centroid_coordinate/centroid_time_series.csv",
-        usecols=[f"No.{SAMPLE}_time"],
-    ).iloc[:len(selected_time), 0].to_numpy(float)
+    selected_time = frame.time_sec.to_numpy(float)[START - 1 : END]
+    stage_time = (
+        pd.read_csv(
+            OUTPUT / "repellent_response/00_all_rotational_analysis/centroid_coordinate/centroid_time_series.csv",
+            usecols=[f"No.{SAMPLE}_time"],
+        )
+        .iloc[: len(selected_time), 0]
+        .to_numpy(float)
+    )
     if not np.allclose(stage_time, selected_time, atol=1e-9, rtol=0):
         raise ValueError("Repellent timestamps are not aligned to the source AVI frames")
-    comparison = pd.DataFrame({"source_frame_1based": np.arange(START, END + 1),
-                               "time_sec": selected_time,
-                               "canonical_x_um": canonical[:, 0], "canonical_y_um": canonical[:, 1],
-                               "initial_x_um": initial[:, 0], "initial_y_um": initial[:, 1],
-                               "stage_x_um": stage[:, 0], "stage_y_um": stage[:, 1],
-                               "stage_minus_initial_2d_um": np.linalg.norm(stage - initial, axis=1)})
+    comparison = pd.DataFrame(
+        {
+            "source_frame_1based": np.arange(START, END + 1),
+            "time_sec": selected_time,
+            "canonical_x_um": canonical[:, 0],
+            "canonical_y_um": canonical[:, 1],
+            "initial_x_um": initial[:, 0],
+            "initial_y_um": initial[:, 1],
+            "stage_x_um": stage[:, 0],
+            "stage_y_um": stage[:, 1],
+            "stage_minus_initial_2d_um": np.linalg.norm(stage - initial, axis=1),
+        }
+    )
     comparison.to_csv(TABLES / "no14_raw_centroid_legacy_comparison.csv", index=False)
-    stats = pd.DataFrame([summarize_difference("initial", initial, canonical),
-                          summarize_difference("stage", stage, canonical)])
+    stats = pd.DataFrame(
+        [summarize_difference("initial", initial, canonical), summarize_difference("stage", stage, canonical)]
+    )
     stats.to_csv(TABLES / "no14_raw_centroid_summary.csv", index=False)
     numbers = checked_frames(frame, comparison)
     plot_outputs(frame, comparison, numbers)

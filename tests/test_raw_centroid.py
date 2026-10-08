@@ -19,7 +19,7 @@ def test_shared_raw_centroid_preserves_frames_and_cache(tmp_path, monkeypatch):
     with (day_dir / "config.ini").open("w") as stream:
         config.write(stream)
     avi = day_dir / "sample.avi"
-    writer = cv2.VideoWriter(str(avi), cv2.VideoWriter_fourcc(*"MJPG"), 200, (64, 64))
+    writer = cv2.VideoWriter(str(avi), getattr(cv2, "VideoWriter_fourcc")(*"MJPG"), 200, (64, 64))
     if not writer.isOpened():
         pytest.skip("MJPG AVI writer unavailable")
     for center in ((20, 22), None, (32, 28), (34, 30)):

@@ -12,15 +12,10 @@ from pathlib import Path
 os.environ.setdefault("MPLBACKEND", "Agg")
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-import matplotlib.pyplot as plt  # noqa: E402
-from issue38_paths import FIGURES, TABLES, ensure_output_dirs
-
 import cv2  # noqa: E402
+import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-from scipy.optimize import least_squares  # noqa: E402
-from scipy.ndimage import gaussian_filter1d  # noqa: E402
-
 from issue38_center_diagnostics import (  # noqa: E402
     angular_coverage,
     ellipse_distance,
@@ -28,6 +23,9 @@ from issue38_center_diagnostics import (  # noqa: E402
     fit_ellipse,
 )
 from issue38_no14_center_timeseries import param, window_width  # noqa: E402
+from issue38_paths import FIGURES, TABLES, ensure_output_dirs
+from scipy.ndimage import gaussian_filter1d  # noqa: E402
+from scipy.optimize import least_squares  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 STRIDE_FRAMES = 100  # About 0.5 s; production center itself remains frame by frame.
@@ -50,8 +48,10 @@ def fit_circle(points: np.ndarray, scale: float) -> tuple[np.ndarray, float, flo
     result = least_squares(
         residual,
         [middle[0], middle[1], initial_radius],
-        bounds=([middle[0] - scale, middle[1] - scale, 0.1 * scale],
-                [middle[0] + scale, middle[1] + scale, 2.0 * scale]),
+        bounds=(
+            [middle[0] - scale, middle[1] - scale, 0.1 * scale],
+            [middle[0] + scale, middle[1] + scale, 2.0 * scale],
+        ),
         loss="soft_l1",
         f_scale=0.2 * scale,
         max_nfev=150,
@@ -126,41 +126,44 @@ def evaluate(data: pd.DataFrame) -> pd.DataFrame:
         bc = np.asarray(block_centers)
         jk = np.asarray(jackknife)
         block_span = float(np.max(np.linalg.norm(bc[:, None] - bc[None, :], axis=2))) if len(bc) > 1 else np.nan
-        row.update({
-            "fit_valid": True,
-            "fit_center_x_um": center[0],
-            "fit_center_y_um": center[1],
-            "ellipse_axis_1_um": fit.axes[0],
-            "ellipse_axis_2_um": fit.axes[1],
-            "normalized_design_condition": fit.condition,
-            "coverage_deg": coverage,
-            "max_empty_angle_deg": max_gap,
-            "smoothed_net_turns": abs(float(np.sum(phase_steps))) / (2 * np.pi),
-            "smoothed_path_turns": phase_path / (2 * np.pi),
-            "smoothed_directionality": abs(float(np.sum(phase_steps))) / phase_path if phase_path else np.nan,
-            "residual_p50_over_radius": np.median(residual) / radius,
-            "residual_p95_over_radius": np.quantile(residual, 0.95) / radius,
-            "circle_center_x_um": circle_center[0],
-            "circle_center_y_um": circle_center[1],
-            "circle_radius_um": circle_radius,
-            "circle_residual_p95_over_radius": circle_p95,
-            "circle_vs_ellipse_center_over_radius": np.linalg.norm(circle_center - center) / radius,
-            "raw_vs_refit_over_radius": np.linalg.norm(raw[i] - center) / radius,
-            "correction_over_radius": np.linalg.norm(saved[i] - raw[i]) / radius,
-            "current_vs_refit_over_radius": np.linalg.norm(saved[i] - center) / radius,
-            "fit_center_offset_over_radius": np.linalg.norm(center - np.median(points, axis=0)) / radius,
-            "block_valid": len(bc),
-            "block_sd_x_um": float(np.std(bc[:, 0])) if len(bc) else np.nan,
-            "block_sd_y_um": float(np.std(bc[:, 1])) if len(bc) else np.nan,
-            "block_center_span_over_radius": block_span / radius,
-            "block_min_coverage_deg": min(block_coverage) if block_coverage else np.nan,
-            "block_max_residual_p95_over_radius": max(block_residual) if block_residual else np.nan,
-            "jackknife_valid": len(jk),
-            "jackknife_sd_x_um": float(np.std(jk[:, 0])) if len(jk) else np.nan,
-            "jackknife_sd_y_um": float(np.std(jk[:, 1])) if len(jk) else np.nan,
-            "jackknife_max_shift_over_radius": float(np.max(np.linalg.norm(jk - center, axis=1))) / radius
-            if len(jk) else np.nan,
-        })
+        row.update(
+            {
+                "fit_valid": True,
+                "fit_center_x_um": center[0],
+                "fit_center_y_um": center[1],
+                "ellipse_axis_1_um": fit.axes[0],
+                "ellipse_axis_2_um": fit.axes[1],
+                "normalized_design_condition": fit.condition,
+                "coverage_deg": coverage,
+                "max_empty_angle_deg": max_gap,
+                "smoothed_net_turns": abs(float(np.sum(phase_steps))) / (2 * np.pi),
+                "smoothed_path_turns": phase_path / (2 * np.pi),
+                "smoothed_directionality": abs(float(np.sum(phase_steps))) / phase_path if phase_path else np.nan,
+                "residual_p50_over_radius": np.median(residual) / radius,
+                "residual_p95_over_radius": np.quantile(residual, 0.95) / radius,
+                "circle_center_x_um": circle_center[0],
+                "circle_center_y_um": circle_center[1],
+                "circle_radius_um": circle_radius,
+                "circle_residual_p95_over_radius": circle_p95,
+                "circle_vs_ellipse_center_over_radius": np.linalg.norm(circle_center - center) / radius,
+                "raw_vs_refit_over_radius": np.linalg.norm(raw[i] - center) / radius,
+                "correction_over_radius": np.linalg.norm(saved[i] - raw[i]) / radius,
+                "current_vs_refit_over_radius": np.linalg.norm(saved[i] - center) / radius,
+                "fit_center_offset_over_radius": np.linalg.norm(center - np.median(points, axis=0)) / radius,
+                "block_valid": len(bc),
+                "block_sd_x_um": float(np.std(bc[:, 0])) if len(bc) else np.nan,
+                "block_sd_y_um": float(np.std(bc[:, 1])) if len(bc) else np.nan,
+                "block_center_span_over_radius": block_span / radius,
+                "block_min_coverage_deg": min(block_coverage) if block_coverage else np.nan,
+                "block_max_residual_p95_over_radius": max(block_residual) if block_residual else np.nan,
+                "jackknife_valid": len(jk),
+                "jackknife_sd_x_um": float(np.std(jk[:, 0])) if len(jk) else np.nan,
+                "jackknife_sd_y_um": float(np.std(jk[:, 1])) if len(jk) else np.nan,
+                "jackknife_max_shift_over_radius": (
+                    float(np.max(np.linalg.norm(jk - center, axis=1))) / radius if len(jk) else np.nan
+                ),
+            }
+        )
         rows.append(row)
     result = pd.DataFrame(rows)
     center_xy = result[["current_center_x_um", "current_center_y_um"]].to_numpy(float)
@@ -210,10 +213,8 @@ def plot_metrics(rows: pd.DataFrame) -> None:
     axes[3].plot(t, rows.smoothed_path_turns, ".-", ms=2, lw=0.6, label="total angular path")
     axes[3].set_ylabel("Turns in forward window")
     axes[3].legend(frameon=False, ncol=2)
-    axes[4].plot(t, rows.correction_over_radius.clip(upper=3), ".-", ms=2, lw=0.6,
-                 label="outlier correction")
-    axes[4].plot(t, rows.block_center_span_over_radius.clip(upper=3), ".-", ms=2, lw=0.6,
-                 label="quarter-center span")
+    axes[4].plot(t, rows.correction_over_radius.clip(upper=3), ".-", ms=2, lw=0.6, label="outlier correction")
+    axes[4].plot(t, rows.block_center_span_over_radius.clip(upper=3), ".-", ms=2, lw=0.6, label="quarter-center span")
     axes[4].set_ylabel("Center change / orbit radius")
     axes[4].set_xlabel("Window start time (s)")
     axes[4].legend(frameon=False, ncol=2)
@@ -234,22 +235,37 @@ def plot_examples(data: pd.DataFrame, rows: pd.DataFrame, times: list[float]) ->
         row = rows.iloc[(rows.start_time_sec - target).abs().argmin()]
         start, end = row.start_time_sec, row.end_time_sec
         points = xy[(t >= start) & (t < end)]
-        axis.scatter(points[:, 0], points[:, 1], c=np.linspace(0, 1, len(points)), cmap="viridis",
-                     s=4, alpha=0.45, rasterized=True)
+        axis.scatter(
+            points[:, 0],
+            points[:, 1],
+            c=np.linspace(0, 1, len(points)),
+            cmap="viridis",
+            s=4,
+            alpha=0.45,
+            rasterized=True,
+        )
         if row.fit_valid:
             fit = fit_ellipse(points[:, 0], points[:, 1])
             if fit is not None:
                 ellipse = ellipse_points(fit)
                 axis.plot(ellipse[:, 0], ellipse[:, 1], color="#0072b2", lw=1.2, label="window fit")
                 axis.plot(fit.center[0], fit.center[1], "+", color="#0072b2", ms=11, mew=2)
-        axis.plot(row.current_center_x_um, row.current_center_y_um, "x", color="#d95f02",
-                  ms=11, mew=2, label="corrected center")
+        axis.plot(
+            row.current_center_x_um,
+            row.current_center_y_um,
+            "x",
+            color="#d95f02",
+            ms=11,
+            mew=2,
+            label="corrected center",
+        )
         for quarter, block in enumerate(np.array_split(points, 4), start=1):
             part = fit_ellipse(block[:, 0], block[:, 1])
             if part is not None:
                 axis.plot(part.center[0], part.center[1], ".", color="#6a3d9a", ms=5)
-                axis.annotate(str(quarter), part.center, fontsize=7, color="#6a3d9a", xytext=(3, 3),
-                              textcoords="offset points")
+                axis.annotate(
+                    str(quarter), part.center, fontsize=7, color="#6a3d9a", xytext=(3, 3), textcoords="offset points"
+                )
         axis.set_title(f"{start:.1f}–{end:.1f} s | {row.assessment}", fontsize=10)
         axis.set_xlabel("x in AVI frame (µm)")
         axis.set_ylabel("y in AVI frame (µm)")
@@ -279,10 +295,16 @@ def plot_video_checks(data: pd.DataFrame) -> None:
                 raise RuntimeError(f"Could not read source frame {source}")
             axis = axes[row, col]
             axis.imshow(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-            axis.plot(data.x_px.iloc[i], data.y_px.iloc[i], "+", color="#1b9e77",
-                      ms=13, mew=2, label="centroid")
-            axis.plot(data.center_x_um.iloc[i] / px2um_x, data.center_y_um.iloc[i] / px2um_y, "x",
-                      color="#d95f02", ms=11, mew=2, label="current center")
+            axis.plot(data.x_px.iloc[i], data.y_px.iloc[i], "+", color="#1b9e77", ms=13, mew=2, label="centroid")
+            axis.plot(
+                data.center_x_um.iloc[i] / px2um_x,
+                data.center_y_um.iloc[i] / px2um_y,
+                "x",
+                color="#d95f02",
+                ms=11,
+                mew=2,
+                label="current center",
+            )
             axis.set_title(f"{times[i]:.2f} s | AVI {source}", fontsize=9)
             axis.set_xlim(0, frame.shape[1])
             axis.set_ylim(frame.shape[0], 0)
@@ -308,8 +330,10 @@ def main() -> None:
     plot_examples(data, rows, [20, 35, 38, 40, 65, 80])
     plot_video_checks(data)
     print(rows.assessment.value_counts().to_string())
-    print(f"windows={len(rows)}; fit_valid={rows.fit_valid.sum()}; "
-          f"max raw/refit delta={rows.raw_vs_refit_over_radius.max():.3g} R")
+    print(
+        f"windows={len(rows)}; fit_valid={rows.fit_valid.sum()}; "
+        f"max raw/refit delta={rows.raw_vs_refit_over_radius.max():.3g} R"
+    )
 
 
 if __name__ == "__main__":

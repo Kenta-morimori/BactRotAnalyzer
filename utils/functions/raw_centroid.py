@@ -1,7 +1,7 @@
 """Canonical, center-independent centroid measurements from source AVIs."""
 
-import json
 import hashlib
+import json
 import os
 from pathlib import Path
 from typing import Sequence
@@ -45,9 +45,7 @@ def _provenance(day: str, sample_no: int, frame_count: int) -> dict:
     }
 
 
-def extract_or_load(
-    day: str, sample_no: int, time_values: Sequence[float], force: bool = False
-) -> pd.DataFrame:
+def extract_or_load(day: str, sample_no: int, time_values: Sequence[float], force: bool = False) -> pd.DataFrame:
     """Extract once, then reuse only when AVI, calibration and frame axis match."""
     path = coordinate_path(day, sample_no)
     meta_path = path.with_suffix(".json")
@@ -72,16 +70,21 @@ def extract_or_load(
             detected = bool(np.isfinite(x_px) and np.isfinite(y_px))
             index = len(rows)
             rows.append(
-                (index + 1, float(time_values[index]) if index < len(time_values) else np.nan,
-                 x_px, y_px, x_px * px2um_x, y_px * px2um_y,
-                 ellipse[2] if ellipse is not None else np.nan, detected)
+                (
+                    index + 1,
+                    float(time_values[index]) if index < len(time_values) else np.nan,
+                    x_px,
+                    y_px,
+                    x_px * px2um_x,
+                    y_px * px2um_y,
+                    ellipse[2] if ellipse is not None else np.nan,
+                    detected,
+                )
             )
     finally:
         capture.release()
     if len(rows) != len(time_values):
-        raise ValueError(
-            f"No.{sample_no} AVI has {len(rows)} frames, TIFF time list has {len(time_values)}"
-        )
+        raise ValueError(f"No.{sample_no} AVI has {len(rows)} frames, TIFF time list has {len(time_values)}")
     frame = pd.DataFrame(rows, columns=COLUMNS)
     path.parent.mkdir(parents=True, exist_ok=True)
     csv_tmp = path.with_suffix(".csv.tmp")
@@ -107,9 +110,10 @@ def load(day: str, sample_no: int, time_values: Sequence[float]) -> pd.DataFrame
         raise ValueError(f"Frame numbers do not match TIFF time list: {path}")
     if not np.allclose(frame["time_sec"].to_numpy(dtype=float), time_values, atol=1e-9, rtol=0):
         raise ValueError(f"Timestamps do not match TIFF time list: {path}")
-    if not np.array_equal(frame["detected"].to_numpy(dtype=bool),
-                          np.isfinite(frame["x_px"].to_numpy(dtype=float))
-                          & np.isfinite(frame["y_px"].to_numpy(dtype=float))):
+    if not np.array_equal(
+        frame["detected"].to_numpy(dtype=bool),
+        np.isfinite(frame["x_px"].to_numpy(dtype=float)) & np.isfinite(frame["y_px"].to_numpy(dtype=float)),
+    ):
         raise ValueError(f"Detection flags do not match centroid values: {path}")
     return frame
 

@@ -25,3 +25,5 @@ jobs:
         run: isort . --diff --check
       - name: Lint with ruff
         run: ruff check .
+      - name: Run tests
+        run: python -m pytest -q

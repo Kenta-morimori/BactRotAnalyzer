@@ -6,8 +6,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 from utils.functions import (  # noqa
     fluctuation_analysis,
     get_angular_velocity,
-    get_tiff_info,
     get_centroid_coordinate,
+    get_tiff_info,
     input_data,
     make_graph,
     raw_centroid,
