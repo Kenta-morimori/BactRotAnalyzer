@@ -84,4 +84,4 @@ python3 scripts/diagnostics/issue38_no14_window_scale.py
 - [共通の輪郭計測](../../../utils/functions/image_diagnostics.py)：面積・円形度・輪郭数・端接触。重心抽出は行わない。
 - `scripts/diagnostics/issue38_no14_*.py`：No.14の入力対応と図・表の再生成。評価の再現に必要な部分を残し、共通処理を呼ぶ。代表区間・描画色・出力先は`issue38_paths.py`へ集約。
 
-旧重心の復元による暫定診断の実行コードと、参照のない忌避応答解析の6関数を削除した。旧評価の資料は履歴として保存する。比較スクリプトの名前を`issue38_no14_method_comparison.py`へ統一した。今回の整理で採用法や判定条件は変更しない。
+旧重心の復元による暫定診断の実行コードと、参照のない忌避応答解析の6関数と旧描画3関数を削除した。旧評価の資料は履歴として保存する。比較スクリプトの名前を`issue38_no14_method_comparison.py`へ統一した。今回の整理で採用法や判定条件は変更しない。
