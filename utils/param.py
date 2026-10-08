@@ -1,5 +1,7 @@
 import configparser
+import math
 import os
+import re
 
 import pandas as pd
 
@@ -9,23 +11,43 @@ input_dir_bef = f"{curr_dir}/data"
 save_dir_bef = f"{curr_dir}/outputs"
 
 
-def get_flag_use_tiff_log(day):
+def _read_config(day):
     config_dir = f"{input_dir_bef}/{day}/config.ini"
     config = configparser.ConfigParser()
     config.read(config_dir)
+    return config
 
+
+def get_flag_use_tiff_log(day):
+    config = _read_config(day)
     flag_use_tiff_log = config.getboolean("Settings", "flag_use_tiff_log")
 
     return flag_use_tiff_log
 
 
-def get_config(day):
-    config_dir = f"{input_dir_bef}/{day}/config.ini"
-    config = configparser.ConfigParser()
-    config.read(config_dir)
+def get_flag_use_brightness_data(day, default_flag=False):
+    config = _read_config(day)
+    section = "RepellentResponse"
+    option = "flag_use_brightness_data"
 
+    if not config.has_section(section):
+        return bool(default_flag)
+    if not config.has_option(section, option):
+        return bool(default_flag)
+
+    try:
+        return config.getboolean(section, option)
+    except ValueError:
+        return bool(default_flag)
+
+
+def get_config(day):
+    config = _read_config(day)
     flag_use_tiff_log = get_flag_use_tiff_log(day)
-    sample_num = config.getint("Settings", "sample_num")
+    # TIFF-log datasets are defined by their explicitly ordered TIFF series.
+    # Keeping a second sample count in Settings made it possible for the time
+    # CSV and downstream analysis to disagree, causing index errors.
+    sample_num = len(get_tiffinfo_config(day)) if flag_use_tiff_log else config.getint("Settings", "sample_num")
     # Frame Rate, Total Time
     FrameRate_list = []
     total_time_list = []
@@ -52,9 +74,7 @@ def get_config(day):
 
 
 def get_px2um_config(day):
-    config_dir = f"{input_dir_bef}/{day}/config.ini"
-    config = configparser.ConfigParser()
-    config.read(config_dir)
+    config = _read_config(day)
     try:
         px2um_x = config.getfloat("Settings", "px2um_x")
     except (ValueError, TypeError):
@@ -67,13 +87,136 @@ def get_px2um_config(day):
 
 
 def get_tiffinfo_config(day):
-    config_dir = f"{input_dir_bef}/{day}/config.ini"
-    config = configparser.ConfigParser()
-    config.read(config_dir)
+    config = _read_config(day)
 
     items = config["Tiff_info"]["tiff_data"].split(", ")
 
     return items
+
+
+def get_flag_use_manual_rise_time(day, default_flag=False):
+    config = _read_config(day)
+
+    section = "RepellentResponse"
+    option = "flag_use_manual_rise_time"
+
+    if not config.has_section(section):
+        return default_flag
+    if not config.has_option(section, option):
+        return default_flag
+
+    try:
+        return config.getboolean(section, option)
+    except ValueError:
+        return default_flag
+
+
+def get_manual_rise_time_sec_config(day):
+    config = _read_config(day)
+
+    section = "RepellentResponse"
+    option = "manual_rise_time_sec"
+
+    if not config.has_section(section):
+        return []
+    if not config.has_option(section, option):
+        return []
+
+    raw_value = config.get(section, option, fallback="").strip()
+    if raw_value == "":
+        return []
+
+    values: list[float | None] = []
+    for item in raw_value.split(","):
+        item = item.strip()
+        if item == "" or item.lower() in {"none", "nan", "auto"}:
+            values.append(None)
+            continue
+        try:
+            value = float(item)
+        except ValueError as exc:
+            raise ValueError(f"Invalid float in {section}.{option}: '{item}'") from exc
+        values.append(value if math.isfinite(value) else None)
+
+    return values
+
+
+def get_manual_stop_frame_indices_config(day):
+    """Read optional per-sample zero-based stop-frame indices.
+
+    ``auto`` delegates that sample to the activity-based stop detector.  A
+    shorter list also leaves remaining samples to automatic detection.
+    """
+    config = _read_config(day)
+    section = "RepellentResponse"
+    option = "manual_stop_frame_indices"
+    if not config.has_section(section) or not config.has_option(section, option):
+        return []
+
+    raw_value = config.get(section, option, fallback="").strip()
+    if raw_value == "":
+        return []
+
+    values: list[int | None] = []
+    for item in raw_value.split(","):
+        item = item.strip()
+        if item == "" or item.lower() == "auto":
+            values.append(None)
+            continue
+        try:
+            value = int(item)
+        except ValueError as exc:
+            raise ValueError(f"Invalid stop-frame index in {section}.{option}: '{item}'") from exc
+        if value < 0:
+            raise ValueError(f"Stop-frame index in {section}.{option} must be non-negative: '{item}'")
+        values.append(value)
+    return values
+
+
+def get_analysis_frame_ranges_config(day):
+    """Return optional per-sample 1-based inclusive analysis frame ranges.
+
+    ``None`` means that the complete series is analyzed.  When the option is
+    present its length is deliberately strict: silently shifting a range to a
+    different sample would invalidate the experiment.
+    """
+    config = _read_config(day)
+    section = "RepellentResponse"
+    option = "analysis_frame_ranges"
+    if not config.has_section(section) or not config.has_option(section, option):
+        return []
+
+    raw_value = config.get(section, option, fallback="").strip()
+    if raw_value == "":
+        return []
+
+    values: list[tuple[int, int] | None] = []
+    for item in raw_value.split(","):
+        item = item.strip()
+        if item == "" or item.lower() in {"none", "nan", "auto"}:
+            values.append(None)
+            continue
+        match = re.fullmatch(r"(\d+)\s*-\s*(\d+)", item)
+        if match is None:
+            raise ValueError(
+                f"Invalid frame range in {section}.{option}: '{item}'. " "Use 'start-end' (1-based, inclusive) or auto."
+            )
+        start, end = (int(match.group(1)), int(match.group(2)))
+        if start < 1 or end < 1 or start > end:
+            raise ValueError(
+                f"Invalid frame range in {section}.{option}: '{item}'. "
+                "Frame numbers must be positive and start must not exceed end."
+            )
+        values.append((start, end))
+
+    sample_num = (
+        len(get_tiffinfo_config(day)) if get_flag_use_tiff_log(day) else config.getint("Settings", "sample_num")
+    )
+    if len(values) != sample_num:
+        raise ValueError(
+            f"{section}.{option} must contain one value per sample. " f"ranges={len(values)}, samples={sample_num}"
+        )
+    return values
 
 
 # rotational analysis
@@ -120,6 +263,25 @@ min_ref_av_num = 10  # Average
 
 ## Switching
 flag_eval_switching_with_averaged_av = False
+
+# Angular Velocity Switching Frequency Analysis (post-rise)
+av_switching_window_width_sec = 2.0  # Window width in seconds
+av_switching_window_shift_sec = 0.5  # Window shift step in seconds
+
+# Background ROI Configuration (repellent response)
+bg_roi_offset_um_downward = 10.0  # Downward offset from centroid in micrometers
+
+# Repellent response post-rise center strategy.
+# 1: use rolling mean of the raw coordinates after rise
+# 2: use rolling median of the raw coordinates after rise
+# 3: use the constant post-rise mean center
+post_rise_center_mode = 2
+
+# Freeze the post-rise rotation center once rotation has stopped.  The activity
+# threshold is expressed as a fraction of the pre-rise activity level, and the
+# duration is expressed in estimated rotations.
+stop_activity_ratio = 0.20
+stop_min_duration_rotations = 1.0
 
 # fluctuation analysis
 # SD_window_width_list = [0.1, 0.5, 1.0]
