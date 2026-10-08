@@ -24,7 +24,7 @@ REPO = Path(__file__).resolve().parents[2]
 DATA = REPO / "data/repellent-response/23"
 OUTPUT = REPO / "outputs/repellent-response/23"
 STAGE = OUTPUT / "repellent_response/00_all_rotational_analysis"
-DEFAULT_DEST = REPO / "docs/analysis/issue-38"
+DEFAULT_DEST = REPO / "docs/analysis/issue-38/archive/legacy"
 VIDEOS = {10: "2026_0606_221330.avi", 14: "2026_0802_182430.avi"}
 PLOT_TIMES = {10: (10, 78, 82, 90), 14: (22, 35, 42, 65)}
 

@@ -8,6 +8,8 @@ os.environ.setdefault("MPLBACKEND", "Agg")
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from issue38_paths import FIGURES, TABLES, ensure_output_dirs
+
 import cv2  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
@@ -21,7 +23,6 @@ SAMPLE = 14
 START, END = 2049, 16384
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "outputs" / DAY
-REPORT = ROOT / "docs/analysis/issue-38"
 
 
 def legacy_series():
@@ -92,7 +93,7 @@ def plot_outputs(frame: pd.DataFrame, comparison: pd.DataFrame, numbers: list[in
     axes[2].set_ylabel("legacy stage-initial (um)")
     axes[2].set_xlabel("TIFF time (s)")
     fig.tight_layout()
-    fig.savefig(REPORT / "no14_raw_centroid_timeseries.png", dpi=140)
+    fig.savefig(FIGURES / "no14_raw_centroid_timeseries.png", dpi=140)
     plt.close(fig)
 
     fig, axis = plt.subplots(figsize=(7, 7))
@@ -103,7 +104,7 @@ def plot_outputs(frame: pd.DataFrame, comparison: pd.DataFrame, numbers: list[in
     axis.set_xlabel("AVI local x (um)")
     axis.set_ylabel("AVI local y (um)")
     fig.tight_layout()
-    fig.savefig(REPORT / "no14_raw_centroid_trajectory.png", dpi=140)
+    fig.savefig(FIGURES / "no14_raw_centroid_trajectory.png", dpi=140)
     plt.close(fig)
 
     capture = cv2.VideoCapture(str(raw_centroid.source_path(DAY, SAMPLE)))
@@ -131,13 +132,13 @@ def plot_outputs(frame: pd.DataFrame, comparison: pd.DataFrame, numbers: list[in
     finally:
         capture.release()
     fig.tight_layout()
-    fig.savefig(REPORT / "no14_raw_centroid_video_overlay.png", dpi=140)
+    fig.savefig(FIGURES / "no14_raw_centroid_video_overlay.png", dpi=140)
     plt.close(fig)
-    pd.DataFrame(overlays).to_csv(REPORT / "no14_raw_centroid_video_checks.csv", index=False)
+    pd.DataFrame(overlays).to_csv(TABLES / "no14_raw_centroid_video_checks.csv", index=False)
 
 
 def main() -> None:
-    REPORT.mkdir(parents=True, exist_ok=True)
+    ensure_output_dirs()
     times = read_csv.get_timelist(DAY)[SAMPLE - 1]
     frame = raw_centroid.extract_or_load(DAY, SAMPLE, times)
     if len(frame) != 18432 or not frame.detected.all():
@@ -159,10 +160,10 @@ def main() -> None:
                                "initial_x_um": initial[:, 0], "initial_y_um": initial[:, 1],
                                "stage_x_um": stage[:, 0], "stage_y_um": stage[:, 1],
                                "stage_minus_initial_2d_um": np.linalg.norm(stage - initial, axis=1)})
-    comparison.to_csv(REPORT / "no14_raw_centroid_legacy_comparison.csv", index=False)
+    comparison.to_csv(TABLES / "no14_raw_centroid_legacy_comparison.csv", index=False)
     stats = pd.DataFrame([summarize_difference("initial", initial, canonical),
                           summarize_difference("stage", stage, canonical)])
-    stats.to_csv(REPORT / "no14_raw_centroid_summary.csv", index=False)
+    stats.to_csv(TABLES / "no14_raw_centroid_summary.csv", index=False)
     numbers = checked_frames(frame, comparison)
     plot_outputs(frame, comparison, numbers)
     print(stats.to_string(index=False))

@@ -10,6 +10,8 @@ os.environ.setdefault("MPLBACKEND", "Agg")
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from issue38_paths import FIGURES, TABLES, ensure_output_dirs
+
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
@@ -27,7 +29,6 @@ DAY = "repellent-response/23"
 SAMPLE_NO = 14
 START_FRAME, END_FRAME = 2049, 16384
 RISE_TIME_SEC = 40.0
-FIGURE_DIR = Path(__file__).resolve().parents[2] / "docs/analysis/issue-38"
 
 
 def window_width(time: np.ndarray, x: np.ndarray, y: np.ndarray) -> float:
@@ -113,6 +114,7 @@ def plot_timeseries(data: pd.DataFrame, width: float, path: Path) -> None:
 
 
 def main() -> None:
+    ensure_output_dirs()
     full_time = read_csv.get_timelist(DAY)[SAMPLE_NO - 1]
     frame = raw_centroid.load(DAY, SAMPLE_NO, full_time).iloc[START_FRAME - 1:END_FRAME].copy()
     time = frame.time_sec.to_numpy(float)
@@ -132,9 +134,8 @@ def main() -> None:
     data["raw_center_x_um"] = raw_x
     data["raw_center_y_um"] = raw_y
     data["center_source"] = np.where(time <= time[-1] - width, "window", "terminal_hold")
-    FIGURE_DIR.mkdir(parents=True, exist_ok=True)
-    data.to_csv(FIGURE_DIR / "no14_centroid_center_timeseries.csv", index=False)
-    plot_timeseries(data, width, FIGURE_DIR / "no14_centroid_center_timeseries.png")
+    data.to_csv(TABLES / "no14_centroid_center_timeseries.csv", index=False)
+    plot_timeseries(data, width, FIGURES / "no14_centroid_center_timeseries.png")
     print(f"No.14: {len(data)} frames, window={width:.3f}s")
 
 

@@ -6,6 +6,8 @@ import os
 os.environ.setdefault("MPLBACKEND", "Agg")
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
+from issue38_paths import FIGURES, TABLES, ensure_output_dirs
+
 import cv2  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
@@ -15,7 +17,7 @@ from scipy.signal import csd, welch  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 
 from issue38_center_diagnostics import Ellipse, fit_ellipse, angular_coverage  # noqa: E402
-from issue38_no14_center_evaluation import DEST, robust_radius  # noqa: E402
+from issue38_no14_center_evaluation import robust_radius  # noqa: E402
 
 METHODS = ("legacy", "centered_algebraic", "ellipse_constrained", "geometric_ellipse", "robust_circle")
 
@@ -131,8 +133,8 @@ def evaluate(points: np.ndarray, method: str) -> dict:
 
 
 def real_windows() -> pd.DataFrame:
-    data = pd.read_csv(DEST / "no14_centroid_center_timeseries.csv")
-    windows = pd.read_csv(DEST / "no14_center_window_metrics.csv")
+    data = pd.read_csv(TABLES / "no14_centroid_center_timeseries.csv")
+    windows = pd.read_csv(TABLES / "no14_center_window_metrics.csv")
     t = data.time_sec.to_numpy(float)
     xy = data[["x_um", "y_um"]].to_numpy(float)
     records = []
@@ -192,7 +194,7 @@ def plot_results(data: pd.DataFrame) -> None:
         axis.axvline(40, color="gray", ls=":")
         axis.grid(alpha=.15)
     fig.tight_layout()
-    fig.savefig(DEST / "no14_center_method_comparison.png", dpi=150)
+    fig.savefig(FIGURES / "no14_center_method_comparison.png", dpi=150)
     plt.close(fig)
 
 
@@ -202,7 +204,7 @@ def interpolation_trials(real: pd.DataFrame) -> pd.DataFrame:
     This validates reproduction of a reference estimator, not true-center accuracy.
     """
     reference = real.loc[(real.method == "robust_circle") & (real.start_time_sec >= 65)].reset_index(drop=True)
-    data = pd.read_csv(DEST / "no14_centroid_center_timeseries.csv")
+    data = pd.read_csv(TABLES / "no14_centroid_center_timeseries.csv")
     t = data.time_sec.to_numpy(float)
     xy = data[["x_um", "y_um"]].to_numpy(float)
     records = []
@@ -240,12 +242,13 @@ def interpolation_trials(real: pd.DataFrame) -> pd.DataFrame:
 
 
 def main() -> None:
+    ensure_output_dirs()
     real = real_windows()
-    real.to_csv(DEST / "no14_center_method_comparison.csv", index=False)
-    interpolation_trials(real).to_csv(DEST / "no14_center_interpolation_trials.csv", index=False)
+    real.to_csv(TABLES / "no14_center_method_comparison.csv", index=False)
+    interpolation_trials(real).to_csv(TABLES / "no14_center_interpolation_trials.csv", index=False)
     plot_results(real)
     synthetic = synthetic_trials()
-    synthetic.to_csv(DEST / "no14_center_method_synthetic.csv", index=False)
+    synthetic.to_csv(TABLES / "no14_center_method_synthetic.csv", index=False)
     print(real.groupby("method")[["block_cv_p95_R", "center_max_shift_R", "origin_shift_error_R"]].median().to_string())
 
 

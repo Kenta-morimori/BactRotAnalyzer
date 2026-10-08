@@ -19,7 +19,7 @@ python3 scripts/diagnostics/issue38_no14_image_trajectory.py
 python3 scripts/diagnostics/issue39_no14_method_comparison.py
 ```
 
-[手法別の全数値](no14_center_method_comparison.csv)、[時系列比較図](no14_center_method_comparison.png)、[既知中心の模擬試験](no14_center_method_synthetic.csv)、[補完比較の全試行](no14_center_interpolation_trials.csv)を保存した。実データ134窓×5手法、模擬データ7条件×12試行×5手法。現行の前向き窓幅5.080367秒と同じ点群を使い、窓開始を約0.501秒ごとに評価する。隣接窓は大きく重なり、独立標本ではない。
+[手法別の全数値](../tables/no14_center_method_comparison.csv)、[時系列比較図](../figures/no14_center_method_comparison.png)、[既知中心の模擬試験](../tables/no14_center_method_synthetic.csv)、[補完比較の全試行](../tables/no14_center_interpolation_trials.csv)を保存した。実データ134窓×5手法、模擬データ7条件×12試行×5手法。現行の前向き窓幅5.080367秒と同じ点群を使い、窓開始を約0.501秒ごとに評価する。隣接窓は大きく重なり、独立標本ではない。
 
 ## 1. 大きくずれる理由
 

@@ -14,6 +14,8 @@ from pathlib import Path
 os.environ.setdefault("MPLBACKEND", "Agg")
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
+from issue38_paths import FIGURES, TABLES, ensure_output_dirs
+
 import cv2  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
@@ -25,7 +27,6 @@ from issue38_center_diagnostics import ellipse_points, fit_ellipse  # noqa: E402
 from issue38_no14_center_timeseries import param  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
-DEST = ROOT / "docs/analysis/issue-38"
 AVI = ROOT / "data/repellent-response/23/2026_0802_182430.avi"
 TIFF = AVI.with_suffix(".tif")
 TIFF_LOG_DIR = AVI.parent / "tiff_data" / AVI.stem
@@ -176,7 +177,7 @@ def continuous_burst_gif(name: str, frame: pd.DataFrame, image_map: dict[int, np
                         (5, 40), cv2.FONT_HERSHEY_SIMPLEX, .48, (0, 0, 0), 1)
             panels.append(panel)
         frames.append(Image.fromarray(np.concatenate(panels, axis=1)))
-    frames[0].save(DEST / f"no14_image_trajectory_{name}.gif", save_all=True,
+    frames[0].save(FIGURES / f"no14_image_trajectory_{name}.gif", save_all=True,
                    append_images=frames[1:], duration=100, loop=0)
 
 
@@ -252,7 +253,7 @@ def image_trajectory_figure(name: str, frame: pd.DataFrame, measurements: pd.Dat
                  f"{frame.time_sec.iloc[0]:.3f}–{frame.time_sec.iloc[-1]:.3f} s\n"
                  "green + = frame centroid; orange × = window-start corrected/held center; "
                  "blue ○ = window-start raw center", fontsize=12)
-    fig.savefig(DEST / f"no14_image_trajectory_{name}.png", dpi=140)
+    fig.savefig(FIGURES / f"no14_image_trajectory_{name}.png", dpi=140)
     plt.close(fig)
 
 
@@ -317,8 +318,9 @@ def summarize(name: str, frame: pd.DataFrame, images: pd.DataFrame, row: pd.Seri
 
 
 def main() -> None:
-    data = pd.read_csv(DEST / "no14_centroid_center_timeseries.csv")
-    metrics = pd.read_csv(DEST / "no14_center_window_metrics.csv")
+    ensure_output_dirs()
+    data = pd.read_csv(TABLES / "no14_centroid_center_timeseries.csv")
+    metrics = pd.read_csv(TABLES / "no14_center_window_metrics.csv")
     if data.source_frame_1based.iloc[[0, -1]].tolist() != [2049, 16384]:
         raise ValueError("No.14 frame range changed")
     cap = cv2.VideoCapture(str(AVI))
@@ -341,9 +343,9 @@ def main() -> None:
     finally:
         cap.release()
     all_frames = pd.concat(frame_tables, ignore_index=True)
-    all_frames.to_csv(DEST / "no14_image_trajectory_frame_checks.csv", index=False)
+    all_frames.to_csv(TABLES / "no14_image_trajectory_frame_checks.csv", index=False)
     summary = pd.DataFrame(summaries)
-    summary.to_csv(DEST / "no14_image_trajectory_summary.csv", index=False)
+    summary.to_csv(TABLES / "no14_image_trajectory_summary.csv", index=False)
     print(summary.to_string(index=False))
 
 

@@ -6,9 +6,9 @@
 
 入力は原 AVI の 2049–16384 フレームに対応する確定済み重心で、AVI 内の µm 座標を用いる。まず `python3 scripts/diagnostics/issue38_no14_center_timeseries.py`、次に `python3 scripts/diagnostics/issue38_no14_center_evaluation.py` をリポジトリのルートで実行する。現行の刺激前 FFT と 30 回転の規則による前向き窓幅は **5.080367 秒**。中心は現行法で全 14,336 フレームに対して算出し、窓診断はそのうち約 0.5 秒（100 フレーム）間隔の **134 窓**を抽出した。各窓は 1,014–1,015 点。82.500 秒以降は完全な前向き窓がないため窓診断から除き、時系列図では保持値と明示した。
 
-- [連続した時間軸の重心・中心](no14_centroid_center_timeseries.png)と[全フレームの値](no14_centroid_center_timeseries.csv)
-- [窓ごとの指標図](no14_center_window_metrics.png)と[数値表](no14_center_window_metrics.csv)
-- [代表窓の二次元軌跡・楕円・中心](no14_center_window_examples.png)、[原 AVI フレームとの照合](no14_center_video_checks.png)
+- [連続した時間軸の重心・中心](../figures/no14_centroid_center_timeseries.png)と[全フレームの値](../tables/no14_centroid_center_timeseries.csv)
+- [窓ごとの指標図](../figures/no14_center_window_metrics.png)と[数値表](../tables/no14_center_window_metrics.csv)
+- [代表窓の二次元軌跡・楕円・中心](../figures/no14_center_window_examples.png)、[原 AVI フレームとの照合](../figures/no14_center_video_checks.png)
 
 窓内の点を時間順に 4 分割して各ブロックの中心を再推定し、さらに各ブロックを 1 個ずつ除いて全点中心との差を求めた。x、y 別の標準偏差と最大二次元距離を表に保存した。楕円への最近点距離の 95 パーセンタイル、中心まわりの角度被覆と最大空白角、中心化・スケール化した設計行列の条件数も算出した。距離は窓の x、y の各 5–95 パーセンタイル幅の大きい方の半分 (R) で規格化した。円への頑健フィットは手法比較の参考であり、現行の中心を置き換えていない。
 

@@ -13,6 +13,8 @@ os.environ.setdefault("MPLBACKEND", "Agg")
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 import matplotlib.pyplot as plt  # noqa: E402
+from issue38_paths import FIGURES, TABLES, ensure_output_dirs
+
 import cv2  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
@@ -28,7 +30,6 @@ from issue38_center_diagnostics import (  # noqa: E402
 from issue38_no14_center_timeseries import param, window_width  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
-DEST = ROOT / "docs/analysis/issue-38"
 STRIDE_FRAMES = 100  # About 0.5 s; production center itself remains frame by frame.
 
 
@@ -221,7 +222,7 @@ def plot_metrics(rows: pd.DataFrame) -> None:
         axis.grid(alpha=0.18)
     axes[-1].set_xlim(15.78, 82.5)
     fig.tight_layout()
-    fig.savefig(DEST / "no14_center_window_metrics.png", dpi=160)
+    fig.savefig(FIGURES / "no14_center_window_metrics.png", dpi=160)
     plt.close(fig)
 
 
@@ -256,7 +257,7 @@ def plot_examples(data: pd.DataFrame, rows: pd.DataFrame, times: list[float]) ->
         axis.grid(alpha=0.16)
     axes[0, 0].legend(frameon=False, fontsize=8)
     fig.tight_layout()
-    fig.savefig(DEST / "no14_center_window_examples.png", dpi=160)
+    fig.savefig(FIGURES / "no14_center_window_examples.png", dpi=160)
     plt.close(fig)
 
 
@@ -290,18 +291,19 @@ def plot_video_checks(data: pd.DataFrame) -> None:
     cap.release()
     axes[0, 0].legend(loc="lower left", fontsize=7, framealpha=0.8)
     fig.tight_layout()
-    fig.savefig(DEST / "no14_center_video_checks.png", dpi=160)
+    fig.savefig(FIGURES / "no14_center_video_checks.png", dpi=160)
     plt.close(fig)
 
 
 def main() -> None:
-    data = pd.read_csv(DEST / "no14_centroid_center_timeseries.csv")
+    ensure_output_dirs()
+    data = pd.read_csv(TABLES / "no14_centroid_center_timeseries.csv")
     assert data.source_frame_1based.iloc[[0, -1]].tolist() == [2049, 16384]
     assert np.all(np.diff(data.time_sec) > 0)
     rows = evaluate(data)
     if rows.loc[rows.fit_valid, "raw_vs_refit_over_radius"].max() > 1e-8:
         raise AssertionError("Diagnostic windows do not reproduce the production raw ellipse fits")
-    rows.to_csv(DEST / "no14_center_window_metrics.csv", index=False)
+    rows.to_csv(TABLES / "no14_center_window_metrics.csv", index=False)
     plot_metrics(rows)
     plot_examples(data, rows, [20, 35, 38, 40, 65, 80])
     plot_video_checks(data)

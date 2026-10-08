@@ -4,13 +4,13 @@
 
 `python3 scripts/diagnostics/issue38_no14_centroid.py` をリポジトリのルートで実行する。入力は `data/repellent-response/23/2026_0802_182430.avi`、設定 `data/repellent-response/23/config.ini`、TIFF 由来の `outputs/repellent-response/23/time_list.csv`。標準回転解析と同じ二値化閾値 120・最大外輪郭・輪郭点の算術平均を使用した。全フレームの測定値は `outputs/repellent-response/23/raw_centroid/2026_0802_182430.csv` に保存される。ここでの `x_px,y_px` は **150×150 ピクセルの AVI 画像内の座標**で、`x_um,y_um` は各軸 0.02 µm/px を乗じた値である。実験装置の大域的な位置は含まない。
 
-18,432 フレームすべてで輪郭を検出した。動画を再読込して重心を重ねた 12 フレームでは、保存値と再測定値が**ピクセル座標で完全一致**した。[フレーム別照合](no14_raw_centroid_video_checks.csv)、[動画重ね描き](no14_raw_centroid_video_overlay.png)、[全軌跡](no14_raw_centroid_trajectory.png)。この照合には、安定した 20・30 秒、40 秒前後、既存系列間の差が最大のフレーム、保存軌跡のフレーム間移動が最大のフレーム、解析範囲の両端を含めた。明らかな輪郭未検出はないが、すべてのフレームの対象識別を独立に検証したわけではない。
+18,432 フレームすべてで輪郭を検出した。動画を再読込して重心を重ねた 12 フレームでは、保存値と再測定値が**ピクセル座標で完全一致**した。[フレーム別照合](../tables/no14_raw_centroid_video_checks.csv)、[動画重ね描き](../figures/no14_raw_centroid_video_overlay.png)、[全軌跡](../figures/no14_raw_centroid_trajectory.png)。この照合には、安定した 20・30 秒、40 秒前後、既存系列間の差が最大のフレーム、保存軌跡のフレーム間移動が最大のフレーム、解析範囲の両端を含めた。明らかな輪郭未検出はないが、すべてのフレームの対象識別を独立に検証したわけではない。
 
 忌避応答解析の指定範囲は原 AVI の **2049–16384 フレーム**、0 始まりの配列では `[2048:16384]` であり、14,336 点となる。保存した全長の TIFF 時刻と、既存の忌避応答解析に保存された当該範囲の時刻は全点で一致した。標準解析と忌避応答解析は同じ原フレームの保存済み `x_um,y_um` を読み、後者はその範囲だけを選択する。
 
 ## 既存系列との差と原因
 
-既存の「全体解析」と「忌避応答解析」の値は、中心相対座標に**当時保存された**中心を加えて比較用に復元した。新しい中心推定は行っていない。[全フレームの比較表](no14_raw_centroid_legacy_comparison.csv)、[要約表](no14_raw_centroid_summary.csv)、[時系列図](no14_raw_centroid_timeseries.png)。
+既存の「全体解析」と「忌避応答解析」の値は、中心相対座標に**当時保存された**中心を加えて比較用に復元した。新しい中心推定は行っていない。[全フレームの比較表](../tables/no14_raw_centroid_legacy_comparison.csv)、[要約表](../tables/no14_raw_centroid_summary.csv)、[時系列図](../figures/no14_raw_centroid_timeseries.png)。
 
 | 既存系列 | AVI 局所座標との差の中央値 x, y (µm) | 定数オフセット除去後の二次元差：中央値 / 95 パーセンタイル (µm) |
 | --- | ---: | ---: |
@@ -27,7 +27,7 @@
 
 ## 重心と現行法の回転中心を時間軸で重ねた図
 
-`python3 scripts/diagnostics/issue38_no14_center_timeseries.py` で再生成する。[全期間を連続した時間軸で示す図](no14_centroid_center_timeseries.png)と[各フレームの図示値](no14_centroid_center_timeseries.csv)を保存した。横軸は TIFF 時刻、縦軸は AVI 内の局所座標で、上段が x、下段が y。窓別の妥当性評価は [No.14 回転中心の評価](no14_center_evaluation.md) に記録した。
+`python3 scripts/diagnostics/issue38_no14_center_timeseries.py` で再生成する。[全期間を連続した時間軸で示す図](../figures/no14_centroid_center_timeseries.png)と[各フレームの図示値](../tables/no14_centroid_center_timeseries.csv)を保存した。横軸は TIFF 時刻、縦軸は AVI 内の局所座標で、上段が x、下段が y。窓別の妥当性評価は [No.14 回転中心の評価](no14_center_evaluation.md) に記録した。
 
 灰色は確定した重心、青色は楕円フィット直後の未補正中心、橙色は現行法の外れ値補正後の中心。青色の大きな発散は縦軸範囲外で非表示とした。窓幅は刺激前の FFT から **5.080 秒**と算出され、中心は各時刻から先の約 5 秒分の重心で求める。そのため橙色の線を、その時刻の瞬間的な位置測定と解釈しない。**82.500132 秒以降の破線と淡い背景**は前の中心を保持した区間であり、新たな楕円フィットではない（1,015 フレーム）。
 
