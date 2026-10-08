@@ -27,7 +27,7 @@
 
 ## 重心と現行法の回転中心を時間軸で重ねた図
 
-`python3 scripts/diagnostics/issue38_no14_center_5s.py` で再生成する。[全期間・5 秒ごとの列](no14_centroid_center_5s_full.png)、拡大図 [15–40 秒](no14_centroid_center_5s_15-40.png)・[40–65 秒](no14_centroid_center_5s_40-65.png)・[65–90 秒](no14_centroid_center_5s_65-90.png)、[各フレームの図示値](no14_centroid_center_5s.csv)を保存した。横軸は TIFF 時刻、縦軸は AVI 内の局所座標で、上段が x、下段が y。各段の縦軸範囲はすべての列で共通である。図の左右端 15–15.78 秒と 87.58–90 秒にはデータがない。
+`python3 scripts/diagnostics/issue38_no14_center_timeseries.py` で再生成する。[全期間を連続した時間軸で示す図](no14_centroid_center_timeseries.png)と[各フレームの図示値](no14_centroid_center_timeseries.csv)を保存した。横軸は TIFF 時刻、縦軸は AVI 内の局所座標で、上段が x、下段が y。窓別の妥当性評価は [No.14 回転中心の評価](no14_center_evaluation.md) に記録した。
 
 灰色は確定した重心、青色は楕円フィット直後の未補正中心、橙色は現行法の外れ値補正後の中心。青色の大きな発散は縦軸範囲外で非表示とした。窓幅は刺激前の FFT から **5.080 秒**と算出され、中心は各時刻から先の約 5 秒分の重心で求める。そのため橙色の線を、その時刻の瞬間的な位置測定と解釈しない。**82.500132 秒以降の破線と淡い背景**は前の中心を保持した区間であり、新たな楕円フィットではない（1,015 フレーム）。
 

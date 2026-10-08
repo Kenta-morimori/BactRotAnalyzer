@@ -1,4 +1,4 @@
-"""Plot No.14 centroid and current moving-window center in five-second columns."""
+"""Plot the No.14 centroid and current moving-window center on one time axis."""
 
 from __future__ import annotations
 
@@ -71,59 +71,41 @@ def uncorrected_centers(time: np.ndarray, x: np.ndarray, y: np.ndarray, width: f
     return np.asarray(raw_x + [np.nan] * missing), np.asarray(raw_y + [np.nan] * missing)
 
 
-def plot_grid(data: pd.DataFrame, width: float, starts: list[int], path: Path) -> None:
-    ncols = len(starts)
-    fig, axes = plt.subplots(2, ncols, figsize=(3.6 * ncols, 6.4), sharey="row", squeeze=False)
+def plot_timeseries(data: pd.DataFrame, width: float, path: Path) -> None:
+    fig, axes = plt.subplots(2, 1, figsize=(22, 7), sharex=True)
     time = data.time_sec.to_numpy(float)
     cutoff = time[-1] - width
     colors = {"centroid": "#455468", "center": "#d95f02", "raw": "#0072b2"}
-    limits = {}
-    for axis_name in "xy":
+    for row, axis_name in enumerate("xy"):
+        axis = axes[row]
         values = np.r_[data[f"{axis_name}_um"].to_numpy(float),
                        data[f"center_{axis_name}_um"].to_numpy(float)]
         lo, hi = np.nanmin(values), np.nanmax(values)
         padding = 0.045 * (hi - lo)
-        limits[axis_name] = (lo - padding, hi + padding)
-    for col, begin in enumerate(starts):
-        end = begin + 5
-        mask = (time >= begin) & (time < end)
-        for row, axis_name in enumerate("xy"):
-            axis = axes[row, col]
-            axis.plot(time[mask], data.loc[mask, f"{axis_name}_um"], color=colors["centroid"],
-                      alpha=0.52, lw=0.55, rasterized=True, label="centroid" if col == 0 else None)
-            fitted = mask & (time <= cutoff)
-            held = mask & (time > cutoff)
-            raw = data[f"raw_center_{axis_name}_um"].to_numpy(float)
-            lo, hi = limits[axis_name]
-            raw_visible = mask & np.isfinite(raw) & (raw >= lo) & (raw <= hi)
-            raw_plot = np.where(raw_visible, raw, np.nan)
-            axis.plot(time[mask], raw_plot[mask], color=colors["raw"], lw=0.6,
-                      alpha=0.7, label="uncorrected fit" if col == 0 else None)
-            axis.plot(time[fitted], data.loc[fitted, f"center_{axis_name}_um"],
-                      color=colors["center"], lw=1.65, label="window center" if col == 0 else None)
-            if held.any():
-                first = np.flatnonzero(held)[0]
-                bridge = np.r_[first - 1, np.flatnonzero(held)] if first > 0 else np.flatnonzero(held)
-                axis.plot(time[bridge], data.iloc[bridge][f"center_{axis_name}_um"],
-                          color=colors["center"], lw=1.65, ls="--", label="held center" if col == 0 else None)
-                axis.axvspan(max(begin, cutoff), end, color="#d95f02", alpha=0.06, lw=0)
-            if begin <= RISE_TIME_SEC < end:
-                axis.axvline(RISE_TIME_SEC, color="#7b3294", lw=1.1, ls=":")
-            axis.set_xlim(begin, end)
-            axis.set_xticks([begin, begin + 2.5, end])
-            axis.grid(alpha=0.16)
-            if row == 0:
-                axis.set_title(f"{begin}–{end} s", fontsize=10)
-            else:
-                axis.set_xlabel("Time (s)")
-            if col == 0:
-                axis.set_ylabel(f"{axis_name} in AVI frame (µm)")
-    for row, axis_name in enumerate("xy"):
-        lo, hi = limits[axis_name]
-        for axis in axes[row]:
-            axis.set_ylim(lo, hi)
-    handles, labels = axes[0, 0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="upper right", ncol=3, frameon=False, fontsize=9)
+        lo, hi = lo - padding, hi + padding
+        axis.plot(time, data[f"{axis_name}_um"], color=colors["centroid"], alpha=0.38,
+                  lw=0.45, rasterized=True, label="centroid")
+        raw = data[f"raw_center_{axis_name}_um"].to_numpy(float)
+        raw_plot = np.where(np.isfinite(raw) & (raw >= lo) & (raw <= hi), raw, np.nan)
+        axis.plot(time, raw_plot, color=colors["raw"], lw=0.6, alpha=0.7,
+                  label="uncorrected fit")
+        fitted = time <= cutoff
+        axis.plot(time[fitted], data.loc[fitted, f"center_{axis_name}_um"],
+                  color=colors["center"], lw=1.7, label="corrected center")
+        held = time > cutoff
+        if held.any():
+            first = np.flatnonzero(held)[0]
+            bridge = np.r_[first - 1, np.flatnonzero(held)]
+            axis.plot(time[bridge], data.iloc[bridge][f"center_{axis_name}_um"],
+                      color=colors["center"], lw=1.7, ls="--", label="terminal hold")
+        axis.axvspan(cutoff, time[-1], color="#d95f02", alpha=0.06, lw=0)
+        axis.axvline(RISE_TIME_SEC, color="#7b3294", lw=1.1, ls=":")
+        axis.set_ylim(lo, hi)
+        axis.set_ylabel(f"{axis_name} in AVI frame (µm)")
+        axis.grid(alpha=0.16)
+    axes[0].legend(loc="upper right", ncol=4, frameon=False)
+    axes[-1].set_xlabel("Time (s)")
+    axes[-1].set_xlim(time[0], time[-1])
     fig.suptitle(f"No.14 centroid and center | {width:.3f} s forward window", y=1.015, fontsize=12)
     fig.tight_layout()
     fig.savefig(path, dpi=160, bbox_inches="tight")
@@ -144,20 +126,16 @@ def main() -> None:
     raw_x, raw_y = uncorrected_centers(time, x, y, width)
     if len(centers_x[0]) != len(frame) or len(centers_y[0]) != len(frame):
         raise ValueError("Current center estimate is not aligned with the canonical centroid")
-    data = frame[["source_frame_1based", "time_sec", "x_um", "y_um"]].reset_index(drop=True)
+    data = frame[["source_frame_1based", "time_sec", "x_px", "y_px", "x_um", "y_um", "detected"]].reset_index(drop=True)
     data["center_x_um"] = centers_x[0]
     data["center_y_um"] = centers_y[0]
     data["raw_center_x_um"] = raw_x
     data["raw_center_y_um"] = raw_y
     data["center_source"] = np.where(time <= time[-1] - width, "window", "terminal_hold")
     FIGURE_DIR.mkdir(parents=True, exist_ok=True)
-    data.to_csv(FIGURE_DIR / "no14_centroid_center_5s.csv", index=False)
-    starts = list(range(15, 90, 5))
-    plot_grid(data, width, starts, FIGURE_DIR / "no14_centroid_center_5s_full.png")
-    for begin in (15, 40, 65):
-        plot_grid(data, width, list(range(begin, begin + 25, 5)),
-                  FIGURE_DIR / f"no14_centroid_center_5s_{begin:02d}-{begin + 25:02d}.png")
-    print(f"No.14: {len(data)} frames, window={width:.3f}s, columns={len(starts)}")
+    data.to_csv(FIGURE_DIR / "no14_centroid_center_timeseries.csv", index=False)
+    plot_timeseries(data, width, FIGURE_DIR / "no14_centroid_center_timeseries.png")
+    print(f"No.14: {len(data)} frames, window={width:.3f}s")
 
 
 if __name__ == "__main__":
