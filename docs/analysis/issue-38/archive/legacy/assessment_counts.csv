@@ -1,0 +1,9 @@
+sample_no,assessment,window_count
+10,center_unidentifiable,44
+10,fit_failed,63
+10,nonelliptic_or_noisy,660
+10,saved_center_displaced,128
+10,supported,24
+14,center_unidentifiable,264
+14,fit_failed,38
+14,nonelliptic_or_noisy,414
