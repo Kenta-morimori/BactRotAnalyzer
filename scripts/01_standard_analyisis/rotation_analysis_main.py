@@ -7,8 +7,11 @@ from utils.functions import (  # noqa
     fluctuation_analysis,
     get_angular_velocity,
     get_tiff_info,
+    get_centroid_coordinate,
     input_data,
     make_graph,
+    raw_centroid,
+    read_csv,
     rot_df_manage,
 )
 
@@ -22,6 +25,8 @@ def main(
     get_tiff_info.get_timelist(day)
 
     # obtain centroid coordinates
+    if not raw_centroid.standard_cache_matches(day, read_csv.get_timelist(day)):
+        get_centroid_coordinate.main(day)
     x_list, y_list = input_data.input_centroid_coordinate(day)
     # obtain angle, angular velocity (+ evaluate switching)
     _, angular_velocity_list = get_angular_velocity.get_angular_velocity(x_list, y_list, day)

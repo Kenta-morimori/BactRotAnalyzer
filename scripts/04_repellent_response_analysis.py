@@ -1,7 +1,5 @@
 import argparse
 import os
-import shutil
-import subprocess
 import sys
 from typing import Optional, cast
 
@@ -12,7 +10,7 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from utils import param  # noqa
-from utils.functions import input_data, make_graph, repellent_response, save2csv  # noqa
+from utils.functions import input_data, make_graph, raw_centroid, repellent_response, save2csv  # noqa
 
 
 def main(
@@ -42,47 +40,16 @@ def main(
     time_list = repellent_response.ensure_time_list(day)
     save2csv.save_repellent_avi_tiff_sample_map(input_data.get_tiff_avi_sample_map(day), day)
 
-    # Reuse existing centroid / angular-velocity pipeline.
-    centroid_csv = f"{param.save_dir_bef}/{day}/centroid_coordinate.csv"
-    base_centroid_csv = f"{base_save_dir}/{day}/centroid_coordinate.csv"
-    centroid_cache_is_valid = False
-    if os.path.isfile(centroid_csv):
-        existing_x_list, existing_y_list = input_data.input_centroid_coordinate(day)
-        centroid_cache_is_valid = min(len(existing_x_list), len(existing_y_list)) == len(
-            time_list
-        ) and input_data.centroid_coordinate_sample_map_matches(day)
-
-    # A centroid CSV without matching AVI/TIFF provenance is not safe to
-    # reuse: same column count does not prove the same sample order.
-    if not centroid_cache_is_valid:
-        if os.path.isfile(base_centroid_csv):
-            # A separate output suffix may reuse the base cache only together
-            # with its matching provenance sidecar.
-            param.save_dir_bef = base_save_dir
-            base_x_list, base_y_list = input_data.input_centroid_coordinate(day)
-            base_centroid_map = input_data.get_centroid_coordinate_sample_map_path(day)
-            base_cache_is_valid = min(len(base_x_list), len(base_y_list)) == len(
-                time_list
-            ) and input_data.centroid_coordinate_sample_map_matches(day)
-            param.save_dir_bef = base_save_dir if output_suffix in (None, "") else f"{base_save_dir}/{output_suffix}"
-            if base_cache_is_valid:
-                os.makedirs(os.path.dirname(centroid_csv), exist_ok=True)
-                shutil.copy2(base_centroid_csv, centroid_csv)
-                shutil.copy2(base_centroid_map, input_data.get_centroid_coordinate_sample_map_path(day))
-                centroid_cache_is_valid = True
-        if not centroid_cache_is_valid:
-            try:
-                script_path = os.path.join(
-                    os.path.dirname(os.path.dirname(__file__)),
-                    "utils",
-                    "functions",
-                    "get_centroid_coordinate.py",
-                )
-                subprocess.run([sys.executable, script_path, day], check=True)
-            except subprocess.CalledProcessError:
-                repellent_response.generate_centroid_coordinate_simple(day)
-    x_list, y_list = input_data.input_centroid_coordinate(day)
-    x_list, y_list = repellent_response.align_coordinate_series_to_time(x_list, y_list, time_list)
+    # Both analyses consume the same source-frame measurements. The standard
+    # center-relative centroid_coordinate.csv is a separate compatibility file.
+    output_root = param.save_dir_bef
+    try:
+        param.save_dir_bef = base_save_dir
+        raw_frames = raw_centroid.load_all(day, time_list)
+    finally:
+        param.save_dir_bef = output_root
+    x_list = [frame["x_um"].to_list() for frame in raw_frames]
+    y_list = [frame["y_um"].to_list() for frame in raw_frames]
 
     # Phase 1: background intensity and rise-point detection.
     background_list = repellent_response.get_background_intensity_time_series(day)
@@ -111,12 +78,7 @@ def main(
     make_graph.plot_repellent_background_intensity(time_list, background_list, rise_indices, day)
 
     # Build all-time centroid components once, then split into pre/post later.
-    all_comp_time_list, all_x_before_list, all_y_before_list = repellent_response.build_all_time_raw_centroid_series(
-        day=day,
-        time_list=time_list,
-        corrected_x_list=x_list,
-        corrected_y_list=y_list,
-    )
+    all_comp_time_list, all_x_before_list, all_y_before_list = time_list, x_list, y_list
     all_center_x_standard_list, all_center_y_standard_list = repellent_response.estimate_rotation_center_like_standard(
         time_list=all_comp_time_list,
         x_raw_list=all_x_before_list,

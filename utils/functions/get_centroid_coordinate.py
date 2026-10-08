@@ -427,33 +427,22 @@ def dev_get_max_dists(x_list, y_list, day, split_time=0.5):
 
 
 def main(day):
+    from utils.functions import raw_centroid
+
     sample_num, _, _ = param.get_config(day)
     save_dir = f"{param.save_dir_bef}/{day}"
-    px2um_x, px2um_y = param.get_px2um_config(day)
-
-    file_name_list_aft = input_data.get_ordered_avi_paths(day)
+    time_list = read_csv.get_timelist(day)
+    raw_frames = raw_centroid.load_all(day, time_list)
+    if len(raw_frames) != sample_num:
+        raise ValueError("The number of raw centroid samples differs from the configuration")
 
     x_list_bef, y_list_bef, angle_list = [], [], []
-    for file_name in file_name_list_aft:
-        movie = cv2.VideoCapture(file_name)
-        add_x_list, add_y_list, add_angle_list_bef = [], [], []
-        while True:
-            ret, frame = movie.read()
-            if not ret:
-                break
-            if param.flag_get_angle_with_cell_direcetion:
-                x, y, ellipse = contours(frame)
-                add_angle_list_bef.append(ellipse[2] if ellipse is not None else np.nan)
-            else:
-                x, y, _ = contours(frame)
-            add_x_list.append(x * px2um_x)
-            add_y_list.append(y * px2um_y)
-
-        x_list_bef.append(add_x_list)
-        y_list_bef.append(add_y_list)
+    for frame in raw_frames:
+        x_list_bef.append(frame["x_um"].to_list())
+        y_list_bef.append(frame["y_um"].to_list())
         if param.flag_get_angle_with_cell_direcetion:
             # adjust angle (-π/2 ~ π/2)
-            add_angle_list_aft = adjust_angle(add_angle_list_bef)
+            add_angle_list_aft = adjust_angle(frame["ellipse_angle_deg"].to_list())
             angle_list.append(add_angle_list_aft)
     x_arr_bef = np.array(x_list_bef, dtype=object)
     y_arr_bef = np.array(y_list_bef, dtype=object)
@@ -560,6 +549,7 @@ def main(day):
     make_graph.plot_r(r_arr, day)
     r_arr_mean = np.array([np.mean(r) if np.size(r) else np.nan for r in r_arr])
     rot_df_manage.update_rot_df(ROTATION_FEATURES.rotation_r, r_arr_mean, day)
+    raw_centroid.save_standard_manifest(day, time_list)
 
 
 if __name__ == "__main__":

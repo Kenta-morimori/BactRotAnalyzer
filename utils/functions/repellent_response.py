@@ -7,7 +7,6 @@ import threading
 from datetime import datetime
 from typing import Dict, List, Literal, Optional, Sequence, Tuple, TypedDict
 
-import cv2
 import numpy as np
 import pandas as pd
 from PIL import Image
@@ -470,26 +469,6 @@ def build_pre_rise_centroid_series(
     return pre_time_list, pre_x_list, pre_y_list
 
 
-def load_centroid_coordinate_with_nan(day: str) -> Tuple[List[List[float]], List[List[float]]]:
-    csv_path = f"{param.save_dir_bef}/{day}/centroid_coordinate.csv"
-    if not os.path.isfile(csv_path):
-        raise FileNotFoundError(
-            f"centroid_coordinate.csv not found: {csv_path}. "
-            "Run centroid extraction first (e.g., rotation_analysis_main.py)."
-        )
-
-    df = pd.read_csv(csv_path)
-    x_list: List[List[float]] = []
-    y_list: List[List[float]] = []
-    for i, col_name in enumerate(df.columns.tolist()):
-        col_arr = pd.to_numeric(df[col_name], errors="coerce").to_numpy(dtype=float)
-        if i % 2 == 0:
-            x_list.append(col_arr.tolist())
-        else:
-            y_list.append(col_arr.tolist())
-    return x_list, y_list
-
-
 def load_rotation_center_with_nan(day: str) -> Tuple[List[List[float]], List[List[float]]]:
     candidate_paths = [
         f"{param.save_dir_bef}/{day}/center_coordinate/center_coordinate.csv",
@@ -533,46 +512,6 @@ def _fill_center_nan_with_previous(values: Sequence[float]) -> np.ndarray:
     return arr
 
 
-def build_all_time_raw_centroid_series(
-    day: str,
-    time_list: Sequence[Sequence[float]],
-    corrected_x_list: Sequence[Sequence[float]],
-    corrected_y_list: Sequence[Sequence[float]],
-) -> Tuple[List[List[float]], List[List[float]], List[List[float]]]:
-    center_x_list, center_y_list = load_rotation_center_with_nan(day)
-    n = min(len(time_list), len(corrected_x_list), len(corrected_y_list))
-
-    out_time_list: List[List[float]] = []
-    out_x_raw_list: List[List[float]] = []
-    out_y_raw_list: List[List[float]] = []
-
-    for i in range(n):
-        t = np.asarray(time_list[i], dtype=float)
-        x_corr = np.asarray(corrected_x_list[i], dtype=float)
-        y_corr = np.asarray(corrected_y_list[i], dtype=float)
-
-        if i < len(center_x_list) and i < len(center_y_list):
-            cx = _fill_center_nan_with_previous(center_x_list[i])
-            cy = _fill_center_nan_with_previous(center_y_list[i])
-            m = min(len(t), len(x_corr), len(y_corr), len(cx), len(cy))
-            cx = cx[:m]
-            cy = cy[:m]
-        else:
-            m = min(len(t), len(x_corr), len(y_corr))
-            cx = np.zeros(m, dtype=float)
-            cy = np.zeros(m, dtype=float)
-
-        t = t[:m]
-        x_corr = x_corr[:m]
-        y_corr = y_corr[:m]
-
-        out_time_list.append(t.tolist())
-        out_x_raw_list.append((x_corr + cx).tolist())
-        out_y_raw_list.append((y_corr + cy).tolist())
-
-    return out_time_list, out_x_raw_list, out_y_raw_list
-
-
 def build_post_rise_centroid_series(
     time_list: Sequence[Sequence[float]],
     x_list: Sequence[Sequence[float]],
@@ -606,155 +545,6 @@ def build_post_rise_centroid_series(
         post_y_list.append(y_arr[rise_idx:].tolist())
 
     return post_time_list, post_x_list, post_y_list
-
-
-def build_post_rise_x_components(
-    day: str,
-    time_list: Sequence[Sequence[float]],
-    corrected_x_list: Sequence[Sequence[float]],
-    rise_indices: Sequence[float],
-) -> Tuple[List[List[float]], List[List[float]], List[List[float]], List[List[float]]]:
-    center_x_list, _ = load_rotation_center_with_nan(day)
-    flag_has_center = len(center_x_list) > 0
-
-    n = min(len(time_list), len(corrected_x_list), len(rise_indices))
-    post_time_list: List[List[float]] = []
-    post_x_raw_list: List[List[float]] = []
-    post_x_center_list: List[List[float]] = []
-    post_x_corr_list: List[List[float]] = []
-
-    for i in range(n):
-        time_arr = np.asarray(time_list[i], dtype=float)
-        x_corr_arr = np.asarray(corrected_x_list[i], dtype=float)
-
-        if flag_has_center and i < len(center_x_list):
-            x_center_arr = np.asarray(center_x_list[i], dtype=float)
-            m = min(len(time_arr), len(x_corr_arr), len(x_center_arr))
-            time_arr = time_arr[:m]
-            x_corr_arr = x_corr_arr[:m]
-            x_center_arr = x_center_arr[:m]
-            x_raw_arr = x_corr_arr + x_center_arr
-        else:
-            m = min(len(time_arr), len(x_corr_arr))
-            time_arr = time_arr[:m]
-            x_corr_arr = x_corr_arr[:m]
-            x_center_arr = np.zeros(m, dtype=float)
-            x_raw_arr = x_corr_arr.copy()
-
-        if m <= 0:
-            post_time_list.append([])
-            post_x_raw_list.append([])
-            post_x_center_list.append([])
-            post_x_corr_list.append([])
-            continue
-
-        rise_idx = _normalize_rise_index(float(rise_indices[i]), m)
-        post_time_list.append(time_arr[rise_idx:].tolist())
-        post_x_raw_list.append(x_raw_arr[rise_idx:].tolist())
-        post_x_center_list.append(x_center_arr[rise_idx:].tolist())
-        post_x_corr_list.append(x_corr_arr[rise_idx:].tolist())
-
-    return post_time_list, post_x_raw_list, post_x_center_list, post_x_corr_list
-
-
-def build_post_rise_coordinate_components(
-    day: str,
-    time_list: Sequence[Sequence[float]],
-    corrected_x_list: Sequence[Sequence[float]],
-    corrected_y_list: Sequence[Sequence[float]],
-    rise_indices: Sequence[float],
-) -> Tuple[
-    List[List[float]],
-    List[List[float]],
-    List[List[float]],
-    List[List[float]],
-    List[List[float]],
-    List[List[float]],
-    List[List[float]],
-]:
-    center_x_list, center_y_list = load_rotation_center_with_nan(day)
-    flag_has_center = (len(center_x_list) > 0) and (len(center_y_list) > 0)
-
-    n = min(len(time_list), len(corrected_x_list), len(corrected_y_list), len(rise_indices))
-    post_time_list: List[List[float]] = []
-    post_x_before_list: List[List[float]] = []
-    post_y_before_list: List[List[float]] = []
-    post_x_center_list: List[List[float]] = []
-    post_y_center_list: List[List[float]] = []
-    post_x_corr_list: List[List[float]] = []
-    post_y_corr_list: List[List[float]] = []
-
-    for i in range(n):
-        time_arr = np.asarray(time_list[i], dtype=float)
-        x_corr_arr = np.asarray(corrected_x_list[i], dtype=float)
-        y_corr_arr = np.asarray(corrected_y_list[i], dtype=float)
-
-        if flag_has_center and (i < len(center_x_list)) and (i < len(center_y_list)):
-            x_center_arr = np.asarray(center_x_list[i], dtype=float)
-            y_center_arr = np.asarray(center_y_list[i], dtype=float)
-            m = min(len(time_arr), len(x_corr_arr), len(y_corr_arr), len(x_center_arr), len(y_center_arr))
-            time_arr = time_arr[:m]
-            x_corr_arr = x_corr_arr[:m]
-            y_corr_arr = y_corr_arr[:m]
-            x_center_arr = x_center_arr[:m]
-            y_center_arr = y_center_arr[:m]
-            if np.isfinite(x_center_arr).any():
-                x_center_mean = float(np.nanmean(x_center_arr))
-            elif np.isfinite(x_corr_arr).any():
-                x_center_mean = float(np.nanmean(x_corr_arr))
-            else:
-                x_center_mean = 0.0
-            if np.isfinite(y_center_arr).any():
-                y_center_mean = float(np.nanmean(y_center_arr))
-            elif np.isfinite(y_corr_arr).any():
-                y_center_mean = float(np.nanmean(y_corr_arr))
-            else:
-                y_center_mean = 0.0
-        else:
-            m = min(len(time_arr), len(x_corr_arr), len(y_corr_arr))
-            time_arr = time_arr[:m]
-            x_corr_arr = x_corr_arr[:m]
-            y_corr_arr = y_corr_arr[:m]
-
-            # Temporary fallback requested by user: use sample-wide constant center.
-            x_center_mean = float(np.nanmean(x_corr_arr)) if np.isfinite(x_corr_arr).any() else 0.0
-            y_center_mean = float(np.nanmean(y_corr_arr)) if np.isfinite(y_corr_arr).any() else 0.0
-
-        # Temporary behavior: always embed rotation center as a constant series.
-        x_center_arr = np.full(m, x_center_mean, dtype=float)
-        y_center_arr = np.full(m, y_center_mean, dtype=float)
-
-        if m <= 0:
-            post_time_list.append([])
-            post_x_before_list.append([])
-            post_y_before_list.append([])
-            post_x_center_list.append([])
-            post_y_center_list.append([])
-            post_x_corr_list.append([])
-            post_y_corr_list.append([])
-            continue
-
-        x_before_arr = x_corr_arr + x_center_arr
-        y_before_arr = y_corr_arr + y_center_arr
-        rise_idx = _normalize_rise_index(float(rise_indices[i]), m)
-
-        post_time_list.append(time_arr[rise_idx:].tolist())
-        post_x_before_list.append(x_before_arr[rise_idx:].tolist())
-        post_y_before_list.append(y_before_arr[rise_idx:].tolist())
-        post_x_center_list.append(x_center_arr[rise_idx:].tolist())
-        post_y_center_list.append(y_center_arr[rise_idx:].tolist())
-        post_x_corr_list.append(x_corr_arr[rise_idx:].tolist())
-        post_y_corr_list.append(y_corr_arr[rise_idx:].tolist())
-
-    return (
-        post_time_list,
-        post_x_before_list,
-        post_y_before_list,
-        post_x_center_list,
-        post_y_center_list,
-        post_x_corr_list,
-        post_y_corr_list,
-    )
 
 
 def _write_temp_config(config_path: str, sample_num: int) -> None:
@@ -1430,48 +1220,6 @@ def save_segment_center_coordinate(
     pd.DataFrame(data).to_csv(f"{save_dir}/center_coordinate.csv", index=False)
 
 
-def build_pre_rise_raw_centroid_series(
-    day: str,
-    time_list: Sequence[Sequence[float]],
-    corrected_x_list: Sequence[Sequence[float]],
-    corrected_y_list: Sequence[Sequence[float]],
-    rise_indices: Sequence[float],
-) -> Tuple[List[List[float]], List[List[float]], List[List[float]]]:
-    center_x_list, center_y_list = load_rotation_center_with_nan(day)
-    n = min(len(time_list), len(corrected_x_list), len(corrected_y_list), len(rise_indices))
-    pre_time_list: List[List[float]] = []
-    pre_x_raw_list: List[List[float]] = []
-    pre_y_raw_list: List[List[float]] = []
-
-    for i in range(n):
-        t = np.asarray(time_list[i], dtype=float)
-        x_corr = np.asarray(corrected_x_list[i], dtype=float)
-        y_corr = np.asarray(corrected_y_list[i], dtype=float)
-        if i < len(center_x_list) and i < len(center_y_list):
-            cx = np.asarray(center_x_list[i], dtype=float)
-            cy = np.asarray(center_y_list[i], dtype=float)
-            m = min(len(t), len(x_corr), len(y_corr), len(cx), len(cy))
-            cx = cx[:m]
-            cy = cy[:m]
-            cx = np.where(np.isfinite(cx), cx, np.nanmean(cx) if np.isfinite(cx).any() else 0.0)
-            cy = np.where(np.isfinite(cy), cy, np.nanmean(cy) if np.isfinite(cy).any() else 0.0)
-        else:
-            m = min(len(t), len(x_corr), len(y_corr))
-            cx = np.zeros(m, dtype=float)
-            cy = np.zeros(m, dtype=float)
-
-        t = t[:m]
-        x_corr = x_corr[:m]
-        y_corr = y_corr[:m]
-        rise_idx = _normalize_rise_index(float(rise_indices[i]), m)
-
-        pre_time_list.append(t[:rise_idx].tolist())
-        pre_x_raw_list.append((x_corr[:rise_idx] + cx[:rise_idx]).tolist())
-        pre_y_raw_list.append((y_corr[:rise_idx] + cy[:rise_idx]).tolist())
-
-    return pre_time_list, pre_x_raw_list, pre_y_raw_list
-
-
 def subtract_center_from_raw(
     x_raw_list: Sequence[Sequence[float]],
     y_raw_list: Sequence[Sequence[float]],
@@ -1890,67 +1638,6 @@ def ensure_time_list(day: str) -> List[List[float]]:
 
         save2csv.save_time_list(time_list_all, day)
         return time_list_all
-
-
-def _extract_centroid_from_frame(frame) -> Tuple[float, float]:
-    img_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    _, img_binary = cv2.threshold(img_gray, 120, 255, cv2.THRESH_BINARY)
-    contours, _ = cv2.findContours(img_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if len(contours) == 0:
-        return np.nan, np.nan
-    max_contour = max(contours, key=cv2.contourArea)
-    if max_contour is None or max_contour.size == 0:
-        return np.nan, np.nan
-    mean_x = np.mean(max_contour[:, 0, 0].astype(float))
-    mean_y = np.mean(max_contour[:, 0, 1].astype(float))
-    return float(mean_x), float(mean_y)
-
-
-def generate_centroid_coordinate_simple(day: str) -> str:
-    save_path = f"{param.save_dir_bef}/{day}/centroid_coordinate.csv"
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
-
-    # This is a fallback for the standard extractor, not a different input
-    # policy.  In particular, TIFF-log datasets must retain config order.
-    from utils.functions import input_data
-
-    avi_paths = input_data.get_ordered_avi_paths(day)
-
-    try:
-        px2um_x, px2um_y = param.get_px2um_config(day)
-    except Exception:
-        px2um_x, px2um_y = 1.0, 1.0
-
-    x_list: List[List[float]] = []
-    y_list: List[List[float]] = []
-    for avi_path in avi_paths:
-        cap = cv2.VideoCapture(avi_path)
-        sample_x: List[float] = []
-        sample_y: List[float] = []
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
-            x, y = _extract_centroid_from_frame(frame)
-            if np.isfinite(x):
-                sample_x.append(float(x) * px2um_x)
-            else:
-                sample_x.append(np.nan)
-            if np.isfinite(y):
-                sample_y.append(float(y) * px2um_y)
-            else:
-                sample_y.append(np.nan)
-        cap.release()
-        x_list.append(sample_x)
-        y_list.append(sample_y)
-
-    data = {}
-    for i in range(len(x_list)):
-        data[f"x_{i+1}"] = pd.Series(x_list[i], dtype="float64")
-        data[f"y_{i+1}"] = pd.Series(y_list[i], dtype="float64")
-    pd.DataFrame(data).to_csv(save_path, index=False)
-    input_data.save_centroid_coordinate_sample_map(day)
-    return save_path
 
 
 def align_coordinate_series_to_time(
