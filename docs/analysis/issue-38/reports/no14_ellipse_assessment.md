@@ -13,7 +13,7 @@
 原AVI `2026_0802_182430.avi` の2049–16384フレーム、14,336点の保存済み重心を用いる。全手法の窓幅は現行の5.080367秒。窓は約0.501秒間隔の134個で大きく重なり、独立試行ではない。比較表には原フレーム両端・点数・時刻も記録し、窓を変えて手法を有利にしない。Rはx/yの5–95%幅の大きい方の半分。
 
 ```sh
-python3 scripts/diagnostics/issue39_no14_method_comparison.py
+python3 scripts/diagnostics/issue38_no14_method_comparison.py
 python3 scripts/diagnostics/issue38_no14_ellipse_assessment.py
 ```
 

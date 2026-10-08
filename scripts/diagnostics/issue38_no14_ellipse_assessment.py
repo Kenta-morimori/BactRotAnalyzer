@@ -14,21 +14,19 @@ import numpy as np
 import pandas as pd
 import tifffile
 from issue38_no14_image_trajectory import (
-    WINDOWS,
     read_window_images,
     select_window,
     selected_positions,
 )
-from issue38_paths import FIGURES, TABLES, ensure_output_dirs
+from issue38_paths import FIGURES
+from issue38_paths import METHOD_COLORS as COLORS
+from issue38_paths import TABLES, WINDOWS, ensure_output_dirs
 
-from utils.functions.rotation_center_candidates import (
-    ELLIPSE_METHODS,
-    ellipse_distance,
-    estimate_center,
-    robust_radius,
+from utils.functions.rotation_center_candidates import ELLIPSE_METHODS, estimate_center
+from utils.functions.rotation_center_diagnostics import (
+    ellipse_points,
+    geometric_sensitivity,
 )
-
-COLORS = dict(zip(ELLIPSE_METHODS, ("#0072b2", "#009e73", "#d55e00")))
 
 
 def sensitivity_table():
@@ -38,56 +36,16 @@ def sensitivity_table():
     for index, window in enumerate(windows.itertuples()):
         selected = data.loc[(data.time_sec >= window.start_time_sec) & (data.time_sec < window.end_time_sec)]
         points = selected[["x_um", "y_um"]].to_numpy(float)
-        radius = robust_radius(points)
-        baseline = estimate_center(points, "geometric_ellipse")
-        for initial in ("ellipse", "median"):
-            for scale in (1.0, 2.0):
-                result = (
-                    baseline
-                    if (initial, scale) == ("ellipse", 1.0)
-                    else estimate_center(points, "geometric_ellipse", initial_center=initial, bounds_scale=scale)
-                )
-                for budget, fit in [(80, result)] + (
-                    [
-                        (
-                            320,
-                            estimate_center(
-                                points, "geometric_ellipse", initial_center=initial, bounds_scale=scale, max_nfev=320
-                            ),
-                        )
-                    ]
-                    if result.converged is False
-                    else []
-                ):
-                    records.append(
-                        {
-                            "start_time_sec": window.start_time_sec,
-                            "end_time_sec": window.end_time_sec,
-                            "source_first_frame_1based": int(selected.source_frame_1based.iloc[0]),
-                            "source_last_frame_1based": int(selected.source_frame_1based.iloc[-1]),
-                            "n_input": fit.n_input,
-                            "n_used": fit.n_used,
-                            "initial_center": initial,
-                            "bounds_scale": scale,
-                            "max_nfev": budget,
-                            "status": fit.status,
-                            "converged": fit.converged,
-                            "boundary_reached": fit.boundary_reached,
-                            "center_x_um": fit.center[0] if fit.center is not None else np.nan,
-                            "center_y_um": fit.center[1] if fit.center is not None else np.nan,
-                            "center_difference_from_baseline_R": (
-                                np.linalg.norm(fit.center - baseline.center) / radius
-                                if fit.center is not None and baseline.center is not None
-                                else np.nan
-                            ),
-                            "fit_residual_p95_R": (
-                                np.quantile(np.abs(ellipse_distance(points, fit.ellipse)), 0.95) / radius
-                                if fit.ellipse is not None
-                                else np.nan
-                            ),
-                            "axis_ratio": (max(fit.axes) / min(fit.axes) if fit.axes is not None else np.nan),
-                        }
-                    )
+        for record in geometric_sensitivity(points):
+            records.append(
+                {
+                    "start_time_sec": window.start_time_sec,
+                    "end_time_sec": window.end_time_sec,
+                    "source_first_frame_1based": int(selected.source_frame_1based.iloc[0]),
+                    "source_last_frame_1based": int(selected.source_frame_1based.iloc[-1]),
+                    **record,
+                }
+            )
         if index % 20 == 0:
             print(f"sensitivity windows {index + 1}/{len(windows)}", flush=True)
     return pd.DataFrame(records)
@@ -119,11 +77,7 @@ def representative_figures():
                     axis.scatter(frame.x_px.iloc[indices], frame.y_px.iloc[indices], s=4, color=color, alpha=0.4)
                 for method, result in fits.items():
                     if result.ellipse is not None:
-                        phase = np.linspace(0, 2 * np.pi, 720)
-                        curve = (
-                            result.center
-                            + (np.column_stack((np.cos(phase), np.sin(phase))) * result.axes) @ result.ellipse.basis.T
-                        )
+                        curve = ellipse_points(result.ellipse, count=720, endpoint=True)
                         axis.plot(
                             curve[:, 0] / 0.02,
                             curve[:, 1] / 0.02,

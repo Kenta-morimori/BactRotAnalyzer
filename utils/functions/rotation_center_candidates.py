@@ -14,7 +14,7 @@ from scipy.optimize import least_squares
 from scipy.spatial import cKDTree
 
 ELLIPSE_METHODS = ("legacy", "ellipse_constrained", "geometric_ellipse")
-METHODS = ELLIPSE_METHODS + ("centered_algebraic", "robust_circle")
+METHODS = ("legacy", "centered_algebraic", "ellipse_constrained", "geometric_ellipse", "robust_circle")
 
 
 @dataclass

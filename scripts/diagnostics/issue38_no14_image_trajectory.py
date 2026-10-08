@@ -7,34 +7,34 @@ issue38_no14_center_evaluation.py. Outputs only diagnostic files.
 from __future__ import annotations
 
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 os.environ.setdefault("MPLBACKEND", "Agg")
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import cv2  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 import tifffile  # noqa: E402
-from issue38_center_diagnostics import ellipse_points, fit_ellipse  # noqa: E402
-from issue38_no14_center_timeseries import param  # noqa: E402
-from issue38_paths import FIGURES, TABLES, ensure_output_dirs
+from issue38_paths import FIGURES, TABLES, WINDOWS, ensure_output_dirs
 from PIL import Image  # noqa: E402
+
+from utils import param  # noqa: E402
+from utils.functions.image_diagnostics import measure_contour
+from utils.functions.rotation_center_diagnostics import (  # noqa: E402
+    ellipse_points,
+    fit_legacy_ellipse,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 AVI = ROOT / "data/repellent-response/23/2026_0802_182430.avi"
 TIFF = AVI.with_suffix(".tif")
 TIFF_LOG_DIR = AVI.parent / "tiff_data" / AVI.stem
-WINDOWS = {
-    "initial_invalid": 15.781025,
-    "early_displaced": 20.789,
-    "rise_crossing": 38.318,
-    "later_reference": 64.862,
-    "terminal_hold": 82.500132,
-}
 BURST_SPACING_FRAMES = 8
 BURST_LENGTH = 5
 BURST_FRACTIONS = (0.10, 0.50, 0.90)
@@ -109,24 +109,13 @@ def read_window_images(
                 raise AssertionError(f"TIFF timestamp mismatch at frame {item.source_frame_1based}")
         else:
             time_error = np.nan
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        _, binary = cv2.threshold(gray, 120, 255, cv2.THRESH_BINARY)
-        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if contours:
-            contour = max(contours, key=cv2.contourArea)
-            if len(contour) >= 5:
-                measured_x = float(np.mean(contour[:, 0, 0]))
-                measured_y = float(np.mean(contour[:, 0, 1]))
-            else:
-                measured_x = measured_y = np.nan
-            area = float(cv2.contourArea(contour))
-            perimeter = float(cv2.arcLength(contour, True))
-            circularity = 4 * np.pi * area / perimeter**2 if perimeter > 0 else np.nan
-            x0, y0, width, height = cv2.boundingRect(contour)
-            border_touch = x0 == 0 or y0 == 0 or x0 + width >= gray.shape[1] or y0 + height >= gray.shape[0]
+        measured = measure_contour(image)
+        contour = measured.contour
+        if contour is not None and len(contour) >= 5:
+            measured_x = float(np.mean(contour[:, 0, 0]))
+            measured_y = float(np.mean(contour[:, 0, 1]))
         else:
-            measured_x = measured_y = area = circularity = np.nan
-            border_touch = False
+            measured_x = measured_y = np.nan
         error = float(np.hypot(measured_x - item.x_px, measured_y - item.y_px))
         if bool(item.detected) != bool(np.isfinite(measured_x)):
             raise AssertionError(f"Detection status mismatch at frame {item.source_frame_1based}")
@@ -149,10 +138,10 @@ def read_window_images(
                 "measured_x_px": measured_x,
                 "measured_y_px": measured_y,
                 "centroid_error_px": error,
-                "contour_count": len(contours),
-                "max_contour_area_px2": area,
-                "max_contour_circularity": circularity,
-                "border_touch": border_touch,
+                "contour_count": measured.count,
+                "max_contour_area_px2": measured.area,
+                "max_contour_circularity": measured.circularity,
+                "border_touch": measured.border_touch,
             }
         )
     return pd.DataFrame(rows), image_map
@@ -268,7 +257,7 @@ def image_trajectory_figure(
             fontsize=7,
         )
     if row is not None and bool(row.fit_valid):
-        fit = fit_ellipse(frame.x_um.to_numpy(float), frame.y_um.to_numpy(float))
+        fit = fit_legacy_ellipse(frame[["x_um", "y_um"]].to_numpy(float))
         if fit is None:
             raise AssertionError(f"Metrics mark {name} valid, but ellipse is invalid")
         curve = ellipse_points(fit)

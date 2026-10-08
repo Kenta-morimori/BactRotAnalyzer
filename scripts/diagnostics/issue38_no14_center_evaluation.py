@@ -16,24 +16,22 @@ import cv2  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-from issue38_center_diagnostics import (  # noqa: E402
-    angular_coverage,
-    ellipse_distance,
-    ellipse_points,
-    fit_ellipse,
-)
-from issue38_no14_center_timeseries import param, window_width  # noqa: E402
+from issue38_no14_center_timeseries import window_width
 from issue38_paths import FIGURES, TABLES, ensure_output_dirs
 from scipy.ndimage import gaussian_filter1d  # noqa: E402
 from scipy.optimize import least_squares  # noqa: E402
 
+from utils import param  # noqa: E402
+from utils.functions.rotation_center_candidates import robust_radius
+from utils.functions.rotation_center_diagnostics import (  # noqa: E402
+    angular_coverage,
+    ellipse_points,
+    fit_legacy_ellipse,
+    sampled_ellipse_distance,
+)
+
 ROOT = Path(__file__).resolve().parents[2]
 STRIDE_FRAMES = 100  # About 0.5 s; production center itself remains frame by frame.
-
-
-def robust_radius(x: np.ndarray, y: np.ndarray) -> float:
-    """Half the larger 5–95% coordinate span, independent of fitted center."""
-    return 0.5 * max(np.ptp(np.quantile(x, [0.05, 0.95])), np.ptp(np.quantile(y, [0.05, 0.95])))
 
 
 def fit_circle(points: np.ndarray, scale: float) -> tuple[np.ndarray, float, float]:
@@ -77,7 +75,7 @@ def evaluate(data: pd.DataFrame) -> pd.DataFrame:
         points = xy[start:end]
         finite = np.isfinite(points).all(axis=1)
         points = points[finite]
-        radius = robust_radius(points[:, 0], points[:, 1]) if len(points) >= 30 else np.nan
+        radius = robust_radius(points) if len(points) >= 30 else np.nan
         row = {
             "center_index_0based": i,
             "source_frame_1based": int(data.source_frame_1based.iloc[i]),
@@ -94,33 +92,33 @@ def evaluate(data: pd.DataFrame) -> pd.DataFrame:
         if len(points) < 30 or not np.isfinite(radius) or radius <= 0:
             rows.append(row)
             continue
-        fit = fit_ellipse(points[:, 0], points[:, 1])
+        fit = fit_legacy_ellipse(points)
         if fit is None:
             rows.append(row)
             continue
         center = fit.center
-        residual = ellipse_distance(points[:, 0], points[:, 1], fit)
+        residual = sampled_ellipse_distance(points, fit)
         circle_center, circle_radius, circle_p95 = fit_circle(points, radius)
         smooth = gaussian_filter1d(points, sigma=3, axis=0)
         phase = np.unwrap(np.arctan2(smooth[:, 1] - center[1], smooth[:, 0] - center[0]))
         phase_steps = np.diff(phase)
         phase_path = float(np.sum(np.abs(phase_steps)))
-        coverage, max_gap = angular_coverage(points[:, 0], points[:, 1], center)
+        coverage, max_gap = angular_coverage(points, center)
         block_centers = []
         block_coverage = []
         block_residual = []
         for block in np.array_split(points, 4):
-            part = fit_ellipse(block[:, 0], block[:, 1])
+            part = fit_legacy_ellipse(block)
             if part is None:
                 continue
             block_centers.append(part.center)
-            block_coverage.append(angular_coverage(block[:, 0], block[:, 1], part.center)[0])
-            block_residual.append(np.quantile(ellipse_distance(block[:, 0], block[:, 1], part), 0.95) / radius)
+            block_coverage.append(angular_coverage(block, part.center)[0])
+            block_residual.append(np.quantile(sampled_ellipse_distance(block, part), 0.95) / radius)
         jackknife = []
         for omit in np.array_split(np.arange(len(points)), 4):
             keep = np.ones(len(points), dtype=bool)
             keep[omit] = False
-            part = fit_ellipse(points[keep, 0], points[keep, 1])
+            part = fit_legacy_ellipse(points[keep])
             if part is not None:
                 jackknife.append(part.center)
         bc = np.asarray(block_centers)
@@ -245,7 +243,7 @@ def plot_examples(data: pd.DataFrame, rows: pd.DataFrame, times: list[float]) ->
             rasterized=True,
         )
         if row.fit_valid:
-            fit = fit_ellipse(points[:, 0], points[:, 1])
+            fit = fit_legacy_ellipse(points)
             if fit is not None:
                 ellipse = ellipse_points(fit)
                 axis.plot(ellipse[:, 0], ellipse[:, 1], color="#0072b2", lw=1.2, label="window fit")
@@ -260,7 +258,7 @@ def plot_examples(data: pd.DataFrame, rows: pd.DataFrame, times: list[float]) ->
             label="corrected center",
         )
         for quarter, block in enumerate(np.array_split(points, 4), start=1):
-            part = fit_ellipse(block[:, 0], block[:, 1])
+            part = fit_legacy_ellipse(block)
             if part is not None:
                 axis.plot(part.center[0], part.center[1], ".", color="#6a3d9a", ms=5)
                 axis.annotate(

@@ -13,88 +13,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-from issue38_center_diagnostics import angular_coverage  # noqa: E402
-from issue38_no14_center_evaluation import robust_radius  # noqa: E402
 from issue38_paths import FIGURES, TABLES, ensure_output_dirs
-from scipy.signal import csd, welch  # noqa: E402
 
-from utils.functions.rotation_center_candidates import (  # noqa: E402
-    Ellipse,
-    ellipse_distance,
-    estimate_center,
-)
-
-METHODS = ("legacy", "centered_algebraic", "ellipse_constrained", "geometric_ellipse", "robust_circle")
-
-
-def distance(points: np.ndarray, ellipse: Ellipse) -> np.ndarray:
-    return ellipse_distance(points, ellipse)
-
-
-def estimate(points: np.ndarray, method: str) -> tuple[Ellipse | None, bool]:
-    result = estimate_center(points, method)
-    return result.ellipse, not result.computationally_ok
-
-
-def evaluate(points: np.ndarray, method: str) -> dict:
-    radius = robust_radius(*points.T)
-    result = estimate_center(points, method)
-    fit = result.ellipse
-    bounded = result.boundary_reached or result.converged is False
-    row = {
-        "method": method,
-        "ellipse_returned": fit is not None,
-        "bound_or_nonconvergence": bounded,
-        "radius_um": radius,
-        "status": result.status,
-        "computationally_ok": result.computationally_ok,
-        "converged": result.converged,
-        "boundary_reached": result.boundary_reached,
-        "n_input": result.n_input,
-        "n_used": result.n_used,
-        "scientific_assessment": "not_assessed",
-    }
-    freq, xx = welch(points[:, 0], fs=200, nperseg=min(256, len(points)))
-    _, yy = welch(points[:, 1], fs=200, nperseg=min(256, len(points)))
-    _, cross = csd(points[:, 0], points[:, 1], fs=200, nperseg=min(256, len(points)))
-    band = (freq >= 2) & (freq <= 80)
-    peak = np.flatnonzero(band)[np.argmax((xx + yy)[band])]
-    row["rotation_quadrature_score"] = abs(cross[peak].imag) / np.sqrt(xx[peak] * yy[peak])
-    row["peak_energy_fraction"] = np.sum((xx + yy)[max(1, peak - 1) : peak + 2]) / np.sum((xx + yy)[band])
-    if fit is None:
-        return row
-    row.update(
-        center_x_um=fit.center[0],
-        center_y_um=fit.center[1],
-        fit_residual_p95_R=np.quantile(np.abs(distance(points, fit)), 0.95) / radius,
-        axis_ratio=max(fit.axes) / min(fit.axes),
-        major_axis_R=max(fit.axes) / radius,
-        coverage_deg=angular_coverage(points[:, 0], points[:, 1], fit.center)[0],
-    )
-    centers, heldout, bounds, ok_counts = [], [], [], []
-    for omit in np.array_split(np.arange(len(points)), 4):
-        keep = np.ones(len(points), bool)
-        keep[omit] = False
-        part_result = estimate_center(points[keep], method)
-        part, hit = part_result.ellipse, part_result.boundary_reached or part_result.converged is False
-        ok_counts.append(part_result.computationally_ok)
-        if part is not None:
-            centers.append(part.center)
-            heldout.extend(np.abs(distance(points[omit], part)).tolist())
-            bounds.append(hit)
-    row["block_cv_valid"] = len(centers)  # Geometry returned, including flagged trials.
-    row["block_cv_computationally_ok"] = sum(ok_counts)
-    row["block_cv_bound_count"] = sum(bounds)
-    row["block_cv_p95_R"] = np.quantile(heldout, 0.95) / radius if heldout else np.nan
-    row["center_max_shift_R"] = (
-        np.max(np.linalg.norm(np.asarray(centers) - fit.center, axis=1)) / radius if centers else np.nan
-    )
-    # Origin perturbation is a diagnostic of the algebraic objective, not ground truth.
-    shifted, _ = estimate(points + np.array([2.0, -1.0]), method)
-    row["origin_shift_error_R"] = (
-        np.linalg.norm(shifted.center - np.array([2.0, -1.0]) - fit.center) / radius if shifted else np.nan
-    )
-    return row
+from utils.functions.rotation_center_candidates import METHODS
+from utils.functions.rotation_center_diagnostics import evaluate_center
 
 
 def real_windows() -> pd.DataFrame:
@@ -110,7 +32,7 @@ def real_windows() -> pd.DataFrame:
     for i, window in enumerate(windows.itertuples()):
         points = xy[(t >= window.start_time_sec) & (t < window.end_time_sec)]
         for method in METHODS:
-            row = evaluate(points, method)
+            row = evaluate_center(points, method, sample_rate_hz=200)
             frames = data.loc[(t >= window.start_time_sec) & (t < window.end_time_sec), "source_frame_1based"]
             row.update(
                 start_time_sec=window.start_time_sec,
@@ -150,7 +72,7 @@ def synthetic_trials(methods: tuple[str, ...] = METHODS) -> pd.DataFrame:
             noise = 0.08 if scenario.startswith("thick_") else (0.008 if scenario == "stopped_cloud" else 0.02)
             points += rng.normal(0, noise, points.shape)
             for method in methods:
-                row = evaluate(points, method)
+                row = evaluate_center(points, method, sample_rate_hz=200)
                 row.update(scenario=scenario, trial=trial)
                 if row["ellipse_returned"]:
                     row["true_center_error_R"] = (

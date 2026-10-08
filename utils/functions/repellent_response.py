@@ -403,99 +403,6 @@ def _normalize_rise_index(rise_index: float, max_len: int) -> int:
     return max(0, min(max_len, rise_idx))
 
 
-def build_pre_rise_fluctuation_inputs(
-    time_list: Sequence[Sequence[float]],
-    angular_velocity_list: Sequence[Sequence[float]],
-    rise_indices: Sequence[float],
-) -> Tuple[List[List[float]], List[List[float]]]:
-    n = min(len(time_list), len(angular_velocity_list), len(rise_indices))
-    pre_time_list: List[List[float]] = []
-    pre_angular_velocity_list: List[List[float]] = []
-
-    for i in range(n):
-        time_arr = np.asarray(time_list[i], dtype=float)
-        av_arr = np.asarray(angular_velocity_list[i], dtype=float)
-        max_frame_len = min(time_arr.size, av_arr.size + 1)
-        if max_frame_len <= 0:
-            pre_time_list.append([])
-            pre_angular_velocity_list.append([])
-            continue
-
-        time_arr = time_arr[:max_frame_len]
-        av_arr = av_arr[: max_frame_len - 1]
-
-        rise_idx = _normalize_rise_index(float(rise_indices[i]), max_frame_len)
-        pre_time = time_arr[:rise_idx]
-        pre_av = av_arr[: max(0, rise_idx - 1)]
-
-        pre_time_list.append(pre_time.tolist())
-        pre_angular_velocity_list.append(pre_av.tolist())
-
-    return pre_time_list, pre_angular_velocity_list
-
-
-def build_pre_rise_centroid_series(
-    time_list: Sequence[Sequence[float]],
-    x_list: Sequence[Sequence[float]],
-    y_list: Sequence[Sequence[float]],
-    rise_indices: Sequence[float],
-) -> Tuple[List[List[float]], List[List[float]], List[List[float]]]:
-    n = min(len(time_list), len(x_list), len(y_list), len(rise_indices))
-    pre_time_list: List[List[float]] = []
-    pre_x_list: List[List[float]] = []
-    pre_y_list: List[List[float]] = []
-
-    for i in range(n):
-        time_arr = np.asarray(time_list[i], dtype=float)
-        x_arr = np.asarray(x_list[i], dtype=float)
-        y_arr = np.asarray(y_list[i], dtype=float)
-        max_len = min(time_arr.size, x_arr.size, y_arr.size)
-
-        if max_len <= 0:
-            pre_time_list.append([])
-            pre_x_list.append([])
-            pre_y_list.append([])
-            continue
-
-        time_arr = time_arr[:max_len]
-        x_arr = x_arr[:max_len]
-        y_arr = y_arr[:max_len]
-        rise_idx = _normalize_rise_index(float(rise_indices[i]), max_len)
-
-        pre_time_list.append(time_arr[:rise_idx].tolist())
-        pre_x_list.append(x_arr[:rise_idx].tolist())
-        pre_y_list.append(y_arr[:rise_idx].tolist())
-
-    return pre_time_list, pre_x_list, pre_y_list
-
-
-def load_rotation_center_with_nan(day: str) -> Tuple[List[List[float]], List[List[float]]]:
-    candidate_paths = [
-        f"{param.save_dir_bef}/{day}/center_coordinate/center_coordinate.csv",
-        f"{param.save_dir_bef}/{day}/center_coordinate/bef_correction/center_coordinate.csv",
-        f"{param.save_dir_bef}/{day}/center_coordinate/bef_correction/center_coordinate_bef_correct.csv",
-    ]
-
-    csv_path = ""
-    for path in candidate_paths:
-        if os.path.isfile(path):
-            csv_path = path
-            break
-    if csv_path == "":
-        return [], []
-
-    df = pd.read_csv(csv_path)
-    x_list: List[List[float]] = []
-    y_list: List[List[float]] = []
-    for col_name in df.columns.tolist():
-        col_arr = pd.to_numeric(df[col_name], errors="coerce").to_numpy(dtype=float)
-        if col_name.endswith("_x"):
-            x_list.append(col_arr.tolist())
-        elif col_name.endswith("_y"):
-            y_list.append(col_arr.tolist())
-    return x_list, y_list
-
-
 def _fill_center_nan_with_previous(values: Sequence[float]) -> np.ndarray:
     arr = np.asarray(values, dtype=float).copy()
     if arr.size == 0:
@@ -510,41 +417,6 @@ def _fill_center_nan_with_previous(values: Sequence[float]) -> np.ndarray:
         if not np.isfinite(arr[i]):
             arr[i] = arr[i - 1]
     return arr
-
-
-def build_post_rise_centroid_series(
-    time_list: Sequence[Sequence[float]],
-    x_list: Sequence[Sequence[float]],
-    y_list: Sequence[Sequence[float]],
-    rise_indices: Sequence[float],
-) -> Tuple[List[List[float]], List[List[float]], List[List[float]]]:
-    n = min(len(time_list), len(x_list), len(y_list), len(rise_indices))
-    post_time_list: List[List[float]] = []
-    post_x_list: List[List[float]] = []
-    post_y_list: List[List[float]] = []
-
-    for i in range(n):
-        time_arr = np.asarray(time_list[i], dtype=float)
-        x_arr = np.asarray(x_list[i], dtype=float)
-        y_arr = np.asarray(y_list[i], dtype=float)
-        max_len = min(time_arr.size, x_arr.size, y_arr.size)
-
-        if max_len <= 0:
-            post_time_list.append([])
-            post_x_list.append([])
-            post_y_list.append([])
-            continue
-
-        time_arr = time_arr[:max_len]
-        x_arr = x_arr[:max_len]
-        y_arr = y_arr[:max_len]
-        rise_idx = _normalize_rise_index(float(rise_indices[i]), max_len)
-
-        post_time_list.append(time_arr[rise_idx:].tolist())
-        post_x_list.append(x_arr[rise_idx:].tolist())
-        post_y_list.append(y_arr[rise_idx:].tolist())
-
-    return post_time_list, post_x_list, post_y_list
 
 
 def _write_temp_config(config_path: str, sample_num: int) -> None:
@@ -1640,29 +1512,6 @@ def ensure_time_list(day: str) -> List[List[float]]:
         return time_list_all
 
 
-def align_coordinate_series_to_time(
-    x_list: Sequence[Sequence[float]],
-    y_list: Sequence[Sequence[float]],
-    time_list: Sequence[Sequence[float]],
-) -> Tuple[List[List[float]], List[List[float]]]:
-    n = min(len(x_list), len(y_list), len(time_list))
-    x_aligned: List[List[float]] = []
-    y_aligned: List[List[float]] = []
-    for i in range(n):
-        x_arr = np.asarray(x_list[i], dtype=float)
-        y_arr = np.asarray(y_list[i], dtype=float)
-        t_arr = np.asarray(time_list[i], dtype=float)
-        # Keep the frame axis intact.  Missing centroid detections are data
-        # gaps, not a reason to shift later coordinates onto another frame.
-        x_out = np.full(len(t_arr), np.nan, dtype=float)
-        y_out = np.full(len(t_arr), np.nan, dtype=float)
-        x_out[: min(len(x_arr), len(t_arr))] = x_arr[: len(x_out)]
-        y_out[: min(len(y_arr), len(t_arr))] = y_arr[: len(y_out)]
-        x_aligned.append(x_out.tolist())
-        y_aligned.append(y_out.tolist())
-    return x_aligned, y_aligned
-
-
 def apply_analysis_frame_ranges(
     time_list: Sequence[Sequence[float]],
     series_lists: Sequence[Sequence[Sequence[float]]],
@@ -1725,14 +1574,6 @@ def apply_analysis_frame_ranges(
             }
         )
     return selected_time, selected_series, range_rows
-
-
-def copy_center_coordinate_to_segment(day: str, segment_subdir: str) -> None:
-    src = f"{param.save_dir_bef}/{day}/center_coordinate"
-    if not os.path.isdir(src):
-        return
-    dst = f"{param.save_dir_bef}/{day}/repellent_response/{segment_subdir}/center_coordinate"
-    _copytree_replace(src, dst)
 
 
 def cleanup_legacy_repellent_outputs(day: str) -> None:

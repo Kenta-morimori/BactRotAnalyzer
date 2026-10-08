@@ -10,7 +10,7 @@
 
 ## 再実行とデータ対応
 
-リポジトリのルートで `python3 scripts/diagnostics/issue38_center_diagnostics.py` を実行する。必要な入力は `data/repellent-response/23` の AVI と `outputs/repellent-response/23` の既存 CSV。入力は変更しない。出力はこのディレクトリに保存する。代表動画との対応は `centroid_coordinate_sample_map.csv` と `avi_tiff_sample_map.csv` の両方で確認した。
+これは旧重心による履歴資料であり、最新の再実行対象ではない。暫定診断の実行コードは削除済みだが、コミット `301893d` の `scripts/diagnostics/issue38_center_diagnostics.py` で参照できる。当時はリポジトリのルートで同コードを実行した。必要な入力は `data/repellent-response/23` の AVI と `outputs/repellent-response/23` の既存 CSV。入力は変更しない。出力はこのディレクトリに保存する。代表動画との対応は `centroid_coordinate_sample_map.csv` と `avi_tiff_sample_map.csv` の両方で確認した。
 
 | No. | AVI | 使用した原動画フレーム（1 始まり） | TIFF 時刻 | 推定窓幅 |
 | --- | --- | ---: | ---: | ---: |
@@ -58,3 +58,5 @@ No.14 では保存中心が正しいとは確認できず、重心座標の生�
 3. No.14 の旧二系列差は、切り出し後に加算した旧中心の 2,048 フレームずれで説明できる。今後は原 AVI から一度だけ保存した重心を用い、旧系列と AVI 局所座標との位置差は別問題として扱う。
 
 **限界:** 中心の真値はない。窓が重なり、診断のしきい値は探索用である。AVI の局所画像と旧保存座標の位置合わせにも残差がある。旧系列間の差の直接原因は判明したが、旧系列と現 AVI の座標原点・軌跡形状の差、および中心の変化のうち実際の試料移動による部分は未確定である。
+
+補足の履歴表：[No.10画像登録](no10_avi_registration.csv)、[No.14画像登録](no14_avi_registration.csv)、[暫定分類の集計](assessment_counts.csv)。いずれも旧入力による結果で、最新の判定根拠には使わない。

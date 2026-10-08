@@ -16,32 +16,24 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from issue38_no14_image_trajectory import WINDOWS
-from issue38_paths import FIGURES, TABLES, ensure_output_dirs
+from issue38_paths import FIGURES
+from issue38_paths import METHOD_COLORS as COLORS
+from issue38_paths import TABLES, WINDOWS, ensure_output_dirs
 
+from utils.functions.image_diagnostics import measure_contour
 from utils.functions.rotation_center_candidates import (
     ELLIPSE_METHODS,
     ellipse_distance,
     estimate_center,
     robust_radius,
 )
+from utils.functions.rotation_center_diagnostics import (
+    block_cross_validation,
+    ellipse_points,
+    observed_extent,
+)
 
 SCALES = (0.25, 0.5, 1.0, 2.0)
-COLORS = dict(zip(ELLIPSE_METHODS, ("#0072b2", "#009e73", "#d55e00")))
-
-
-def observed_extent(points):
-    """Extent of sampled centroid cloud, not a physical rotation radius."""
-    quantiles = np.quantile(points, [0.05, 0.95], axis=0)
-    eigenvalues = np.linalg.eigvalsh(np.cov(points.T))
-    return {
-        "x_half_span_um": (quantiles[1, 0] - quantiles[0, 0]) / 2,
-        "y_half_span_um": (quantiles[1, 1] - quantiles[0, 1]) / 2,
-        "median_x_um": np.median(points[:, 0]),
-        "median_y_um": np.median(points[:, 1]),
-        "cloud_pca_ratio": np.sqrt(eigenvalues[-1] / eigenvalues[0]) if eigenvalues[0] > 0 else np.nan,
-        "cloud_R_um": robust_radius(points),
-    }
 
 
 def measure_images(data):
@@ -55,26 +47,15 @@ def measure_images(data):
             ok, image = cap.read()
             if not ok:
                 raise RuntimeError(f"Cannot read AVI {item.source_frame_1based}")
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-            _, binary = cv2.threshold(gray, 120, 255, cv2.THRESH_BINARY)
-            contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            area = circularity = np.nan
-            touches = False
-            if contours:
-                contour = max(contours, key=cv2.contourArea)
-                area = cv2.contourArea(contour)
-                perimeter = cv2.arcLength(contour, True)
-                circularity = 4 * np.pi * area / perimeter**2 if perimeter else np.nan
-                x, y, w, h = cv2.boundingRect(contour)
-                touches = x == 0 or y == 0 or x + w >= gray.shape[1] or y + h >= gray.shape[0]
+            measured = measure_contour(image)
             records.append(
                 {
                     "source_frame_1based": item.source_frame_1based,
                     "time_sec": item.time_sec,
-                    "contour_area_px2": area,
-                    "circularity": circularity,
-                    "contour_count": len(contours),
-                    "border_touch": touches,
+                    "contour_area_px2": measured.area,
+                    "circularity": measured.circularity,
+                    "contour_count": measured.count,
+                    "border_touch": measured.border_touch,
                 }
             )
     finally:
@@ -115,19 +96,13 @@ def fit_metrics(points, method):
         % 180,
         fit_p95_R=np.quantile(np.abs(ellipse_distance(points, result.ellipse)), 0.95) / radius,
     )
-    centers, residuals = [], []
-    for omitted in np.array_split(np.arange(len(points)), 4):
-        keep = np.ones(len(points), bool)
-        keep[omitted] = False
-        part = estimate_center(points[keep], method)
-        row["cv_computed_count"] += int(part.computationally_ok)
-        if part.ellipse is not None:
-            centers.append(part.center)
-            residuals.extend(np.abs(ellipse_distance(points[omitted], part.ellipse)))
-    row["cv_ellipse_count"] = len(centers)
-    if centers:
-        row["center_cv_max_R"] = np.max(np.linalg.norm(np.asarray(centers) - result.center, axis=1)) / radius
-        row["cv_p95_R"] = np.quantile(residuals, 0.95) / radius
+    cv = block_cross_validation(points, method, fit=result)
+    row.update(
+        cv_computed_count=cv["block_cv_computationally_ok"],
+        cv_ellipse_count=cv["block_cv_valid"],
+        center_cv_max_R=cv["center_max_shift_R"],
+        cv_p95_R=cv["block_cv_p95_R"],
+    )
     return row
 
 
@@ -279,12 +254,8 @@ def figures(fits, raw, morphology, data, windows):
                 for method in ELLIPSE_METHODS:
                     result = estimate_center(points, method)
                     if result.ellipse is not None:
-                        phase = np.linspace(0, 2 * np.pi, 720)
                         axis.plot(*(result.ellipse.center / 0.02), "+", color=COLORS[method], ms=10)
-                        curve = (
-                            result.center
-                            + (np.column_stack((np.cos(phase), np.sin(phase))) * result.axes) @ result.ellipse.basis.T
-                        )
+                        curve = ellipse_points(result.ellipse, count=720, endpoint=True)
                         axis.plot(
                             curve[:, 0] / 0.02,
                             curve[:, 1] / 0.02,

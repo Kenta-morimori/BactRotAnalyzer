@@ -64,15 +64,24 @@ python3 scripts/diagnostics/issue38_no14_centroid.py
 python3 scripts/diagnostics/issue38_no14_center_timeseries.py
 python3 scripts/diagnostics/issue38_no14_center_evaluation.py
 python3 scripts/diagnostics/issue38_no14_image_trajectory.py
-python3 scripts/diagnostics/issue39_no14_method_comparison.py
+python3 scripts/diagnostics/issue38_no14_method_comparison.py
 python3 scripts/diagnostics/issue38_no14_ellipse_assessment.py
 python3 scripts/diagnostics/issue38_no14_window_scale.py
 ```
 
-旧診断の `issue38_center_diagnostics.py` は、既定で `archive/legacy/` に出力する。旧README中の仮説や分類は履歴として残し、最新評価の採用条件とは扱わない。
+旧重心を復元する暫定診断の実行コードは整理時に削除した。必要な数値・図と当時のコードはGit履歴（`301893d`）に保存されている。旧README中の仮説や分類は履歴として残し、最新評価の採用条件とは扱わない。
 
 ## mergeの区切り
 
 分析の完了で判断する。支持できる代替法が得られない場合も理由と再現可能な比較を残せばmerge可能とし、最終選定は#39で行う。入力対応、比較図・表、再利用可能なAPI、計算確認、既存テスト・CI、引き継ぎ資料を確認する。候補が計算上成立したことを物理的な採用基準にしない。
 
 今回追加したmerge条件は、4幅の比較・元画像/点群サイズの記録・前向き窓の時間解釈・不完全窓の明示。最適な窓幅の決定は#39へ渡す。[確定した条件と未決定事項](reports/no14_window_width_assessment.md#merge引き継ぎ条件の確定)を参照。
+
+## コードの構成とreview前の整理
+
+- [候補推定API](../../../utils/functions/rotation_center_candidates.py)：データ名・窓幅に依存しない3楕円法と参考法。
+- [共通の軌道診断](../../../utils/functions/rotation_center_diagnostics.py)：角度被覆、中心に依存しない点群サイズ、時間ブロック除外、原点移動、初期値・探索範囲・反復上限の比較。`evaluate_center(xy_um, method, sample_rate_hz=...)`で別動画にも適用できる。欠測行を詰めず、欠測がある窓の周波数指標は未評価とする。以前のレポートの再現用には、離散楕円上の距離近似を明示して残す。
+- [共通の輪郭計測](../../../utils/functions/image_diagnostics.py)：面積・円形度・輪郭数・端接触。重心抽出は行わない。
+- `scripts/diagnostics/issue38_no14_*.py`：No.14の入力対応と図・表の再生成。評価の再現に必要な部分を残し、共通処理を呼ぶ。代表区間・描画色・出力先は`issue38_paths.py`へ集約。
+
+旧重心の復元による暫定診断の実行コードと、参照のない忌避応答解析の6関数を削除した。旧評価の資料は履歴として保存する。比較スクリプトの名前を`issue38_no14_method_comparison.py`へ統一した。今回の整理で採用法や判定条件は変更しない。
