@@ -34,7 +34,7 @@ def longest_continuous_segment(time, *series):
     split = np.zeros(len(indices), dtype=bool)
     if len(indices) > 1:
         diffs = np.diff(valid_time)
-        split[1:] = (~np.isfinite(diffs)) | (diffs <= 0)
+        split[1:] = (np.diff(indices) > 1) | (~np.isfinite(diffs)) | (diffs <= 0)
         if np.isfinite(nominal_dt):
             split[1:] |= diffs > nominal_dt * CONTINUITY_GAP_FACTOR
     starts = np.flatnonzero(split)
@@ -164,11 +164,11 @@ def fft_sd_list(df, day, flag_std=False):
     for i in range(sample_num):
         add_freq_list, add_Amp_list = [], []
         for j in range(len(width_time_list)):
-            if flag_std:
-                sd_list = df[f"No.{i + 1}_{width_time_list[j]}s_sd_std"].dropna().tolist()
-            else:
-                sd_list = df[f"No.{i + 1}_{width_time_list[j]}s_sd"].dropna().tolist()
-            freq, Amp = fft(sd_list, 1 / FrameRate_list[i])
+            key = f"No.{i + 1}_{width_time_list[j]}s_sd{'_std' if flag_std else ''}"
+            time_key = f"No.{i + 1}_time"
+            (segment_time, segment_sd), _ = longest_continuous_segment(df[time_key], df[key])
+            dt = float(np.median(np.diff(segment_time))) if len(segment_time) > 1 else 1 / FrameRate_list[i]
+            freq, Amp = fft(segment_sd, dt)
             add_freq_list.append(freq.tolist())
             add_Amp_list.append(Amp.tolist())
         freq_list.append(add_freq_list)

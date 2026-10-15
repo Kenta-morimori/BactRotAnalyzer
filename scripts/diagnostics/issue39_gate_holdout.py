@@ -18,8 +18,11 @@ from issue39_validation import (  # noqa: E402
     synthetic_points,
 )
 
-from utils.functions.rotation_center_candidates import robust_radius  # noqa: E402
 from utils.functions.rotation_center_diagnostics import evaluate_center  # noqa: E402
+from utils.functions.validated_rotation_center import (  # noqa: E402
+    block_extent_ratio,
+    center_gate,
+)
 
 METHODS = ("ellipse_constrained", "geometric_ellipse")
 POSITIVE = ("ellipse", "circle", "thin_ellipse", "thick_ellipse", "reversal", "center_drift", "radius_change")
@@ -46,36 +49,13 @@ def holdout_points(scenario: str, seed: int) -> np.ndarray:
     return points
 
 
-def block_extent_ratio(points: np.ndarray) -> float:
-    if not np.isfinite(points).all():
-        return np.nan
-    extents = [robust_radius(block) for block in np.array_split(points, 4)]
-    return float(min(extents) / max(extents)) if max(extents) > 0 else np.nan
-
-
-def gate(row: dict) -> tuple[bool, str]:
-    checks = (
-        ("missing", row["n_used"] == row["n_input"]),
-        ("quadrature", row["rotation_quadrature_score"] >= 0.8),
-        ("spectral_energy", row["peak_energy_fraction"] >= 0.15),
-        ("block_extent", row["block_extent_ratio"] >= 0.25),
-        ("fit_status", row["status"] == "computed"),
-        ("block_fits", row.get("block_cv_computationally_ok") == 4),
-        ("heldout_residual", row.get("block_cv_p95_R", np.nan) <= 0.55),
-        ("center_stability", row.get("center_max_shift_R", np.nan) <= 0.10),
-        ("origin_stability", row.get("origin_shift_error_R", np.nan) <= 0.01),
-    )
-    failures = [name for name, passed in checks if not passed]
-    return not failures, ";".join(failures)
-
-
 def record(points: np.ndarray, method: str, sample: str, scenario: str, seed: int | None) -> dict:
     row = evaluate_center(points, method, sample_rate_hz=200)
     row["sample"] = sample
     row["scenario"] = scenario
     row["seed"] = seed
     row["block_extent_ratio"] = block_extent_ratio(points)
-    row["gate_pass"], row["gate_failure"] = gate(row)
+    row["gate_pass"], row["gate_failure"] = center_gate(row)
     return row
 
 

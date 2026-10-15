@@ -28,6 +28,7 @@ def main(
     stop_activity_ratio: float,
     stop_min_duration_rotations: float,
     output_suffix: Optional[str],
+    center_estimator: str = "validated",
 ):
     base_save_dir = param.save_dir_bef
     if output_suffix is not None and output_suffix != "":
@@ -85,12 +86,6 @@ def main(
 
     # Build all-time centroid components once, then split into pre/post later.
     all_comp_time_list, all_x_before_list, all_y_before_list = time_list, x_list, y_list
-    all_center_x_standard_list, all_center_y_standard_list = repellent_response.estimate_rotation_center_like_standard(
-        time_list=all_comp_time_list,
-        x_raw_list=all_x_before_list,
-        y_raw_list=all_y_before_list,
-        rise_indices=rise_indices,
-    )
     automatic_stop_indices = repellent_response.detect_rotation_stop_indices(
         time_list=all_comp_time_list,
         x_raw_list=all_x_before_list,
@@ -117,16 +112,37 @@ def main(
         else:
             result["rotation_stop_time"] = float("nan")
     save2csv.save_repellent_rise_summary(rise_results, day)
-    all_x_center_list, all_y_center_list = repellent_response.apply_post_rise_center_strategy(
-        time_list=all_comp_time_list,
-        x_raw_list=all_x_before_list,
-        y_raw_list=all_y_before_list,
-        center_x_standard_list=all_center_x_standard_list,
-        center_y_standard_list=all_center_y_standard_list,
-        rise_indices=rise_indices,
-        post_rise_center_mode=post_rise_center_mode,
-        stop_indices=stop_indices,
-    )
+    if center_estimator == "validated":
+        all_x_center_list, all_y_center_list, center_assessments = (
+            repellent_response.estimate_rotation_center_validated(
+                time_list=all_comp_time_list,
+                x_raw_list=all_x_before_list,
+                y_raw_list=all_y_before_list,
+                stop_indices=stop_indices,
+            )
+        )
+        repellent_response.save_center_assessments(day, center_assessments)
+    elif center_estimator == "legacy":
+        all_center_x_standard_list, all_center_y_standard_list = (
+            repellent_response.estimate_rotation_center_like_standard(
+                time_list=all_comp_time_list,
+                x_raw_list=all_x_before_list,
+                y_raw_list=all_y_before_list,
+                rise_indices=rise_indices,
+            )
+        )
+        all_x_center_list, all_y_center_list = repellent_response.apply_post_rise_center_strategy(
+            time_list=all_comp_time_list,
+            x_raw_list=all_x_before_list,
+            y_raw_list=all_y_before_list,
+            center_x_standard_list=all_center_x_standard_list,
+            center_y_standard_list=all_center_y_standard_list,
+            rise_indices=rise_indices,
+            post_rise_center_mode=post_rise_center_mode,
+            stop_indices=stop_indices,
+        )
+    else:
+        raise ValueError(f"Unknown center estimator: {center_estimator}")
     all_x_corr_list, all_y_corr_list = repellent_response.subtract_center_from_raw(
         x_raw_list=all_x_before_list,
         y_raw_list=all_y_before_list,
@@ -453,6 +469,7 @@ if __name__ == "__main__":
     parser.add_argument("--sigma-threshold", type=float, default=3.0)
     parser.add_argument("--min-consecutive", type=int, default=3)
     parser.add_argument("--post-rise-center-mode", type=int, choices=[1, 2, 3], default=param.post_rise_center_mode)
+    parser.add_argument("--center-estimator", choices=["validated", "legacy"], default="validated")
     parser.add_argument("--stop-activity-ratio", type=float, default=param.stop_activity_ratio)
     parser.add_argument("--stop-min-duration-rotations", type=float, default=param.stop_min_duration_rotations)
     parser.add_argument("--output-suffix", type=str, default=None)
@@ -468,4 +485,5 @@ if __name__ == "__main__":
         stop_activity_ratio=args.stop_activity_ratio,
         stop_min_duration_rotations=args.stop_min_duration_rotations,
         output_suffix=args.output_suffix,
+        center_estimator=args.center_estimator,
     )

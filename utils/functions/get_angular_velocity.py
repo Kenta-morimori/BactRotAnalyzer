@@ -126,14 +126,15 @@ def get_angular_velocity(x_list, y_list, day, time_list=None, return_signed_angu
         # check colleration
         make_graph.plot_av_colleration(angular_velocity_list_bef_corr, day)
     save2csv.save_angle_angular_velocity(angle_list, angular_velocity_list, day)
+    finite_av = [np.asarray(sublist, dtype=float)[np.isfinite(sublist)] for sublist in angular_velocity_list]
     rot_df_manage.update_rot_df(
         ROTATION_FEATURES.angular_velosity_mean,
-        [np.nanmean(sublist) for sublist in angular_velocity_list],
+        [float(np.mean(values)) if len(values) else np.nan for values in finite_av],
         day,
     )
     rot_df_manage.update_rot_df(
         ROTATION_FEATURES.angular_velosity_sd,
-        [np.nanstd(sublist) for sublist in angular_velocity_list],
+        [float(np.std(values)) if len(values) else np.nan for values in finite_av],
         day,
     )
 
