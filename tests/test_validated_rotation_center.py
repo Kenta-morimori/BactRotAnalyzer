@@ -52,7 +52,7 @@ def test_center_series_preserves_frames_and_invalidates_stop_and_unsupported_end
     points = [1.3, 1.45] + np.column_stack((0.3 * np.cos(phase), 0.18 * np.sin(phase)))
     points += rng.normal(0, 0.02, points.shape)
     cx, cy, assessments = repellent_response.estimate_rotation_center_validated(
-        [time], [points[:, 0]], [points[:, 1]], stop_indices=[900]
+        [time.tolist()], [points[:, 0].tolist()], [points[:, 1].tolist()], stop_indices=[900]
     )
     assert len(cx[0]) == len(cy[0]) == n
     assert np.isfinite(cx[0][500]) and np.isfinite(cy[0][500])
@@ -71,13 +71,18 @@ def test_existing_angular_velocity_csv_keeps_invalid_frames(tmp_path, monkeypatc
     points = [1.3, 1.45] + np.column_stack((0.3 * np.cos(phase), 0.18 * np.sin(phase)))
     points += rng.normal(0, 0.02, points.shape)
     cx, cy, assessments = repellent_response.estimate_rotation_center_validated(
-        [time], [points[:, 0]], [points[:, 1]], stop_indices=[900]
+        [time.tolist()], [points[:, 0].tolist()], [points[:, 1].tolist()], stop_indices=[900]
     )
     repellent_response.save_segment_center_coordinate("sample", "00_all_rotational_analysis", cx, cy)
     repellent_response.save_center_assessments("sample", assessments)
     corrected = points - np.column_stack((cx[0], cy[0]))
     result = repellent_response.run_segment_rotational_analysis(
-        "sample", "00_all_rotational_analysis", [time], [corrected[:, 0]], [corrected[:, 1]], write_time_list=False
+        "sample",
+        "00_all_rotational_analysis",
+        [time.tolist()],
+        [corrected[:, 0].tolist()],
+        [corrected[:, 1].tolist()],
+        write_time_list=False,
     )
     repellent_response.save_segment_angular_velocity_outputs(
         "sample",
@@ -101,7 +106,7 @@ def test_existing_angular_velocity_csv_keeps_invalid_frames(tmp_path, monkeypatc
 
 
 def test_switching_count_does_not_bridge_an_invalid_center_gap():
-    time = [np.arange(6) * 0.1]
+    time = [(np.arange(6) * 0.1).tolist()]
     velocity = [[-2.0, -1.0, np.nan, 2.0, 1.0]]
     _, count = repellent_response.calculate_angular_velocity_switching_count(time, velocity)
     assert count[0][0] == 0.0
@@ -115,10 +120,12 @@ def test_fully_rejected_sample_remains_in_angular_velocity_csv(tmp_path, monkeyp
     time = np.arange(n) / 200
     rng = np.random.default_rng(8)
     points = [1.3, 1.45] + rng.normal(0, 0.008, (n, 2))
-    cx, cy, _ = repellent_response.estimate_rotation_center_validated([time], [points[:, 0]], [points[:, 1]])
+    cx, cy, _ = repellent_response.estimate_rotation_center_validated(
+        [time.tolist()], [points[:, 0].tolist()], [points[:, 1].tolist()]
+    )
     assert np.isnan(cx[0]).all() and np.isnan(cy[0]).all()
     result = repellent_response.run_segment_rotational_analysis(
-        "sample", "00_all_rotational_analysis", [time], [cx[0]], [cy[0]], write_time_list=False
+        "sample", "00_all_rotational_analysis", [time.tolist()], [cx[0]], [cy[0]], write_time_list=False
     )
     assert result["valid_indices"] == [0]
     assert len(result["angular_velocity_list"][0]) == n - 1
