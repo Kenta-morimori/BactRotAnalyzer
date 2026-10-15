@@ -23,6 +23,7 @@ from utils.functions import (
     rot_df_manage,
     save2csv,
 )
+from utils.functions.validated_rotation_center import estimate_center_series
 
 _param_io_lock = threading.Lock()
 
@@ -149,13 +150,10 @@ def get_background_intensity_time_series(day: str, roi_size: int = 10) -> List[L
 
 def _count_sign_switches(values: np.ndarray) -> int:
     sign_arr = np.sign(values)
-    sign_arr = sign_arr[np.isfinite(sign_arr)]
-    sign_arr = sign_arr[sign_arr != 0]
-
     if sign_arr.size < 2:
         return 0
-
-    return int(np.sum(np.diff(sign_arr) != 0))
+    pairs = np.isfinite(sign_arr[:-1]) & np.isfinite(sign_arr[1:]) & (sign_arr[:-1] != 0) & (sign_arr[1:] != 0)
+    return int(np.sum((sign_arr[:-1] != sign_arr[1:]) & pairs))
 
 
 def calculate_angular_velocity_switching_count(
@@ -180,10 +178,16 @@ def calculate_angular_velocity_switching_count(
         w_counts: List[float] = []
 
         for window_start in t[np.isfinite(t)]:
-            window_mask = (t >= window_start) & (t <= window_start + window_width_sec) & np.isfinite(av)
+            window_mask = (t >= window_start) & (t <= window_start + window_width_sec)
             w_times.append(float(window_start + window_width_sec / 2.0))
-            # Zero or one finite AV sample has no possible sign transition.
-            w_counts.append(float(_count_sign_switches(av[window_mask])))
+            window_av = av[window_mask]
+            valid_sign = np.isfinite(window_av) & (window_av != 0)
+            # A missing interval breaks the direction sequence; do not join
+            # signs on opposite sides of a rejected-center window.
+            if not np.any(valid_sign[:-1] & valid_sign[1:]):
+                w_counts.append(float("nan"))
+            else:
+                w_counts.append(float(_count_sign_switches(window_av)))
         out_time.append(w_times)
         out_count.append(w_counts)
 
@@ -810,6 +814,40 @@ def estimate_rotation_center_like_standard(
     return center_x_all, center_y_all
 
 
+def estimate_rotation_center_validated(
+    time_list: Sequence[Sequence[float]],
+    x_raw_list: Sequence[Sequence[float]],
+    y_raw_list: Sequence[Sequence[float]],
+    stop_indices: Optional[Sequence[float]] = None,
+) -> Tuple[List[List[float]], List[List[float]], List[dict]]:
+    """Fit supported centroid orbits without carrying centers through invalid spans."""
+    n = min(len(time_list), len(x_raw_list), len(y_raw_list))
+    center_x_all: List[List[float]] = []
+    center_y_all: List[List[float]] = []
+    assessments: List[dict] = []
+    for i in range(n):
+        t = np.asarray(time_list[i], dtype=float)
+        x = np.asarray(x_raw_list[i], dtype=float)
+        y = np.asarray(y_raw_list[i], dtype=float)
+        m = min(len(t), len(x), len(y))
+        centers = np.full((m, 2), np.nan)
+        stop = m
+        if stop_indices is not None and i < len(stop_indices) and np.isfinite(stop_indices[i]):
+            stop = _normalize_rise_index(float(stop_indices[i]), m)
+        if stop >= 30:
+            centers[:stop], rows = estimate_center_series(t[:stop], np.column_stack((x[:stop], y[:stop])))
+        else:
+            rows = []
+        for row in rows:
+            row["sample_no"] = i + 1
+            row["anchor_time_sec"] = float(t[row["anchor_frame_0based"]])
+            row["stop_frame_0based"] = stop if stop < m else np.nan
+            assessments.append(row)
+        center_x_all.append(centers[:, 0].tolist())
+        center_y_all.append(centers[:, 1].tolist())
+    return center_x_all, center_y_all, assessments
+
+
 def _estimate_window_frames_from_fft(
     time_arr: np.ndarray, x_arr: np.ndarray, y_arr: np.ndarray, rise_idx: Optional[int] = None
 ) -> int:
@@ -1090,6 +1128,13 @@ def save_segment_center_coordinate(
         data[f"No.{i + 1}_x"] = pd.Series(np.asarray(center_x_list[i], dtype=float), dtype="float64")
         data[f"No.{i + 1}_y"] = pd.Series(np.asarray(center_y_list[i], dtype=float), dtype="float64")
     pd.DataFrame(data).to_csv(f"{save_dir}/center_coordinate.csv", index=False)
+
+
+def save_center_assessments(day: str, assessments: Sequence[dict]) -> None:
+    """Save window decisions separately from the unchanged center CSV columns."""
+    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/00_all_rotational_analysis/center_coordinate"
+    os.makedirs(save_dir, exist_ok=True)
+    pd.DataFrame(assessments).to_csv(f"{save_dir}/center_assessment.csv", index=False)
 
 
 def subtract_center_from_raw(
