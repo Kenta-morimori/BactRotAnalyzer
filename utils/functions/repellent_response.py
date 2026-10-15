@@ -1102,9 +1102,8 @@ def apply_post_rise_center_strategy(
                 ref_y = y_raw[ref_start:stop_idx]
                 finite = np.isfinite(ref_x) & np.isfinite(ref_y)
                 if np.count_nonzero(finite) >= param.min_ref_centroid_num:
-                    # The unconstrained origin-dependent conic can turn a
-                    # perfectly circular final orbit into a displaced center.
-                    # Use the issue #39 constrained fit for this snapshot.
+                    # The unconstrained origin-dependent conic can displace
+                    # the center even for a perfectly circular final orbit.
                     snapshot = estimate_center(np.column_stack((ref_x[finite], ref_y[finite])), "ellipse_constrained")
                     if snapshot.computationally_ok and snapshot.center is not None:
                         cx_final[stop_idx:] = float(snapshot.center[0])
