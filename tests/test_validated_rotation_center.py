@@ -130,3 +130,16 @@ def test_fully_rejected_sample_remains_in_angular_velocity_csv(tmp_path, monkeyp
     assert result["valid_indices"] == [0]
     assert len(result["angular_velocity_list"][0]) == n - 1
     assert np.isnan(result["angular_velocity_list"][0]).all()
+
+
+def test_empty_assessment_has_stable_csv_header(tmp_path, monkeypatch):
+    monkeypatch.setattr(param, "save_dir_bef", str(tmp_path))
+    repellent_response.save_center_assessments("sample", [])
+    path = tmp_path / "sample/repellent_response/00_all_rotational_analysis/center_coordinate/center_assessment.csv"
+    assert pd.read_csv(path).columns.tolist() == [
+        "sample_no",
+        "anchor_frame_0based",
+        "anchor_time_sec",
+        "gate_pass",
+        "gate_failure",
+    ]

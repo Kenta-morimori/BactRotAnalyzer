@@ -1134,7 +1134,10 @@ def save_center_assessments(day: str, assessments: Sequence[dict]) -> None:
     """Save window decisions separately from the unchanged center CSV columns."""
     save_dir = f"{param.save_dir_bef}/{day}/repellent_response/00_all_rotational_analysis/center_coordinate"
     os.makedirs(save_dir, exist_ok=True)
-    pd.DataFrame(assessments).to_csv(f"{save_dir}/center_assessment.csv", index=False)
+    data = pd.DataFrame(assessments)
+    required = ["sample_no", "anchor_frame_0based", "anchor_time_sec", "gate_pass", "gate_failure"]
+    data = data.reindex(columns=required + [column for column in data.columns if column not in required])
+    data.to_csv(f"{save_dir}/center_assessment.csv", index=False)
 
 
 def subtract_center_from_raw(
