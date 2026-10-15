@@ -9,13 +9,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
+from issue39_validation import OUT, ROOT, TRUE_RADIUS, synthetic_points  # noqa: E402
 
-from scripts.diagnostics.issue39_validation import (  # noqa: E402
-    OUT,
-    ROOT,
-    TRUE_RADIUS,
-    synthetic_points,
-)
 from utils.functions.rotation_center_candidates import (  # noqa: E402
     estimate_center,
     robust_radius,

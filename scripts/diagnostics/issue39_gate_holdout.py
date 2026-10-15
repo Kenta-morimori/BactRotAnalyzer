@@ -9,8 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-
-from scripts.diagnostics.issue39_validation import (  # noqa: E402
+from issue39_validation import (  # noqa: E402
     OUT,
     ROOT,
     TRUE_CENTER,
@@ -18,6 +17,7 @@ from scripts.diagnostics.issue39_validation import (  # noqa: E402
     avi_centroids,
     synthetic_points,
 )
+
 from utils.functions.rotation_center_candidates import robust_radius  # noqa: E402
 from utils.functions.rotation_center_diagnostics import evaluate_center  # noqa: E402
 

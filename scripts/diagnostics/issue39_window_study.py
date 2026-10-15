@@ -9,12 +9,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
+from issue39_validation import OUT, TRUE_CENTER, TRUE_RADIUS  # noqa: E402
 
-from scripts.diagnostics.issue39_validation import (  # noqa: E402
-    OUT,
-    TRUE_CENTER,
-    TRUE_RADIUS,
-)
 from utils.functions.rotation_center_candidates import estimate_center  # noqa: E402
 
 METHODS = ("legacy", "ellipse_constrained", "geometric_ellipse")
