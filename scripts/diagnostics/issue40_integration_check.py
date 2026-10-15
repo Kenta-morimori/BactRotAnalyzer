@@ -103,9 +103,62 @@ def real_cases() -> list[dict]:
     return rows
 
 
+def signed_velocity(points: np.ndarray, centers: np.ndarray, time: np.ndarray) -> np.ndarray:
+    """Use the production frame-difference sign convention without gap filling."""
+    angle = np.arctan2(points[:, 1] - centers[:, 1], points[:, 0] - centers[:, 0])
+    dt = np.diff(time)
+    delta = np.angle(np.exp(1j * np.diff(angle)))
+    valid_dt = dt[np.isfinite(dt) & (dt > 0)]
+    nominal_dt = float(np.median(valid_dt)) if len(valid_dt) else np.nan
+    valid = np.isfinite(delta) & np.isfinite(dt) & (dt > 0) & (dt <= 1.5 * nominal_dt)
+    return np.divide(-delta, dt, out=np.full_like(delta, np.nan), where=valid)
+
+
+def no14_angular_velocity_comparison() -> pd.DataFrame:
+    """Compare signed AV on identical supported intervals, without a truth claim."""
+    source = pd.read_csv(ROOT / "outputs/repellent-response/23/raw_centroid/2026_0802_182430.csv")
+    source = source.iloc[2048:16384].reset_index(drop=True)
+    saved = pd.read_csv(ROOT / "docs/analysis/issue-38/tables/no14_centroid_center_timeseries.csv")
+    if not np.array_equal(source.source_frame_1based, saved.source_frame_1based) or not np.allclose(
+        source[["x_um", "y_um"]].to_numpy(float), saved[["x_um", "y_um"]].to_numpy(float)
+    ):
+        raise ValueError("No.14 saved center does not match the source centroid frames")
+    time = source.time_sec.to_numpy(float)
+    points = source[["x_um", "y_um"]].to_numpy(float)
+    new_centers, _ = estimate_center_series(time, points)
+    old_centers = saved[["center_x_um", "center_y_um"]].to_numpy(float)
+    new_av = signed_velocity(points, new_centers, time)
+    old_av = signed_velocity(points, old_centers, time)
+    rows = []
+    for start, end in ((15.781, 40), (40, 65), (65, 82.5), (82.5, 87.579)):
+        selected = (time[:-1] >= start) & (time[:-1] < end)
+        valid = selected & np.isfinite(new_av) & np.isfinite(old_av)
+        n = int(valid.sum())
+        new_switches = int(np.sum(valid[:-1] & valid[1:] & (np.sign(new_av[:-1]) != np.sign(new_av[1:]))))
+        old_switches = int(np.sum(valid[:-1] & valid[1:] & (np.sign(old_av[:-1]) != np.sign(old_av[1:]))))
+        rows.append(
+            {
+                "band_start_sec": start,
+                "band_end_sec": end,
+                "common_valid_intervals": n,
+                "new_abs_speed_median_rad_s": float(np.median(np.abs(new_av[valid]))) if n else np.nan,
+                "old_abs_speed_median_rad_s": float(np.median(np.abs(old_av[valid]))) if n else np.nan,
+                "new_abs_speed_p95_rad_s": float(np.quantile(np.abs(new_av[valid]), 0.95)) if n else np.nan,
+                "old_abs_speed_p95_rad_s": float(np.quantile(np.abs(old_av[valid]), 0.95)) if n else np.nan,
+                "sign_disagreement_fraction": (
+                    float(np.mean(np.sign(new_av[valid]) != np.sign(old_av[valid]))) if n else np.nan
+                ),
+                "new_sign_switches": new_switches,
+                "old_sign_switches_on_same_intervals": old_switches,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(synthetic_cases() + real_cases()).to_csv(OUT / "integration_summary.csv", index=False)
+    no14_angular_velocity_comparison().to_csv(OUT / "no14_angular_velocity_comparison.csv", index=False)
 
 
 if __name__ == "__main__":
