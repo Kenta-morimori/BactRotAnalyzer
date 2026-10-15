@@ -83,8 +83,7 @@ def get_sd_time_series(i, angular_velocity, day):
     n_time = len(times)
 
     for width_time in width_time_list:
-        prev_mean = np.nan
-        prev_sd = np.nan
+        warned_zero_mean = False
 
         key_sd = f"No.{i + 1}_{width_time}s_sd"
         key_mean = f"No.{i + 1}_{width_time}s_mean"
@@ -102,7 +101,12 @@ def get_sd_time_series(i, angular_velocity, day):
             data = df.loc[mask, "velocity"].to_numpy(dtype=float)
             times_win = df.loc[mask, "time"].to_numpy(dtype=float)
 
-            if len(data) >= 3:  # at least 3 data to calculate SD
+            if not np.isfinite(data).all():
+                # A rejected center makes its angular velocity unavailable.
+                # Keep that gap unavailable in downstream fluctuation metrics.
+                df_sd_stats_dict[key_sd].append(np.nan)
+                df_sd_stats_dict[key_mean].append(np.nan)
+            elif len(data) >= 3:  # at least 3 data to calculate SD
                 if param.flag_apply_gaussian_window:
                     weights = get_weights_gaussian(start_time, width_time, times_win)
                     if weights.size == 0 or np.sum(weights) == 0:
@@ -118,16 +122,17 @@ def get_sd_time_series(i, angular_velocity, day):
                     if np.isfinite(mean_val) and mean_val != 0.0:
                         sd_val = sd_val / mean_val
                     else:
-                        print(f"[Warning] No.{i + 1}: mean is zero or NaN, cannot compute SD/Mean.")
+                        if not warned_zero_mean:
+                            print(f"[Warning] No.{i + 1}: mean is zero or NaN, cannot compute SD/Mean.")
+                            warned_zero_mean = True
                         sd_val = np.nan
 
                 df_sd_stats_dict[key_sd].append(sd_val)
                 df_sd_stats_dict[key_mean].append(mean_val)
-                prev_sd, prev_mean = sd_val, mean_val
             else:
-                df_sd_stats_dict[key_sd].append(prev_sd)
-                df_sd_stats_dict[key_mean].append(prev_mean)
-            df_sd_stats_dict[key_n].append(len(data))
+                df_sd_stats_dict[key_sd].append(np.nan)
+                df_sd_stats_dict[key_mean].append(np.nan)
+            df_sd_stats_dict[key_n].append(int(np.count_nonzero(np.isfinite(data))))
             start_time += time_step
 
         # record Nan until the end time
@@ -150,10 +155,12 @@ def add_standardize_sd_to_df(df, day):
     for i in range(sample_num):
         for width_time in width_time_list:
             key_sd = f"No.{i + 1}_{width_time}s_sd"
-            sd = np.array(df[key_sd])
-            mean = np.nanmean(sd)
-            std = np.nanstd(sd, axis=0)
-            adt_sd = (sd - mean) / std
+            sd = np.asarray(df[key_sd], dtype=float)
+            finite_sd = sd[np.isfinite(sd)]
+            if finite_sd.size < 2 or np.std(finite_sd) == 0:
+                adt_sd = np.full(sd.shape, np.nan)
+            else:
+                adt_sd = (sd - np.mean(finite_sd)) / np.std(finite_sd)
             key_std_sd = f"No.{i + 1}_{width_time}s_sd_std"
             df[key_std_sd] = adt_sd
 
@@ -173,15 +180,23 @@ def evaluate_FFT(sd_freq_list, sd_Amp_list, day):
         add_ratio = []
         add_ratio_reciprocal = []
         for j in range(len(width_time_list)):
-            add_ref_point = np.mean(sd_Amp_list[i][j][0:3])
+            amplitudes = np.asarray(sd_Amp_list[i][j], dtype=float)
+            add_ref_point = float(np.mean(amplitudes[:3])) if amplitudes.size else np.nan
             ref_point_list[i].append(add_ref_point)
 
-            high_freq_indices = [k for k, x in enumerate(sd_freq_list[i][j]) if x >= 80]
-            Amp_high_freq_arr = np.mean([sd_Amp_list[i][j][k] for k in high_freq_indices])
+            frequencies = np.asarray(sd_freq_list[i][j], dtype=float)
+            high_amplitudes = amplitudes[frequencies >= 80]
+            Amp_high_freq_arr = float(np.mean(high_amplitudes)) if high_amplitudes.size else np.nan
 
             add_decrease.append(add_ref_point - Amp_high_freq_arr)
-            add_ratio.append(add_ref_point / Amp_high_freq_arr)
-            add_ratio_reciprocal.append(Amp_high_freq_arr / add_ref_point)
+            add_ratio.append(
+                add_ref_point / Amp_high_freq_arr
+                if np.isfinite(Amp_high_freq_arr) and Amp_high_freq_arr != 0
+                else np.nan
+            )
+            add_ratio_reciprocal.append(
+                Amp_high_freq_arr / add_ref_point if np.isfinite(add_ref_point) and add_ref_point != 0 else np.nan
+            )
         decrease_list.append(add_decrease)
         ratio_list.append(add_ratio)
         ratio_reciprocal_list.append(add_ratio_reciprocal)
@@ -226,7 +241,9 @@ def main(angular_velocity_list, day):
     for width in width_time_list:
         sd_mean_list = []
         for i in range(sample_num):
-            sd_mean_list.append(np.nanmean(df_all[f"No.{i + 1}_{width}s_sd"]))
+            sd = np.asarray(df_all[f"No.{i + 1}_{width}s_sd"], dtype=float)
+            finite_sd = sd[np.isfinite(sd)]
+            sd_mean_list.append(float(np.mean(finite_sd)) if finite_sd.size else np.nan)
         rot_df_manage.update_rot_df(f"{ROTATION_FEATURES.SD_mean}_{width}s", sd_mean_list, day)
 
     # plot

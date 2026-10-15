@@ -664,7 +664,7 @@ def plot_sd_mean(df, day):
         sd_mean_list = []
         for width_time in width_time_list:
             sd_arr_i = np.asarray(df[f"No.{i + 1}_{width_time}s_sd"].dropna().tolist())
-            sd_mean_list.append(np.mean(sd_arr_i))
+            sd_mean_list.append(float(np.mean(sd_arr_i)) if sd_arr_i.size else np.nan)
 
         axs.plot(width_time_list, sd_mean_list, linewidth=4)
         axs.grid(True)
@@ -678,6 +678,11 @@ def plot_sd_mean(df, day):
     plt.close(fig)
 
 
+def _max_available_frequency(sample_frequencies):
+    last_frequencies = [float(freq[-1]) for freq in sample_frequencies if len(freq)]
+    return max(last_frequencies, default=1.0)
+
+
 def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
@@ -686,7 +691,7 @@ def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
 
     max_x_lim_list = []
     for i in range(sample_num):
-        max_x_lim_list.append(max([freq_list[i][j][-1] for j in range(len(width_time_list))]))
+        max_x_lim_list.append(_max_available_frequency(freq_list[i]))
 
     cols = 2
     rows = max(1, math.ceil(sample_num / cols))
@@ -734,7 +739,7 @@ def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
                 axs[row, col].set_title(f"Standardized SD Time-series No.{j+1}", fontsize=font_size)
             else:
                 axs[row, col].set_title(f"SD Time-series No.{j+1}", fontsize=font_size)
-            axs[row, col].set_xlim(0, freq_list[j][i][-1])
+            axs[row, col].set_xlim(0, max_x_lim_list[j])
             axs[row, col].set_xlabel("Freqency [Hz]", fontsize=font_size)
             axs[row, col].set_ylabel("Amp", fontsize=font_size)
             # axs[row, col].set_xscale("log")
@@ -1092,7 +1097,7 @@ def dev_plot_sd_FFT_with_rotation(freq_list, Amp_list, day):
 
     max_x_lim_list = []
     for i in range(sample_num):
-        max_x_lim_list.append(max([freq_list[i][j][-1] for j in range(len(width_time_list))]))
+        max_x_lim_list.append(_max_available_frequency(freq_list[i]))
 
     cols = 2
     rows = max(1, math.ceil(sample_num / cols))

@@ -1350,6 +1350,8 @@ def _get_valid_pre_rise_indices(
             continue
         if float(time_i[-1]) <= float(time_i[0]):
             continue
+        if np.count_nonzero(np.isfinite(np.asarray(av_i, dtype=float))) < max(3, param.min_ref_av_num):
+            continue
         valid_indices.append(i)
     return valid_indices
 
