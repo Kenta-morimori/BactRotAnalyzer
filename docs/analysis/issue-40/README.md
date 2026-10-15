@@ -4,7 +4,7 @@
 
 `utils/functions/validated_rotation_center.py` は、中心に依存しない局所 x/y スペクトルから周期を推定し、5周期相当の中央窓を0.2秒ごとに評価する。窓幅は60フレーム以上・5秒以下とし、時間の欠落・逆行や重心欠測があれば棄却する。中心は #39 で選定した制約付き代数楕円と固定済み判定規則に合格した窓からだけ採用する。#40 では中心急変をまたぐ窓への対策として、窓前半と後半の中心差が観測半径の0.22倍を超えた窓を棄却し、この条件が隣接2窓以上続く箇所の周辺半窓幅も無効化する。合格中心は評価時刻の周囲0.2秒のフレームに割り当て、隣の無効窓や未評価の端へ持ち越さない。生の重心と時刻は詰めずに元のフレーム順で保持する。
 
-`scripts/04_repellent_response_analysis.py` の既定 `--center-estimator validated` はこの経路を使う。従来経路は `--center-estimator legacy` で再現でき、`--post-rise-center-mode` は従来経路だけに適用する。既存の `center_coordinate.csv`、`angle_time-series.csv`、`angular-velocity_time-series.csv` の列名と行対応は変えない。追加の `00_all_rotational_analysis/center_coordinate/center_assessment.csv` には試行ごとの窓・合否・理由を記録する。停止時刻が決まっている場合、その時刻をまたぐ窓は使わず、停止後の中心は欠測にする。無効中心の前後にある角速度区間は欠測となり、方向切替回数は欠測をまたいで符号をつながない。
+`scripts/04_repellent_response_analysis.py` の既定 `--center-estimator validated` はこの経路を使う。従来の時系列中心方針は `--center-estimator legacy` で使用でき、`--post-rise-center-mode` はこの経路だけに適用する。ただし従来経路の**停止時に固定する中心**は、原点依存の非制約楕円で真円の中心がずれる再現例がCIで見つかったため、制約付き楕円で計算する。既存の `center_coordinate.csv`、`angle_time-series.csv`、`angular-velocity_time-series.csv` の列名と行対応は変えない。追加の `00_all_rotational_analysis/center_coordinate/center_assessment.csv` には試行ごとの窓・合否・理由を記録する。停止時刻が決まっている場合、その時刻をまたぐ窓は使わず、停止後の中心は欠測にする。無効中心の前後にある角速度区間は欠測となり、方向切替回数は欠測をまたいで符号をつながない。
 
 ## 再現検証
 

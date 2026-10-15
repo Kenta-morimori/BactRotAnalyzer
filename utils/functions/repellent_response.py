@@ -23,6 +23,7 @@ from utils.functions import (
     rot_df_manage,
     save2csv,
 )
+from utils.functions.rotation_center_candidates import estimate_center
 from utils.functions.validated_rotation_center import estimate_center_series
 
 _param_io_lock = threading.Lock()
@@ -1101,12 +1102,13 @@ def apply_post_rise_center_strategy(
                 ref_y = y_raw[ref_start:stop_idx]
                 finite = np.isfinite(ref_x) & np.isfinite(ref_y)
                 if np.count_nonzero(finite) >= param.min_ref_centroid_num:
-                    frozen_x, frozen_y, _, _, _ = get_centroid_coordinate.calculate_ellipse_properties(
-                        ref_x[finite].reshape(-1, 1), ref_y[finite].reshape(-1, 1)
-                    )
-                    if np.isfinite(frozen_x) and np.isfinite(frozen_y):
-                        cx_final[stop_idx:] = float(frozen_x)
-                        cy_final[stop_idx:] = float(frozen_y)
+                    # The unconstrained origin-dependent conic can turn a
+                    # perfectly circular final orbit into a displaced center.
+                    # Use the issue #39 constrained fit for this snapshot.
+                    snapshot = estimate_center(np.column_stack((ref_x[finite], ref_y[finite])), "ellipse_constrained")
+                    if snapshot.computationally_ok and snapshot.center is not None:
+                        cx_final[stop_idx:] = float(snapshot.center[0])
+                        cy_final[stop_idx:] = float(snapshot.center[1])
 
         out_center_x_list.append(cx_final.tolist())
         out_center_y_list.append(cy_final.tolist())
