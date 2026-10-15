@@ -136,7 +136,9 @@ def test_centroid_provenance_requires_matching_config_order(tmp_path, monkeypatc
     assert not input_data.centroid_coordinate_sample_map_matches("day")
 
 
-def test_simple_centroid_fallback_uses_config_order(tmp_path, monkeypatch):
+def test_raw_centroid_uses_config_order(tmp_path, monkeypatch):
+    from utils.functions import raw_centroid
+
     input_root = tmp_path / "data"
     output_root = tmp_path / "outputs"
     day_dir = input_root / "day"
@@ -157,13 +159,16 @@ def test_simple_centroid_fallback_uses_config_order(tmp_path, monkeypatch):
         def __init__(self, path):
             opened.append(path)
 
+        def isOpened(self):
+            return True
+
         def read(self):
             return False, None
 
         def release(self):
             return None
 
-    monkeypatch.setattr(repellent_response.cv2, "VideoCapture", EmptyCapture)
-    repellent_response.generate_centroid_coordinate_simple("day")
+    monkeypatch.setattr(raw_centroid.cv2, "VideoCapture", EmptyCapture)
+    raw_centroid.load_all("day", [[], []])
 
     assert [path.split("/")[-1] for path in opened] == ["sample_b.avi", "sample_a.avi"]

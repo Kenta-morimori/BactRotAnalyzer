@@ -1,0 +1,5 @@
+sample_no,target_time_sec,start_time_sec,source_start_frame_1based,assessment,center,signed_turns,speed_sign_changes,median_abs_speed_rad_s
+10,10,10.017132,2001,nonelliptic_or_noisy,saved,-11.18712428517756,2,112.17476076241084
+10,10,10.017132,2001,nonelliptic_or_noisy,refit,-11.180965084538638,2,113.0529649072324
+10,90,89.959733,16861,saved_center_displaced,saved,-0.04126338380990442,26,39.05982923449987
+10,90,89.959733,16861,saved_center_displaced,refit,-8.070426865216822,4,77.20560386006294

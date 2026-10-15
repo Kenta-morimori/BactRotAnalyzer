@@ -132,6 +132,8 @@ python3 scripts/01_standard_analyisis/rotation_analysis_main.py --day [directory
 
 忌避応答解析は以下のコマンドで実行できます。
 
+標準解析と忌避応答解析は `outputs/{day}/raw_centroid/{AVI名}.csv` の原フレーム番号付き重心を共用します。標準解析の `centroid_coordinate.csv` は中心相対座標として引き続き保存されます。No.14 の重心だけを中心・角速度を再計算せず確認するには、`python3 scripts/diagnostics/issue38_no14_centroid.py` を実行してください。
+
 ```bash
 python3 scripts/04_repellent_response_analysis.py --day [day_directory]
 ```
