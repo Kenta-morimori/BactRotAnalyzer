@@ -14,6 +14,12 @@
 
 詳細な現行窓ごとの数値・探索的分類は[現行中心の評価](reports/no14_center_evaluation.md)を参照。偏角から求める周回・方向指標は中心に依存するため、それだけで停止や反転を確定しない。
 
+## 重心・中心・角度・角速度の同時照合
+
+[No.14 の全期間図](figures/no14_legacy_centroid_center_angle_velocity.png)と[38–42秒の拡大図](figures/no14_legacy_centroid_center_angle_velocity_38_42s.png)では、原AVIの2049–16384フレームに対応する確定済み重心、同じ重心から従来法で再計算した中心、中心相対の角度、フレーム差分の符号付き角速度を同一時刻に並べた。[時系列表](tables/no14_legacy_angle_velocity_timeseries.csv)には原フレーム番号・時刻・角度・角速度を保存した。40秒の点線は忌避刺激の立ち上がり、82.5秒以降の薄い領域は従来中心の終端保持を示す。角速度は既存の符号規約に従う未平滑の診断値であり、保存済みの旧出力CSVは重心の座標系列が異なるため流用していない。
+
+38–42秒には中心の段差と細かな角速度の符号・振幅変動が重なり、中心の変化が角度差分へ影響し得ることが分かる。ただし同じ図だけで各スパイクの原因を中心、重心検出、実際の軌道変化のいずれかに断定できない。二値AVIには独立した反転時刻・回転数の真値がなく、この図の角度や角速度を目視真値に代用しない。再生成は `python3 scripts/diagnostics/issue38_no14_angle_velocity_overlay.py`。
+
 ## 回転中心算出法：必要な見直しと未決定事項
 
 | 項目 | 現在の判断 |
@@ -62,6 +68,7 @@
 ```sh
 python3 scripts/diagnostics/issue38_no14_centroid.py
 python3 scripts/diagnostics/issue38_no14_center_timeseries.py
+python3 scripts/diagnostics/issue38_no14_angle_velocity_overlay.py
 python3 scripts/diagnostics/issue38_no14_center_evaluation.py
 python3 scripts/diagnostics/issue38_no14_image_trajectory.py
 python3 scripts/diagnostics/issue38_no14_method_comparison.py
