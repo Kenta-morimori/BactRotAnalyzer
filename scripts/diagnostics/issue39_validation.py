@@ -18,7 +18,7 @@ from utils.functions.rotation_center_diagnostics import evaluate_center  # noqa:
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "docs/analysis/issue-39/tables"
-METHODS = ("legacy", "ellipse_constrained", "geometric_ellipse")
+METHODS = ("legacy", "ellipse_constrained", "geometric_ellipse", "robust_circle")
 TRUE_CENTER = np.array([1.3, 1.45])
 TRUE_RADIUS = 0.3
 
