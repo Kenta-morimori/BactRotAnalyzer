@@ -96,12 +96,17 @@ def _load_brightness_data_mean_series(day: str, sample_name: str, target_len: Op
     return mean_arr.tolist()
 
 
-def get_background_intensity_time_series(day: str, roi_size: int = 10) -> List[List[float]]:
+def get_background_intensity_time_series(
+    day: str,
+    roi_size: int = 10,
+    time_list: Optional[Sequence[Sequence[float]]] = None,
+) -> List[List[float]]:
     """Extract background intensity from brightness_data CSV or top-right fixed ROI."""
     tiff_root = f"{param.input_dir_bef}/{day}/tiff_data"
     brightness_root = f"{param.input_dir_bef}/{day}/brightness_data"
     sample_names = get_tiff_sample_names(day)
-    time_list = ensure_time_list(day)
+    if time_list is None:
+        time_list = ensure_time_list(day)
     flag_use_brightness_data = param.get_flag_use_brightness_data(day, default_flag=False)
 
     if flag_use_brightness_data and not os.path.isdir(brightness_root):
@@ -177,6 +182,8 @@ def calculate_angular_velocity_switching_count(
         t, av = _align_interval_times_and_av(time_arr, av_arr)
         w_times: List[float] = []
         w_counts: List[float] = []
+        dt = np.diff(t)
+        nominal = np.median(dt[np.isfinite(dt) & (dt > 0)]) if np.any(dt > 0) else np.nan
 
         for window_start in t[np.isfinite(t)]:
             window_mask = (t >= window_start) & (t <= window_start + window_width_sec)
@@ -188,7 +195,12 @@ def calculate_angular_velocity_switching_count(
             if not np.any(valid_sign[:-1] & valid_sign[1:]):
                 w_counts.append(float("nan"))
             else:
-                w_counts.append(float(_count_sign_switches(window_av)))
+                window_t = t[window_mask]
+                pairs = valid_sign[:-1] & valid_sign[1:] & (np.diff(window_t) <= 1.5 * nominal)
+                if not pairs.any():
+                    w_counts.append(float("nan"))
+                else:
+                    w_counts.append(float(np.sum((np.sign(window_av[:-1]) != np.sign(window_av[1:])) & pairs)))
         out_time.append(w_times)
         out_count.append(w_counts)
 
@@ -199,8 +211,13 @@ def calculate_angular_velocity_cw_rate(
     time_list: Sequence[Sequence[float]],
     angular_velocity_list: Sequence[Sequence[float]],
     window_width_sec: float = 1.0,
+    missing_breaks_window: bool = False,
 ) -> Tuple[List[List[float]], List[List[float]]]:
-    """Calculate the fraction of clockwise (negative) AV samples per time window."""
+    """Calculate CW fraction (CW positive, CCW negative).
+
+    For V2, reject a window containing missing values so it cannot combine
+    accepted measurements from opposite sides of a recording gap.
+    """
     out_time: List[List[float]] = []
     out_rate: List[List[float]] = []
 
@@ -210,14 +227,14 @@ def calculate_angular_velocity_cw_rate(
         w_rates: List[float] = []
 
         for window_start in t[np.isfinite(t)]:
-            window_mask = (t >= window_start) & (t <= window_start + window_width_sec) & np.isfinite(av)
+            window_mask = (t >= window_start) & (t <= window_start + window_width_sec)
             window_av = av[window_mask]
             w_times.append(float(window_start + window_width_sec / 2.0))
-            if window_av.size == 0:
+            if window_av.size == 0 or (missing_breaks_window and not np.isfinite(window_av).all()):
                 w_rates.append(float("nan"))
             else:
-                # AV == 0 is CCW; only negative samples are clockwise.
-                w_rates.append(float(np.count_nonzero(window_av < 0.0) / window_av.size))
+                finite = window_av[np.isfinite(window_av)]
+                w_rates.append(float(np.count_nonzero(finite > 0.0) / finite.size) if finite.size else float("nan"))
 
         out_time.append(w_times)
         out_rate.append(w_rates)
@@ -585,6 +602,7 @@ def run_segment_rotational_analysis(
                         tmp_day,
                         time_list=selected_time_list,
                         return_signed_angular_velocity=True,
+                        image_y_down=True,
                     )
                 )
 
@@ -1251,6 +1269,7 @@ def split_rotational_series_by_rise(
     valid_indices: Sequence[int],
     rise_indices: Sequence[float],
     mode: str,
+    rise_time_list: Optional[Sequence[float]] = None,
 ) -> Tuple[List[List[float]], List[List[float]], List[List[float]]]:
     out_time: List[List[float]] = []
     out_angle: List[List[float]] = []
@@ -1264,15 +1283,19 @@ def split_rotational_series_by_rise(
         m = min(len(t), len(ang), len(av) + 1)
         t = t[:m]
         ang = ang[:m]
-        av = av[: max(0, m - 1)]
+        point_sampled = len(av) == len(t)
+        av = av[:m] if point_sampled else av[: max(0, m - 1)]
 
         orig_idx = int(valid_indices[i])
         rise_idx = _normalize_rise_index(float(rise_indices[orig_idx]), m) if orig_idx < len(rise_indices) else m
 
+        if rise_time_list is not None:
+            rise_time = rise_time_list[orig_idx] if orig_idx < len(rise_time_list) else np.nan
+            rise_idx = int(np.searchsorted(t, rise_time)) if np.isfinite(rise_time) else m
         if mode == "pre":
             t_seg = t[:rise_idx]
             ang_seg = ang[:rise_idx]
-            av_seg = av[: max(0, rise_idx - 1)]
+            av_seg = av[:rise_idx] if point_sampled else av[: max(0, rise_idx - 1)]
         elif mode == "post":
             t_seg = t[rise_idx:]
             ang_seg = ang[rise_idx:]
@@ -1296,6 +1319,7 @@ def save_segment_angular_velocity_outputs(
     original_sample_indices: Optional[Sequence[int]] = None,
     rise_time_list: Optional[Sequence[float]] = None,
     write_time_list: bool = True,
+    source_frame_list: Optional[Sequence[Sequence[float]]] = None,
 ) -> None:
     save_dir = f"{param.save_dir_bef}/{day}/repellent_response/{segment_subdir}/angular_velocity"
     os.makedirs(save_dir, exist_ok=True)
@@ -1311,6 +1335,11 @@ def save_segment_angular_velocity_outputs(
 
     pd.DataFrame(angle_df).to_csv(f"{save_dir}/angle_time-series.csv", index=False)
     pd.DataFrame(av_df).to_csv(f"{save_dir}/angular-velocity_time-series.csv", index=False)
+    if source_frame_list is not None:
+        if len(source_frame_list) != n or any(len(source_frame_list[i]) != len(time_list[i]) for i in range(n)):
+            raise ValueError("source_frame_list must match the saved time series")
+        source_df = {f"No.{i + 1}": pd.Series(source_frame_list[i], dtype="Int64") for i in range(n)}
+        pd.DataFrame(source_df).to_csv(f"{save_dir}/source_frame_1based_time-series.csv", index=False)
     if write_time_list:
         time_df = {}
         for i in range(n):
@@ -1633,6 +1662,8 @@ def cleanup_legacy_repellent_outputs(day: str) -> None:
     # itself: users may keep notes or other manual artifacts alongside them.
     generated_dirs = [
         "00_time_list",
+        "sign_reference_v2",
+        "rotation_center",
         "01_brightness_change",
         "00_all_rotational_analysis",
         "02_pre_rise_fluctuation",
@@ -1647,6 +1678,7 @@ def cleanup_legacy_repellent_outputs(day: str) -> None:
             shutil.rmtree(path)
 
     legacy_files = [
+        "analysis_method.json",
         "background_intensity_time_series.csv",
         "background_intensity_time_series.png",
         "post_rise_centroid_time_series.csv",

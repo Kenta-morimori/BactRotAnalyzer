@@ -1478,18 +1478,44 @@ def plot_repellent_component_panels(
                 ox, oy = ox[:n], oy[:n]
             rise_time = rise_time_list[i] if rise_time_list is not None and i < len(rise_time_list) else np.nan
             xy_ax, xt_ax, yt_ax = axs[row]
-            xy_ax.plot(x, y, linewidth=1.8)
+            xy_ax.plot(
+                x, y, linewidth=1.8, marker="." if x.size and np.isfinite(x).mean() < 0.3 else None, markersize=2
+            )
             if overlay:
-                xy_ax.plot(ox, oy, color="orange", linewidth=1.8, alpha=0.9)
+                assert ox is not None and oy is not None
+                xy_ax.plot(
+                    ox,
+                    oy,
+                    color="orange",
+                    linewidth=1.8,
+                    alpha=0.9,
+                    marker="." if ox.size and np.isfinite(ox).mean() < 0.3 else None,
+                    markersize=2,
+                )
             xy_ax.grid(True)
             xy_ax.set_aspect("equal", "box")
             xy_ax.set_title(f"{mode_label} No.{i + 1} | x-y", fontsize=title_fs)
             xy_ax.set_xlabel(r"x [$\mu$m]", fontsize=label_fs)
             xy_ax.set_ylabel(r"y [$\mu$m]", fontsize=label_fs)
             for ax, values, label, suffix in ((xt_ax, x, r"x [$\mu$m]", "x-t"), (yt_ax, y, r"y [$\mu$m]", "y-t")):
-                ax.plot(t, values, linewidth=1.8)
+                ax.plot(
+                    t,
+                    values,
+                    linewidth=1.8,
+                    marker="." if values.size and np.isfinite(values).mean() < 0.3 else None,
+                    markersize=2,
+                )
                 if overlay:
-                    ax.plot(t, ox if suffix == "x-t" else oy, color="orange", linewidth=1.8, alpha=0.9)
+                    assert ox is not None and oy is not None
+                    ax.plot(
+                        t,
+                        ox if suffix == "x-t" else oy,
+                        color="orange",
+                        linewidth=1.8,
+                        alpha=0.9,
+                        marker="." if ox.size and np.isfinite(ox).mean() < 0.3 else None,
+                        markersize=2,
+                    )
                 if np.isfinite(rise_time):
                     ax.axvline(rise_time, color="red", linestyle="--", linewidth=1.6, alpha=0.85)
                 ax.grid(True)

@@ -7,6 +7,7 @@
 ### Primary rotation and stop measurements
 
 - For V2 repellent-response output, treat the V2 sign, reference center, and angular velocity as the primary rotating series. Stop-candidate center and angular velocity are separate measurements: they must not fill missing primary values or enter primary CW rate and switching counts. If the required references or lever arm are unavailable, retain a missing stop measurement with its reason.
+- AVI centroid coordinates use a downward-positive y axis. In this image space, a visually clockwise orbit has positive angular change; repellent-response output reports CW as positive for V2, validated, and legacy estimators.
 
 ### Experimental data boundary
 

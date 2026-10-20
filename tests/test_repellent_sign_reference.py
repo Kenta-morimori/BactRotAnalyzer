@@ -1,0 +1,275 @@
+"""Production integration: preserve abstention, frame identity, and point times."""
+
+import importlib.util
+from pathlib import Path
+from typing import Any
+
+import matplotlib
+
+matplotlib.use("Agg")
+import numpy as np
+import pandas as pd
+
+from tests.synthetic.audit import AuditCase, generate
+from tests.synthetic.sign import StudyCase
+from utils import param
+from utils.functions import (
+    fluctuation_analysis,
+    read_csv,
+    repellent_response,
+    repellent_sign_reference,
+)
+
+
+def test_production_adapter_preserves_frozen_signs_and_missing_outputs(tmp_path, monkeypatch):
+    monkeypatch.setattr(param, "save_dir_bef", str(tmp_path))
+
+    def no_baseline(*args, **kwargs):
+        raise AssertionError("V2 must not recompute the old method")
+
+    monkeypatch.setattr(repellent_response, "estimate_rotation_center_validated", no_baseline)
+    data = generate(AuditCase("stop", StudyCase("stop", 0.35, perturbation="dwell_drift_resume")), 10200)
+    cx, cy, result = repellent_sign_reference.analyze(
+        "study", [data.time], [data.observed[:, 0]], [data.observed[:, 1]], source_starts=[201]
+    )
+    frame = pd.read_csv(tmp_path / "study/repellent_response/rotation_center/no01/timeseries.csv")
+    frozen = repellent_sign_reference.estimate_sign_reference_v2(data.time, data.observed)
+    assert np.allclose(frame.rotation_sign, frozen.rotation_sign, equal_nan=True)
+    assert np.allclose(np.sign(result["signed_angular_velocity_list"][0]), frame.rotation_sign, equal_nan=True)
+    assert len(result["time_list"][0]) == len(result["angular_velocity_list"][0]) == len(frame)
+    assert np.array_equal(frame.source_frame_1based, frame.frame_0based + 201)
+    stopped = frame.time_sec.between(2.55, 3.45)
+    assert frame.loc[stopped, "angular_velocity_rad_s"].isna().all()
+    assert frame.loc[stopped, "reference_x_um"].isna().all()
+    anchors = frame.frame_0based.to_numpy(int)
+    assert np.allclose(np.array(cx[0])[anchors], frame.reference_x_um, equal_nan=True)
+    assert np.isnan(np.array(cx[0])[np.setdiff1d(np.arange(len(data.time)), anchors)]).all()
+
+
+def test_image_space_clockwise_sign_and_cw_rate():
+    time = np.arange(1200) / 200
+    phase = 2 * np.pi * 20 * time
+    for y_direction, expected_sign, expected_cw_rate in ((1, 1, 1.0), (-1, -1, 0.0)):
+        points = np.column_stack((1.3 + 0.3 * np.cos(phase), 1.45 + y_direction * 0.18 * np.sin(phase)))
+        _, frame, _ = repellent_sign_reference.analyze_sample(time, points, stop_measurement_enabled=False)
+        reported = frame.rotation_sign.notna()
+        assert reported.sum() > 100
+        assert frame.loc[reported, "rotation_sign"].eq(expected_sign).all()
+        assert frame.loc[reported, "angular_velocity_rad_s"].mul(expected_sign).gt(0).all()
+        _, cw_rate = repellent_response.calculate_angular_velocity_cw_rate(
+            [frame.time_sec.tolist()], [frame.angular_velocity_rad_s.tolist()]
+        )
+        assert np.allclose(np.asarray(cw_rate[0])[np.isfinite(cw_rate[0])], expected_cw_rate)
+
+
+def test_point_sampled_pre_post_split_uses_stimulus_time_and_keeps_nan():
+    args: dict[str, Any] = dict(
+        time_list=[[10, 10.025, 10.05, 10.075]],
+        angle_list=[[0, np.nan, 1, 2]],
+        angular_velocity_list=[[3, np.nan, -4, -5]],
+        valid_indices=[0],
+        rise_indices=[2000],
+        rise_time_list=[10.05],
+    )
+    pre = repellent_response.split_rotational_series_by_rise(**args, mode="pre")
+    post = repellent_response.split_rotational_series_by_rise(**args, mode="post")
+    assert pre[0] == [[10, 10.025]] and np.isnan(pre[2][0][1])
+    assert post[0] == [[10.05, 10.075]] and post[2] == [[-4, -5]]
+
+
+def test_switching_does_not_bridge_timestamp_gap():
+    _, counts = repellent_response.calculate_angular_velocity_switching_count(
+        [[0, 0.025, 0.05, 0.6, 0.625]], [[1, 1, 1, -1, -1]]
+    )
+    assert counts[0][0] == 0
+
+
+def test_default_entry_point_selects_v2():
+    path = Path(__file__).parents[1] / "scripts/04_repellent_response_analysis.py"
+    spec = importlib.util.spec_from_file_location("repellent_entry", path)
+    assert spec is not None and spec.loader is not None
+    entry = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(entry)
+    import inspect
+
+    assert inspect.signature(entry.main).parameters["center_estimator"].default is None
+    assert param.center_estimator == "v2"
+    assert param.stop_measurement_enabled is True
+    assert entry.resolve_center_options(None, None) == ("v2", True)
+    assert entry.resolve_center_options("validated", False) == ("validated", False)
+    assert entry.resolve_center_options("legacy", True) == ("legacy", True)
+
+
+def test_stop_measurements_never_fill_primary_and_can_be_disabled():
+    from tests.synthetic.stops import Case
+    from tests.synthetic.stops import generate as stopped_data
+
+    data = stopped_data(Case("quiet"), 10400)
+    centers, enabled, episodes = repellent_sign_reference.analyze_sample(data["time"], data["observed"])
+    _, disabled, no_episodes = repellent_sign_reference.analyze_sample(
+        data["time"], data["observed"], stop_measurement_enabled=False
+    )
+    measured = enabled.stop_angular_velocity_rad_s.notna()
+    assert measured.any() and not episodes.empty
+    assert enabled.loc[measured, "rotation_sign"].isna().all()
+    assert enabled.loc[measured, "angular_velocity_rad_s"].isna().all()
+    assert np.isnan(centers[enabled.loc[measured, "frame_0based"].to_numpy(int)]).all()
+    assert np.allclose(enabled.angular_velocity_rad_s, disabled.angular_velocity_rad_s, equal_nan=True)
+    assert disabled.stop_angular_velocity_rad_s.isna().all() and no_episodes.empty
+    assert disabled.measurement_reason.eq("disabled").all()
+
+
+def test_short_record_has_stable_empty_output_schema():
+    _, frame, episodes = repellent_sign_reference.analyze_sample(np.arange(3) * 0.005, np.zeros((3, 2)))
+    assert frame.empty and episodes.empty
+    assert {"segment_id", "measurement_reason", "stop_angular_velocity_rad_s"} <= set(frame.columns)
+    assert "start_s" in episodes
+
+
+def test_param_changes_and_explicit_cli_settings(monkeypatch):
+    path = Path(__file__).parents[1] / "scripts/04_repellent_response_analysis.py"
+    spec = importlib.util.spec_from_file_location("repellent_options", path)
+    assert spec is not None and spec.loader is not None
+    entry = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(entry)
+    monkeypatch.setattr(param, "center_estimator", "legacy")
+    monkeypatch.setattr(param, "stop_measurement_enabled", False)
+    assert entry.resolve_center_options(None, None) == ("legacy", False)
+    assert entry.resolve_center_options("v2", True) == ("v2", True)
+    parser = entry.build_parser()
+    args = parser.parse_args(["--center-estimator", "validated", "--no-stop-measurement"])
+    assert entry.resolve_center_options(args.center_estimator, args.stop_measurement) == ("validated", False)
+
+
+def test_empty_sample_saves_missing_coverage_and_diagnostic_schema(tmp_path, monkeypatch):
+    monkeypatch.setattr(param, "save_dir_bef", str(tmp_path))
+    _, _, result = repellent_sign_reference.analyze("short", [np.arange(3) * 0.005], [[0, 0, 0]], [[0, 0, 0]])
+    folder = tmp_path / "short/repellent_response/rotation_center"
+    summary = pd.read_csv(folder / "summary.csv")
+    assert result["valid_indices"] == [0]
+    assert result["time_list"] == [[0, 0.005, 0.01]]
+    assert result["source_frame_list"] == [[1, 2, 3]]
+    assert np.isnan(result["angle_list"]).all()
+    assert np.isnan(result["angular_velocity_list"]).all()
+    assert summary.evaluation_points.iloc[0] == 0
+    assert np.isnan(summary.primary_coverage.iloc[0])
+    assert (folder / "no01/overview.png").is_file()
+    assert (folder / "no01/diagnostics.png").is_file()
+    assert "measurement_reason" in pd.read_csv(folder / "no01/timeseries.csv")
+
+
+def test_empty_sample_retains_identity_in_primary_series(tmp_path, monkeypatch):
+    monkeypatch.setattr(param, "save_dir_bef", str(tmp_path))
+    time = np.arange(400) / 200
+    phase = 2 * np.pi * 20 * time
+    x = 1 + 0.3 * np.cos(phase)
+    y = 1 + 0.2 * np.sin(phase)
+    _, _, result = repellent_sign_reference.analyze(
+        "mixed",
+        [time, time],
+        [np.full(len(time), np.nan), x],
+        [np.full(len(time), np.nan), y],
+        source_starts=[201, 401],
+    )
+    assert result["valid_indices"] == [0, 1]
+    assert result["time_list"][0] == time.tolist()
+    assert result["source_frame_list"][0] == list(range(201, 201 + len(time)))
+    assert np.isnan(result["angle_list"][0]).all()
+    assert np.isnan(result["angular_velocity_list"][0]).all()
+    assert np.isfinite(result["angular_velocity_list"][1]).any()
+
+    repellent_response.save_segment_angular_velocity_outputs(
+        day="mixed",
+        segment_subdir="00_all_rotational_analysis",
+        time_list=result["time_list"],
+        angle_list=result["angle_list"],
+        angular_velocity_list=result["angular_velocity_list"],
+        original_sample_indices=result["valid_indices"],
+        source_frame_list=result["source_frame_list"],
+    )
+    folder = tmp_path / "mixed/repellent_response/00_all_rotational_analysis"
+    primary = pd.read_csv(folder / "angular_velocity/angular-velocity_time-series.csv")
+    mapping = pd.read_csv(folder / "sample_index_map.csv")
+    source_frames = pd.read_csv(folder / "angular_velocity/source_frame_1based_time-series.csv")
+    assert primary["No.1"].isna().all()
+    assert primary["No.2"].notna().any()
+    assert mapping.original_sample_no.tolist() == [1, 2]
+    assert source_frames["No.1"].tolist() == list(range(201, 201 + len(time)))
+    assert source_frames["No.2"].dropna().iloc[0] > 401
+
+    for mode, subdir in (("pre", "02_pre_rise_fluctuation"), ("post", "03_post_rise_analysis")):
+        split_time, split_angle, split_av = repellent_response.split_rotational_series_by_rise(
+            result["time_list"],
+            result["angle_list"],
+            result["angular_velocity_list"],
+            result["valid_indices"],
+            [0, 0],
+            mode,
+            rise_time_list=[1.0, 1.0],
+        )
+        split_sources = [
+            frames[: len(t)] if mode == "pre" else frames[len(frames) - len(t) :]
+            for frames, t in zip(result["source_frame_list"], split_time)
+        ]
+        repellent_response.save_segment_angular_velocity_outputs(
+            "mixed",
+            subdir,
+            split_time,
+            split_angle,
+            split_av,
+            original_sample_indices=result["valid_indices"],
+            source_frame_list=split_sources,
+        )
+        saved = pd.read_csv(
+            tmp_path / "mixed/repellent_response" / subdir / "angular_velocity/source_frame_1based_time-series.csv"
+        )
+        assert saved["No.1"].dropna().tolist() == split_sources[0]
+        assert saved["No.2"].dropna().tolist() == split_sources[1]
+
+    _, cw_rate = repellent_response.calculate_angular_velocity_cw_rate(
+        result["time_list"], result["signed_angular_velocity_list"]
+    )
+    _, switching = repellent_response.calculate_angular_velocity_switching_count(
+        result["time_list"], result["signed_angular_velocity_list"]
+    )
+    assert np.isnan(cw_rate[0]).all()
+    assert np.isnan(switching[0]).all()
+
+
+def test_v2_primary_series_marks_coordinate_gap(tmp_path, monkeypatch):
+    monkeypatch.setattr(param, "save_dir_bef", str(tmp_path))
+    time = np.arange(1200) / 200
+    phase = 2 * np.pi * 20 * time
+    x = 1 + 0.3 * np.cos(phase)
+    y = 1 + 0.2 * np.sin(phase)
+    x[590:610] = np.nan
+    y[590:610] = np.nan
+    _, _, result = repellent_sign_reference.analyze("gap", [time], [x], [y])
+    frame = pd.read_csv(tmp_path / "gap/repellent_response/rotation_center/no01/timeseries.csv")
+    primary_time = np.asarray(result["time_list"][0])
+    primary_av = np.asarray(result["angular_velocity_list"][0])
+    boundary = np.flatnonzero(np.diff(frame.segment_id.to_numpy()) != 0)
+    assert len(boundary) == 1
+    left_time = float(frame.time_sec.iloc[boundary[0]])
+    right_time = float(frame.time_sec.iloc[boundary[0] + 1])
+    marker = np.flatnonzero((primary_time > left_time) & (primary_time < right_time))
+    assert len(marker) == 1 and np.isnan(primary_av[marker[0]])
+    assert np.isnan(result["source_frame_list"][0][marker[0]])
+    assert len(primary_time) == len(frame) + 1
+
+    _, cw_rate = repellent_response.calculate_angular_velocity_cw_rate(
+        result["time_list"], result["signed_angular_velocity_list"], missing_breaks_window=True
+    )
+    crossing = (primary_time >= left_time - 0.5) & (primary_time <= right_time)
+    assert np.isnan(np.asarray(cw_rate[0])[crossing]).any()
+
+
+def test_fluctuation_window_remains_missing_across_gap(monkeypatch):
+    time = (np.arange(10) / 10).tolist()
+    omega = [1.0] * 5 + [np.nan] + [-1.0] * 4
+    monkeypatch.setattr(param, "get_config", lambda day: (1, [10], [1.0]))
+    monkeypatch.setattr(param, "SD_window_width_list", [0.5])
+    monkeypatch.setattr(read_csv, "get_timelist", lambda day: [time])
+    result = fluctuation_analysis.get_sd_time_series(0, omega, "gap")
+    assert np.isfinite(result["No.1_0.5s_sd"].iloc[2])
+    assert result["No.1_0.5s_sd"].iloc[4:7].isna().all()

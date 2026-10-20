@@ -140,6 +140,16 @@ def test_signed_angular_velocity_is_available_when_display_is_absolute(monkeypat
     assert np.all(displayed_av[0] >= 0.0)
     assert np.any(np.asarray(signed_av[0]) < 0.0)
 
+    _, _, image_signed_av = get_angular_velocity.get_angular_velocity(
+        [np.cos(angle)],
+        [np.sin(angle)],
+        "day",
+        time_list=[[0.0, 0.01, 0.02, 0.03, 0.04]],
+        return_signed_angular_velocity=True,
+        image_y_down=True,
+    )
+    assert np.all(np.asarray(image_signed_av[0]) > 0.0)
+
 
 def test_all_time_angular_velocity_can_skip_duplicate_time_csv(tmp_path, monkeypatch):
     monkeypatch.setattr(param, "save_dir_bef", str(tmp_path / "outputs"))
