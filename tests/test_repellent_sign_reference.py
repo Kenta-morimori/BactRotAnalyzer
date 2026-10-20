@@ -138,11 +138,55 @@ def test_param_changes_and_explicit_cli_settings(monkeypatch):
 
 def test_empty_sample_saves_missing_coverage_and_diagnostic_schema(tmp_path, monkeypatch):
     monkeypatch.setattr(param, "save_dir_bef", str(tmp_path))
-    repellent_sign_reference.analyze("short", [np.arange(3) * 0.005], [[0, 0, 0]], [[0, 0, 0]])
+    _, _, result = repellent_sign_reference.analyze("short", [np.arange(3) * 0.005], [[0, 0, 0]], [[0, 0, 0]])
     folder = tmp_path / "short/repellent_response/rotation_center"
     summary = pd.read_csv(folder / "summary.csv")
+    assert result["valid_indices"] == [0]
+    assert result["time_list"] == [[0, 0.005, 0.01]]
+    assert np.isnan(result["angle_list"]).all()
+    assert np.isnan(result["angular_velocity_list"]).all()
     assert summary.evaluation_points.iloc[0] == 0
     assert np.isnan(summary.primary_coverage.iloc[0])
     assert (folder / "no01/overview.png").is_file()
     assert (folder / "no01/diagnostics.png").is_file()
     assert "measurement_reason" in pd.read_csv(folder / "no01/timeseries.csv")
+
+
+def test_empty_sample_retains_identity_in_primary_series(tmp_path, monkeypatch):
+    monkeypatch.setattr(param, "save_dir_bef", str(tmp_path))
+    time = np.arange(400) / 200
+    phase = 2 * np.pi * 20 * time
+    x = 1 + 0.3 * np.cos(phase)
+    y = 1 + 0.2 * np.sin(phase)
+    _, _, result = repellent_sign_reference.analyze(
+        "mixed", [time, time], [np.full(len(time), np.nan), x], [np.full(len(time), np.nan), y]
+    )
+    assert result["valid_indices"] == [0, 1]
+    assert result["time_list"][0] == time.tolist()
+    assert np.isnan(result["angle_list"][0]).all()
+    assert np.isnan(result["angular_velocity_list"][0]).all()
+    assert np.isfinite(result["angular_velocity_list"][1]).any()
+
+    repellent_response.save_segment_angular_velocity_outputs(
+        day="mixed",
+        segment_subdir="00_all_rotational_analysis",
+        time_list=result["time_list"],
+        angle_list=result["angle_list"],
+        angular_velocity_list=result["angular_velocity_list"],
+        original_sample_indices=result["valid_indices"],
+    )
+    folder = tmp_path / "mixed/repellent_response/00_all_rotational_analysis"
+    primary = pd.read_csv(folder / "angular_velocity/angular-velocity_time-series.csv")
+    mapping = pd.read_csv(folder / "sample_index_map.csv")
+    assert primary["No.1"].isna().all()
+    assert primary["No.2"].notna().any()
+    assert mapping.original_sample_no.tolist() == [1, 2]
+
+    _, cw_rate = repellent_response.calculate_angular_velocity_cw_rate(
+        result["time_list"], result["signed_angular_velocity_list"]
+    )
+    _, switching = repellent_response.calculate_angular_velocity_switching_count(
+        result["time_list"], result["signed_angular_velocity_list"]
+    )
+    assert np.isnan(cw_rate[0]).all()
+    assert np.isnan(switching[0]).all()

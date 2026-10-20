@@ -69,8 +69,16 @@ def analyze(day, time_list, x_list, y_list, stop_indices=None, source_starts=Non
         cx_all.append(centers[:, 0].tolist())
         cy_all.append(centers[:, 1].tolist())
         samples.append((time, points, frame, episodes))
-        if not frame.empty:
-            result["valid_indices"].append(sample)
+        result["valid_indices"].append(sample)
+        if frame.empty:
+            # Keep the source sample and its clock visible in primary outputs.
+            # No accepted window means every angle and velocity is missing.
+            missing = np.full(len(time), np.nan).tolist()
+            result["time_list"].append(time.tolist())
+            result["angle_list"].append(missing)
+            result["angular_velocity_list"].append(missing.copy())
+            result["signed_angular_velocity_list"].append(missing.copy())
+        else:
             result["time_list"].append(frame.time_sec.tolist())
             result["angle_list"].append(frame.angle_rad.tolist())
             result["angular_velocity_list"].append(frame.angular_velocity_rad_s.tolist())
