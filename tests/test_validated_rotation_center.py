@@ -9,6 +9,7 @@ from utils.functions import repellent_response
 from utils.functions.validated_rotation_center import (
     assess_center_window,
     estimate_center_series,
+    local_period_frames,
 )
 
 
@@ -134,6 +135,23 @@ def test_fully_rejected_sample_remains_in_angular_velocity_csv(tmp_path, monkeyp
     assert result["valid_indices"] == [0]
     assert len(result["angular_velocity_list"][0]) == n - 1
     assert np.isnan(result["angular_velocity_list"][0]).all()
+
+
+def test_all_missing_validated_sample_does_not_abort_later_sample():
+    n = 1200
+    time = np.arange(n) / 200
+    missing = np.full(n, np.nan)
+    points = _orbit(4000)
+    repeated = np.vstack([points, points, points, points])[:n]
+    assert local_period_frames(np.column_stack((missing, missing)), 200) is None
+    cx, cy, assessments = repellent_response.estimate_rotation_center_validated(
+        [time.tolist(), time.tolist()],
+        [missing.tolist(), repeated[:, 0].tolist()],
+        [missing.tolist(), repeated[:, 1].tolist()],
+    )
+    assert np.isnan(cx[0]).all() and np.isnan(cy[0]).all()
+    assert np.isfinite(cx[1]).any() and np.isfinite(cy[1]).any()
+    assert any(row.get("sample_no") == 1 and row.get("status") == "period_unavailable" for row in assessments)
 
 
 def test_empty_assessment_has_stable_csv_header(tmp_path, monkeypatch):

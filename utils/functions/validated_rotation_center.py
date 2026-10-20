@@ -151,6 +151,8 @@ def local_period_frames(points: np.ndarray, sample_rate_hz: float) -> int | None
         finite = np.isfinite(points).all(axis=1)
         boundaries = np.flatnonzero(np.diff(np.r_[False, finite, False]))
         runs = [(start, end) for start, end in zip(boundaries[::2], boundaries[1::2])]
+        if not runs:
+            return None
         start, end = max(runs, key=lambda pair: pair[1] - pair[0])
         points = points[start:end]
         if len(points) < 60:
