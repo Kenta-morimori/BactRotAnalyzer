@@ -18,6 +18,11 @@ from utils.functions import repellent_response, repellent_sign_reference
 
 def test_production_adapter_preserves_frozen_signs_and_missing_outputs(tmp_path, monkeypatch):
     monkeypatch.setattr(param, "save_dir_bef", str(tmp_path))
+
+    def no_baseline(*args, **kwargs):
+        raise AssertionError("V2 must not recompute the old method")
+
+    monkeypatch.setattr(repellent_response, "estimate_rotation_center_validated", no_baseline)
     data = generate(AuditCase("stop", StudyCase("stop", 0.35, perturbation="dwell_drift_resume")), 10200)
     cx, cy, result = repellent_sign_reference.analyze(
         "study", [data.time], [data.observed[:, 0]], [data.observed[:, 1]], source_starts=[201]
@@ -113,3 +118,15 @@ def test_param_changes_and_explicit_cli_settings(monkeypatch):
     parser = entry.build_parser()
     args = parser.parse_args(["--center-estimator", "validated", "--no-stop-measurement"])
     assert entry.resolve_center_options(args.center_estimator, args.stop_measurement) == ("validated", False)
+
+
+def test_empty_sample_saves_missing_coverage_and_diagnostic_schema(tmp_path, monkeypatch):
+    monkeypatch.setattr(param, "save_dir_bef", str(tmp_path))
+    repellent_sign_reference.analyze("short", [np.arange(3) * 0.005], [[0, 0, 0]], [[0, 0, 0]])
+    folder = tmp_path / "short/repellent_response/rotation_center"
+    summary = pd.read_csv(folder / "summary.csv")
+    assert summary.evaluation_points.iloc[0] == 0
+    assert np.isnan(summary.primary_coverage.iloc[0])
+    assert (folder / "no01/overview.png").is_file()
+    assert (folder / "no01/diagnostics.png").is_file()
+    assert "measurement_reason" in pd.read_csv(folder / "no01/timeseries.csv")

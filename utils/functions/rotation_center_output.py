@@ -32,8 +32,13 @@ def _gaps(axes, time, points):
 
 
 def _series(axis, frame, column, **kwargs):
-    for _, part in frame.groupby("segment_id", sort=False):
-        axis.plot(part.time_sec, part[column], **kwargs)
+    label = kwargs.pop("label", None)
+    color = kwargs.pop("color", None)
+    for index, (_, part) in enumerate(frame.groupby("segment_id", sort=False)):
+        (line,) = axis.plot(
+            part.time_sec, part[column], color=color, label=label if index == 0 else "_nolegend_", **kwargs
+        )
+        color = line.get_color()
 
 
 def _states(axis, frame):
@@ -125,7 +130,7 @@ def plot_sample(time, points, frame, episodes, sample, out):
 
     fig, axes = plt.subplots(7, 1, figsize=(14, 12), sharex=True)
     groups = [
-        (["motion_rms_um", "noise_rms_um"], "Motion / residual (µm)"),
+        (["motion_rms_um", "smoothing_residual_rms_um"], "Motion / residual (µm)"),
         (["direction_coherence", "phase_linearity"], "Coherence / phase R²"),
         (["motion_noise_ratio"], "Motion / noise"),
         (["active_support_s", "active_support_left_s", "active_support_right_s"], "Active support (s)"),
@@ -150,8 +155,12 @@ def plot_sample(time, points, frame, episodes, sample, out):
     _finish(fig, out / "diagnostics.png")
 
     for event in episodes.itertuples():
+        lower = max(time[0], event.start_s - 4.5)
+        upper = min(time[-1], event.end_s + 4.5)
+        selected = (time >= lower) & (time <= upper)
+        nearby = frame[frame.time_sec.between(lower, upper)]
         fig, axes = plt.subplots(5, 1, figsize=(13, 10), sharex=True)
-        _coordinates(axes[:2], time, points, frame)
+        _coordinates(axes[:2], time[selected], points[selected], nearby)
         if event.reference_status == "supported":
             clock = frame.loc[frame.episode_id.eq(event.episode_id), "time_sec"].to_numpy(float)
             weight = (clock - event.left_time_s) / (event.right_time_s - event.left_time_s)
@@ -166,14 +175,14 @@ def plot_sample(time, points, frame, episodes, sample, out):
                     label="Interpolation candidate (not necessarily accepted)",
                 )
                 axis.scatter([event.left_time_s, event.right_time_s], [left, right], color=PRIMARY, s=24)
-        _velocities(axes[2], frame)
-        _series(axes[3], frame, "stop_angular_velocity_rad_s", color=STOP, lw=0.8, marker=".", markersize=2)
+        _velocities(axes[2], nearby)
+        _series(axes[3], nearby, "stop_angular_velocity_rad_s", color=STOP, lw=0.8, marker=".", markersize=2)
         axes[3].set_ylabel("Stop ω (rad/s)")
-        _states(axes[4], frame)
+        _states(axes[4], nearby)
         for axis in axes:
             axis.axvspan(event.start_s, event.end_s, color=STOP, alpha=0.12)
-            axis.set_xlim(event.start_s - 4.5, event.end_s + 4.5)
-        _gaps(axes, time, points)
+            axis.set_xlim(lower, upper)
+        _gaps(axes, time[selected], points[selected])
         axes[4].set_xlabel("Time (s)")
         fig.suptitle(
             f"No.{sample}, stop candidate {event.episode_id+1}: {event.reference_status}; "
