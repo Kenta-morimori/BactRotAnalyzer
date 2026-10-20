@@ -1,5 +1,10 @@
 ## Code Review Rules
 
+### GitHub Codex review requests
+
+- Request a GitHub Codex review manually at most once per PR by default. Check the PR's existing Codex review history before posting `@codex review`; a new head does not reset the count.
+- For any additional GitHub Codex review, explain the reason, the previously reviewed and current head SHAs, the findings addressed, and the current checks, then obtain explicit approval before posting another request. Local review and CI may continue without another GitHub request.
+
 ### Frame and time identity
 
 - In repellent response analysis, keep each observation tied to its original frame and timestamp. Missing coordinates, invalid centers, and timestamp gaps must remain unavailable; do not compact rows, carry values across gaps, or calculate a direction or switching event across them. Preserve explicit source-frame mapping when saving or splitting a series.
