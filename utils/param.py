@@ -5,6 +5,10 @@ import re
 
 import pandas as pd
 
+# Repellent-response defaults; explicit CLI options take precedence.
+center_estimator = "v2"
+stop_measurement_enabled = True
+
 # directory information
 curr_dir = os.getcwd()
 input_dir_bef = f"{curr_dir}/data"

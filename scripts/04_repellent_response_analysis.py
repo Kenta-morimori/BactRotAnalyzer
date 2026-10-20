@@ -1,7 +1,10 @@
 import argparse
+import json
 import os
+import shutil
 import sys
-from typing import Optional, cast
+from pathlib import Path
+from typing import Any, Optional, cast
 
 import numpy as np
 
@@ -15,8 +18,19 @@ from utils.functions import (  # noqa
     make_graph,
     raw_centroid,
     repellent_response,
+    repellent_sign_reference,
     save2csv,
 )
+
+
+def resolve_center_options(center_estimator, stop_measurement_enabled):
+    center_estimator = center_estimator if center_estimator is not None else param.center_estimator
+    stop_measurement_enabled = (
+        param.stop_measurement_enabled if stop_measurement_enabled is None else stop_measurement_enabled
+    )
+    if center_estimator not in {"v2", "validated", "legacy"}:
+        raise ValueError(f"Unknown center estimator: {center_estimator}")
+    return center_estimator, stop_measurement_enabled
 
 
 def main(
@@ -28,8 +42,11 @@ def main(
     stop_activity_ratio: float,
     stop_min_duration_rotations: float,
     output_suffix: Optional[str],
-    center_estimator: str = "validated",
+    center_estimator: Optional[str] = None,
+    all_frames: bool = False,
+    stop_measurement_enabled: Optional[bool] = None,
 ):
+    center_estimator, stop_measurement_enabled = resolve_center_options(center_estimator, stop_measurement_enabled)
     base_save_dir = param.save_dir_bef
     if output_suffix is not None and output_suffix != "":
         param.save_dir_bef = f"{base_save_dir}/{output_suffix}"
@@ -59,11 +76,11 @@ def main(
     y_list = [frame["y_um"].to_list() for frame in raw_frames]
 
     # Phase 1: background intensity and rise-point detection.
-    background_list = repellent_response.get_background_intensity_time_series(day)
+    background_list = repellent_response.get_background_intensity_time_series(day, time_list=time_list)
     time_list, selected_series, range_rows = repellent_response.apply_analysis_frame_ranges(
         time_list=time_list,
         series_lists=[x_list, y_list, background_list],
-        frame_ranges=param.get_analysis_frame_ranges_config(day),
+        frame_ranges=[] if all_frames else param.get_analysis_frame_ranges_config(day),
     )
     x_list, y_list, background_list = selected_series
     # The canonical outputs/<day>/time_list.csv remains the raw TIFF timeline;
@@ -112,7 +129,22 @@ def main(
         else:
             result["rotation_stop_time"] = float("nan")
     save2csv.save_repellent_rise_summary(rise_results, day)
-    if center_estimator == "validated":
+    if center_estimator == "v2":
+        all_x_center_list, all_y_center_list, all_rot_v2 = repellent_sign_reference.analyze(
+            day,
+            all_comp_time_list,
+            all_x_before_list,
+            all_y_before_list,
+            stop_indices,
+            source_starts=[int(cast(Any, row["source_start_frame_1based"])) for row in range_rows],
+            stop_measurement_enabled=stop_measurement_enabled,
+        )
+        # Frame-based FFT and velocity artifacts must not survive a point-sampled run.
+        for segment in ("00_all_rotational_analysis", "02_pre_rise_fluctuation", "03_post_rise_analysis"):
+            target = Path(repellent_root) / segment / "angular_velocity"
+            if target.exists():
+                shutil.rmtree(target)
+    elif center_estimator == "validated":
         all_x_center_list, all_y_center_list, center_assessments = (
             repellent_response.estimate_rotation_center_validated(
                 time_list=all_comp_time_list,
@@ -164,15 +196,18 @@ def main(
         center_x_list=all_x_center_list,
         center_y_list=all_y_center_list,
     )
-    all_rot = repellent_response.run_segment_rotational_analysis(
-        day=day,
-        segment_subdir="00_all_rotational_analysis",
-        time_list=all_comp_time_list,
-        x_list=all_x_corr_list,
-        y_list=all_y_corr_list,
-        run_fluctuation=False,
-        write_time_list=False,
-    )
+    if center_estimator == "v2":
+        all_rot = all_rot_v2
+    else:
+        all_rot = repellent_response.run_segment_rotational_analysis(
+            day=day,
+            segment_subdir="00_all_rotational_analysis",
+            time_list=all_comp_time_list,
+            x_list=all_x_corr_list,
+            y_list=all_y_corr_list,
+            run_fluctuation=False,
+            write_time_list=False,
+        )
     all_rise_time_for_av = []
     for idx in all_rot["valid_indices"]:
         if idx < len(rise_results):
@@ -187,12 +222,19 @@ def main(
         angular_velocity_list=all_rot["angular_velocity_list"],
         original_sample_indices=all_rot["valid_indices"],
         rise_time_list=all_rise_time_for_av,
-        write_time_list=False,
+        write_time_list=center_estimator == "v2",
     )
-    bg_for_av = []
+    bg_for_av: list[list[float]] = []
     for idx in all_rot["valid_indices"]:
         if idx < len(background_list):
-            bg_for_av.append(background_list[idx])
+            if center_estimator == "v2":
+                bg_for_av.append(
+                    np.interp(
+                        all_rot["time_list"][len(bg_for_av)], all_comp_time_list[idx], background_list[idx]
+                    ).tolist()
+                )
+            else:
+                bg_for_av.append(background_list[idx])
         else:
             bg_for_av.append([])
 
@@ -334,6 +376,7 @@ def main(
         valid_indices=all_rot["valid_indices"],
         rise_indices=rise_indices,
         mode="pre",
+        rise_time_list=all_rise_time_for_centroid if center_estimator == "v2" else None,
     )
     repellent_response.save_segment_angular_velocity_outputs(
         day=day,
@@ -422,6 +465,7 @@ def main(
         valid_indices=all_rot["valid_indices"],
         rise_indices=rise_indices,
         mode="post",
+        rise_time_list=all_rise_time_for_centroid if center_estimator == "v2" else None,
     )
     repellent_response.save_segment_angular_velocity_outputs(
         day=day,
@@ -460,8 +504,22 @@ def main(
         "centroid_corrected.png",
     )
 
+    (Path(repellent_root) / "analysis_method.json").write_text(
+        json.dumps(
+            {
+                "center_estimator": center_estimator,
+                "all_frames": all_frames,
+                "stop_measurement_enabled": bool(stop_measurement_enabled and center_estimator == "v2"),
+                "unknown": "NaN; no interpolation or carry-forward",
+                "sign_convention": "CW +, CCW -",
+            },
+            indent=2,
+        )
+        + "\n"
+    )
 
-if __name__ == "__main__":
+
+def build_parser():
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--day", type=str, default="repellent-response/20260312")
@@ -469,12 +527,25 @@ if __name__ == "__main__":
     parser.add_argument("--sigma-threshold", type=float, default=3.0)
     parser.add_argument("--min-consecutive", type=int, default=3)
     parser.add_argument("--post-rise-center-mode", type=int, choices=[1, 2, 3], default=param.post_rise_center_mode)
-    parser.add_argument("--center-estimator", choices=["validated", "legacy"], default="validated")
+    parser.add_argument("--center-estimator", choices=["v2", "validated", "legacy"], default=None)
+    parser.add_argument(
+        "--stop-measurement",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Save separate stopped-orbit measurements for V2 (default: param)",
+    )
+    parser.add_argument(
+        "--all-frames", action="store_true", help="Analyze every saved frame, overriding configured frame ranges"
+    )
     parser.add_argument("--stop-activity-ratio", type=float, default=param.stop_activity_ratio)
     parser.add_argument("--stop-min-duration-rotations", type=float, default=param.stop_min_duration_rotations)
     parser.add_argument("--output-suffix", type=str, default=None)
 
-    args = parser.parse_args()
+    return parser
+
+
+if __name__ == "__main__":
+    args = build_parser().parse_args()
 
     main(
         day=args.day,
@@ -486,4 +557,6 @@ if __name__ == "__main__":
         stop_min_duration_rotations=args.stop_min_duration_rotations,
         output_suffix=args.output_suffix,
         center_estimator=args.center_estimator,
+        all_frames=args.all_frames,
+        stop_measurement_enabled=args.stop_measurement,
     )

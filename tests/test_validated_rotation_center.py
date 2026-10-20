@@ -6,7 +6,10 @@ matplotlib.use("Agg", force=True)
 
 from utils import param
 from utils.functions import repellent_response
-from utils.functions.validated_rotation_center import assess_center_window
+from utils.functions.validated_rotation_center import (
+    assess_center_window,
+    estimate_center_series,
+)
 
 
 def _orbit(seed: int, *, short_arc: bool = False) -> np.ndarray:
@@ -143,3 +146,56 @@ def test_empty_assessment_has_stable_csv_header(tmp_path, monkeypatch):
         "gate_pass",
         "gate_failure",
     ]
+
+
+def test_repeated_short_arc_does_not_become_a_false_center():
+    n = 1200
+    time = np.arange(n) / 200
+    frames = np.arange(n)
+    phase = np.deg2rad(60) * (2 / np.pi) * np.arcsin(np.sin(np.pi * (frames - 30) / 60))
+    rng = np.random.default_rng(7100)
+    points = [1.3, 1.45] + np.column_stack((0.3 * np.cos(phase), 0.18 * np.sin(phase)))
+    points += rng.normal(0, 0.02, points.shape)
+    centers, records = estimate_center_series(time, points)
+    assert not np.isfinite(centers).any()
+    assert any("angular_coverage" in row.get("gate_failure", "") for row in records)
+
+
+def test_full_turn_reversals_remain_usable_despite_cross_spectrum_cancellation():
+    n = 1200
+    time = np.arange(n) / 200
+    frames = np.arange(n)
+    phase = np.pi * (2 / np.pi) * np.arcsin(np.sin(np.pi * (frames - 30) / 60))
+    rng = np.random.default_rng(7100)
+    points = [1.3, 1.45] + np.column_stack((0.3 * np.cos(phase), 0.18 * np.sin(phase)))
+    points += rng.normal(0, 0.02, points.shape)
+    centers, _ = estimate_center_series(time, points)
+    valid = np.isfinite(centers).all(axis=1)
+    assert valid[200:1000].mean() > 0.9
+    assert np.quantile(np.linalg.norm(centers[valid] - [1.3, 1.45], axis=1) / 0.3, 0.95) < 0.1
+
+
+def test_missing_frames_do_not_poison_distant_valid_windows():
+    n = 1200
+    time = np.arange(n) / 200
+    phase = 2 * np.pi * np.arange(n) / 60
+    points = [1.3, 1.45] + np.column_stack((0.3 * np.cos(phase), 0.18 * np.sin(phase)))
+    points[520:560] = np.nan
+    centers, _ = estimate_center_series(time, points)
+    assert np.isnan(centers[520:560]).all()
+    assert np.isfinite(centers[250:400]).any()
+    assert np.isfinite(centers[800:950]).any()
+
+
+def test_small_radius_with_large_relative_noise_is_not_reported_as_a_precise_center():
+    n = 1200
+    time = np.arange(n) / 200
+    phase = 2 * np.pi * np.arange(n) / 60
+    size = np.ones(n)
+    size[n // 2 :] = 0.2
+    rng = np.random.default_rng(8105)
+    points = [1.3, 1.45] + size[:, None] * np.column_stack((0.3 * np.cos(phase), 0.18 * np.sin(phase)))
+    points += rng.normal(0, 0.02, points.shape)
+    centers, records = estimate_center_series(time, points)
+    assert np.isnan(centers[800:1100]).all()
+    assert any("orbit_residual" in row.get("gate_failure", "") for row in records)
