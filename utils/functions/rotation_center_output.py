@@ -233,4 +233,7 @@ def save_results(day, samples, *, stop_measurement_enabled):
             )
         )
         plot_sample(time, points, frame, episodes, sample, out)
-    pd.DataFrame(rows).fillna(0).to_csv(root / "summary.csv", index=False)
+    summary = pd.DataFrame(rows)
+    counts = [column for column in summary if column.startswith(("primary_reason_", "stop_reason_"))]
+    summary[counts] = summary[counts].fillna(0)
+    summary.to_csv(root / "summary.csv", index=False)
