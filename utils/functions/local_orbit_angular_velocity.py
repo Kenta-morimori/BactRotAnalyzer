@@ -1,8 +1,8 @@
 """Center-free, local approximation of centroid-orbit angular velocity.
 
 The window mean is a nuisance offset, not an estimate of the physical orbit
-center. Consequently the returned magnitude is approximate. The sign follows
-the existing analysis convention: clockwise is positive.
+center. Consequently the returned magnitude is approximate. For image-space
+coordinates (y increases downward), visually clockwise motion is positive.
 """
 
 from __future__ import annotations
@@ -74,7 +74,7 @@ def estimate_local_orbit_velocity(
             cross = centered[:-1, 0] * centered[1:, 1] - centered[:-1, 1] * centered[1:, 0]
             radius_squared = np.sum(centered[:-1] ** 2, axis=1)
             denominator = float(np.sum(radius_squared * window_dt))
-            omega = -float(np.sum(cross)) / denominator if denominator > 0 else np.nan
+            omega = float(np.sum(cross)) / denominator if denominator > 0 else np.nan
             sum_abs_cross = float(np.sum(np.abs(cross)))
             coherence = abs(float(np.sum(cross))) / sum_abs_cross if sum_abs_cross > 0 else 0.0
             motion_rms = float(np.sqrt(np.mean(np.sum(centered**2, axis=1))))

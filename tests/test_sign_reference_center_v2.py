@@ -7,13 +7,13 @@ from tests.synthetic.sign import StudyCase
 from utils.functions.sign_reference_center_v2 import estimate_sign_reference_v2
 
 
-def test_fast_drift_can_report_both_rotation_directions():
-    for clockwise in (False, True):
-        data = generate(AuditCase("fast", StudyCase("fast", 0.35, clockwise=clockwise), 44), 10000)
+def test_fast_drift_can_report_both_image_space_directions():
+    for cartesian_clockwise in (False, True):
+        data = generate(AuditCase("fast", StudyCase("fast", 0.35, cartesian_clockwise=cartesian_clockwise), 44), 10000)
         frame = estimate_sign_reference_v2(data.time, data.observed)
         accepted = frame.rotation_sign.dropna()
         assert len(accepted) > 150
-        assert accepted.eq(1 if clockwise else -1).all()
+        assert accepted.eq(-1 if cartesian_clockwise else 1).all()
         assert frame.loc[frame.rotation_sign.notna(), "sign_area"].eq(accepted).all()
 
 

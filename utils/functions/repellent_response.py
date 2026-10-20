@@ -596,6 +596,7 @@ def run_segment_rotational_analysis(
                         tmp_day,
                         time_list=selected_time_list,
                         return_signed_angular_velocity=True,
+                        image_y_down=True,
                     )
                 )
 

@@ -41,6 +41,22 @@ def test_production_adapter_preserves_frozen_signs_and_missing_outputs(tmp_path,
     assert np.isnan(np.array(cx[0])[np.setdiff1d(np.arange(len(data.time)), anchors)]).all()
 
 
+def test_image_space_clockwise_sign_and_cw_rate():
+    time = np.arange(1200) / 200
+    phase = 2 * np.pi * 20 * time
+    for y_direction, expected_sign, expected_cw_rate in ((1, 1, 1.0), (-1, -1, 0.0)):
+        points = np.column_stack((1.3 + 0.3 * np.cos(phase), 1.45 + y_direction * 0.18 * np.sin(phase)))
+        _, frame, _ = repellent_sign_reference.analyze_sample(time, points, stop_measurement_enabled=False)
+        reported = frame.rotation_sign.notna()
+        assert reported.sum() > 100
+        assert frame.loc[reported, "rotation_sign"].eq(expected_sign).all()
+        assert frame.loc[reported, "angular_velocity_rad_s"].mul(expected_sign).gt(0).all()
+        _, cw_rate = repellent_response.calculate_angular_velocity_cw_rate(
+            [frame.time_sec.tolist()], [frame.angular_velocity_rad_s.tolist()]
+        )
+        assert np.allclose(np.asarray(cw_rate[0])[np.isfinite(cw_rate[0])], expected_cw_rate)
+
+
 def test_point_sampled_pre_post_split_uses_stimulus_time_and_keeps_nan():
     args: dict[str, Any] = dict(
         time_list=[[10, 10.025, 10.05, 10.075]],

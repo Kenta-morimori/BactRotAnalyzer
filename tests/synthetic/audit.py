@@ -28,7 +28,7 @@ def generate(case: AuditCase, seed: int):
         if "dwell" in case.source.perturbation:
             a, b = 0.4 * case.source.duration, 0.6 * case.source.duration
             clock = np.where(t < a, t, np.where(t < b, a, t - (b - a)))
-        phase = (-1 if case.source.clockwise else 1) * 2 * np.pi * case.frequency * clock
+        phase = (-1 if case.source.cartesian_clockwise else 1) * 2 * np.pi * case.frequency * clock
         data.ideal = data.center + np.column_stack((data.radius * np.cos(phase), 0.6 * data.radius * np.sin(phase)))
         rng = np.random.default_rng(seed + 777)
         data.observed = data.ideal + rng.normal(0, case.source.noise, data.ideal.shape)

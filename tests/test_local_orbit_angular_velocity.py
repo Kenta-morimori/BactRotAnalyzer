@@ -12,7 +12,7 @@ def test_noiseless_orbit_has_production_sign_and_approximate_speed():
     result = estimate_local_orbit_velocity(time, points)
 
     assert len(result) > 180
-    assert (result.signed_angular_velocity_rad_s < 0).all()  # CCW is negative
+    assert (result.signed_angular_velocity_rad_s > 0).all()  # clockwise in image space
     assert 15 < result.signed_angular_velocity_rad_s.abs().median() < 28
 
 
@@ -40,5 +40,5 @@ def test_reversal_changes_sign_away_from_transition():
     before = result.loc[result.time_sec.between(1, 2), "signed_angular_velocity_rad_s"]
     after = result.loc[result.time_sec.between(4, 5), "signed_angular_velocity_rad_s"]
 
-    assert (before < 0).mean() > 0.95
-    assert (after > 0).mean() > 0.95
+    assert (before > 0).mean() > 0.95
+    assert (after < 0).mean() > 0.95

@@ -252,7 +252,7 @@ def estimate_stopped_reference(
                 continue
             angle = np.unwrap(np.arctan2(relative[:, 1], relative[:, 0]))
             offsets = clock - clock.mean()
-            slope = -float(np.dot(offsets, angle - angle.mean()) / np.dot(offsets, offsets))
+            slope = float(np.dot(offsets, angle - angle.mean()) / np.dot(offsets, offsets))
             noise_scale = noise / lever / np.sqrt(np.dot(offsets, offsets))
             center = reference(np.array([time[anchor]]))[0]
             result.loc[

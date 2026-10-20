@@ -87,6 +87,7 @@ def test_existing_angular_velocity_csv_keeps_invalid_frames(tmp_path, monkeypatc
         [corrected[:, 1].tolist()],
         write_time_list=False,
     )
+    assert np.nanmedian(result["signed_angular_velocity_list"][0]) > 0  # image-space clockwise
     repellent_response.save_segment_angular_velocity_outputs(
         "sample",
         "00_all_rotational_analysis",

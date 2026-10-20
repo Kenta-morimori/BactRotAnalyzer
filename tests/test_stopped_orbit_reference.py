@@ -16,6 +16,21 @@ def test_stop_measurement_is_not_forced_to_zero_and_v2_stays_missing():
     assert frame.loc[measured, "motion_label"].eq("stop_candidate").all()
 
 
+def test_stop_measurement_sign_uses_image_space_direction():
+    for speed in (0.4, -0.4):
+        data = generate(Case("slow_orbit", drift=0, noise=0.008), 10400)
+        stopped = data["stopped"]
+        elapsed = data["time"][stopped] - 3.0
+        orbit = np.column_stack((0.3 * np.cos(speed * elapsed), 0.18 * np.sin(speed * elapsed)))
+        noise = np.random.default_rng(12).normal(0, 0.008, orbit.shape)
+        data["observed"][stopped] = data["center"][stopped] + orbit + noise
+
+        frame, events = estimate_stopped_reference(data["time"], data["observed"])
+        measured = frame.stop_angular_velocity_rad_s.dropna()
+        assert len(events) == 1 and len(measured) > 20
+        assert np.sign(measured.median()) == np.sign(speed)
+
+
 def test_coincident_center_is_labeled_but_not_measured():
     data = generate(Case("center", kind="center"), 10400)
     frame, events = estimate_stopped_reference(data["time"], data["observed"])

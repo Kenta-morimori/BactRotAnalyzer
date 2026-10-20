@@ -19,7 +19,7 @@ class StudyCase:
     direction: str = "x"
     noise: float = 0.02
     duration: float = 6.0
-    clockwise: bool = False
+    cartesian_clockwise: bool = False
     dwell_noise: float = 0.008
 
 
@@ -60,7 +60,9 @@ def make_data(case: StudyCase, seed: int):
         data.ideal = data.center + orbit
         data.observed = data.ideal + np.random.default_rng(seed + 55000).normal(0, case.noise, data.ideal.shape)
         data.rotating[:] = False
-    if case.clockwise:
+    # Preserve the original Cartesian fixture geometry. Reflection reverses
+    # image-space direction because measured AVI coordinates have y downward.
+    if case.cartesian_clockwise:
         data.ideal[:, 1] = 2 * data.center[:, 1] - data.ideal[:, 1]
         data.observed[:, 1] = 2 * data.center[:, 1] - data.observed[:, 1]
     return data

@@ -20,7 +20,7 @@ from utils.functions.local_orbit_angular_velocity import (
 def _area_sign(window: np.ndarray, center: np.ndarray) -> float:
     relative = window - center
     cross = relative[:-1, 0] * relative[1:, 1] - relative[:-1, 1] * relative[1:, 0]
-    value = -float(np.sum(cross))  # clockwise positive
+    value = float(np.sum(cross))  # clockwise positive in image coordinates
     return float(np.sign(value)) if np.isfinite(value) and value != 0 else np.nan
 
 
@@ -29,8 +29,8 @@ def _phase(window: np.ndarray, time: np.ndarray, center: np.ndarray) -> tuple[fl
     angle = np.unwrap(np.arctan2(relative[:, 1], relative[:, 0]))
     offsets = time - time.mean()
     centered = angle - angle.mean()
-    slope = -float(np.dot(offsets, centered) / np.dot(offsets, offsets))
-    residual = centered + slope * offsets
+    slope = float(np.dot(offsets, centered) / np.dot(offsets, offsets))
+    residual = centered - slope * offsets
     variance = float(np.dot(centered, centered))
     linearity = max(0.0, 1 - float(np.dot(residual, residual)) / variance) if variance > 0 else 0.0
     return float(np.sign(slope)), linearity, abs(slope) * (time[-1] - time[0])

@@ -50,7 +50,7 @@ def normalized_angle(angle_bef):
     return angle_aft
 
 
-def get_angular_velocity(x_list, y_list, day, time_list=None, return_signed_angular_velocity=False):
+def get_angular_velocity(x_list, y_list, day, time_list=None, return_signed_angular_velocity=False, image_y_down=False):
     sample_num, FrameRate, _ = param.get_config(day)
     angle_list, angular_velocity_list = [], []
     angular_velocity_list_bef_corr = []
@@ -97,8 +97,9 @@ def get_angular_velocity(x_list, y_list, day, time_list=None, return_signed_angu
                 angle_diff -= 2 * np.pi
             elif angle_diff < -np.pi:
                 angle_diff += 2 * np.pi
-            # CCWを正にするために-1をかける
-            add_angular_velocity[j - 1] = -1 * angle_diff / dt
+            # Keep the historical default; image-space repellent analysis uses
+            # increasing y downward, where positive angle change is visual CW.
+            add_angular_velocity[j - 1] = (1 if image_y_down else -1) * angle_diff / dt
 
         # correct angular velocity
         add_angular_velocity_bef_corr = np.array(copy.deepcopy(add_angular_velocity))
