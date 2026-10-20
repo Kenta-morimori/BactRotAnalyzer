@@ -263,6 +263,7 @@ def main(
         time_list=all_rot["time_list"],
         angular_velocity_list=all_rot["signed_angular_velocity_list"],
         window_width_sec=1.0,
+        missing_breaks_window=center_estimator == "v2",
     )
     save2csv.save_angular_velocity_cw_rate(
         cw_rate_time_list,

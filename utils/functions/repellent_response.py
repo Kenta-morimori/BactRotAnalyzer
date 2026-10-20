@@ -211,8 +211,13 @@ def calculate_angular_velocity_cw_rate(
     time_list: Sequence[Sequence[float]],
     angular_velocity_list: Sequence[Sequence[float]],
     window_width_sec: float = 1.0,
+    missing_breaks_window: bool = False,
 ) -> Tuple[List[List[float]], List[List[float]]]:
-    """Calculate CW fraction among finite samples (CW positive, CCW negative)."""
+    """Calculate CW fraction (CW positive, CCW negative).
+
+    For V2, reject a window containing missing values so it cannot combine
+    accepted measurements from opposite sides of a recording gap.
+    """
     out_time: List[List[float]] = []
     out_rate: List[List[float]] = []
 
@@ -222,13 +227,14 @@ def calculate_angular_velocity_cw_rate(
         w_rates: List[float] = []
 
         for window_start in t[np.isfinite(t)]:
-            window_mask = (t >= window_start) & (t <= window_start + window_width_sec) & np.isfinite(av)
+            window_mask = (t >= window_start) & (t <= window_start + window_width_sec)
             window_av = av[window_mask]
             w_times.append(float(window_start + window_width_sec / 2.0))
-            if window_av.size == 0:
+            if window_av.size == 0 or (missing_breaks_window and not np.isfinite(window_av).all()):
                 w_rates.append(float("nan"))
             else:
-                w_rates.append(float(np.count_nonzero(window_av > 0.0) / window_av.size))
+                finite = window_av[np.isfinite(window_av)]
+                w_rates.append(float(np.count_nonzero(finite > 0.0) / finite.size) if finite.size else float("nan"))
 
         out_time.append(w_times)
         out_rate.append(w_rates)

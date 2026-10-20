@@ -26,6 +26,17 @@ def test_cw_rate_excludes_nan_and_matches_switching_window_times():
     assert np.allclose(cw_rate[0], [0.0, 0.5, 0.5, 1.0])
 
 
+def test_v2_cw_rate_rejects_windows_crossing_missing_observations():
+    _, rate = repellent_response.calculate_angular_velocity_cw_rate(
+        [[0.0, 0.1, 0.2, 0.3, 0.4]],
+        [[1.0, 1.0, np.nan, -1.0, -1.0]],
+        window_width_sec=0.35,
+        missing_breaks_window=True,
+    )
+    assert np.isnan(rate[0][:3]).all()
+    assert rate[0][3:] == [0.0, 0.0]
+
+
 def test_cw_rate_csv_has_time_and_rate_columns(tmp_path, monkeypatch):
     monkeypatch.setattr(param, "save_dir_bef", str(tmp_path))
 

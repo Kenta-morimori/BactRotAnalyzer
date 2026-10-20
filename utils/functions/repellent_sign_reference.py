@@ -79,9 +79,26 @@ def analyze(day, time_list, x_list, y_list, stop_indices=None, source_starts=Non
             result["angular_velocity_list"].append(missing.copy())
             result["signed_angular_velocity_list"].append(missing.copy())
         else:
-            result["time_list"].append(frame.time_sec.tolist())
-            result["angle_list"].append(frame.angle_rad.tolist())
-            result["angular_velocity_list"].append(frame.angular_velocity_rad_s.tolist())
-            result["signed_angular_velocity_list"].append(frame.angular_velocity_rad_s.tolist())
+            primary_time = []
+            primary_angle = []
+            primary_omega = []
+            previous_time = float("nan")
+            previous_segment = -1
+            for row in frame.itertuples():
+                if previous_segment >= 0 and row.segment_id != previous_segment:
+                    # One explicit missing point breaks all downstream windows
+                    # spanning a coordinate or timestamp gap between runs.
+                    primary_time.append((previous_time + row.time_sec) / 2)
+                    primary_angle.append(np.nan)
+                    primary_omega.append(np.nan)
+                primary_time.append(row.time_sec)
+                primary_angle.append(row.angle_rad)
+                primary_omega.append(row.angular_velocity_rad_s)
+                previous_time = row.time_sec
+                previous_segment = row.segment_id
+            result["time_list"].append(primary_time)
+            result["angle_list"].append(primary_angle)
+            result["angular_velocity_list"].append(primary_omega)
+            result["signed_angular_velocity_list"].append(primary_omega.copy())
     save_results(day, samples, stop_measurement_enabled=stop_measurement_enabled)
     return cx_all, cy_all, result

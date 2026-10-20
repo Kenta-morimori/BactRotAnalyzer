@@ -13,7 +13,12 @@ import pandas as pd
 from tests.synthetic.audit import AuditCase, generate
 from tests.synthetic.sign import StudyCase
 from utils import param
-from utils.functions import repellent_response, repellent_sign_reference
+from utils.functions import (
+    fluctuation_analysis,
+    read_csv,
+    repellent_response,
+    repellent_sign_reference,
+)
 
 
 def test_production_adapter_preserves_frozen_signs_and_missing_outputs(tmp_path, monkeypatch):
@@ -190,3 +195,41 @@ def test_empty_sample_retains_identity_in_primary_series(tmp_path, monkeypatch):
     )
     assert np.isnan(cw_rate[0]).all()
     assert np.isnan(switching[0]).all()
+
+
+def test_v2_primary_series_marks_coordinate_gap(tmp_path, monkeypatch):
+    monkeypatch.setattr(param, "save_dir_bef", str(tmp_path))
+    time = np.arange(1200) / 200
+    phase = 2 * np.pi * 20 * time
+    x = 1 + 0.3 * np.cos(phase)
+    y = 1 + 0.2 * np.sin(phase)
+    x[590:610] = np.nan
+    y[590:610] = np.nan
+    _, _, result = repellent_sign_reference.analyze("gap", [time], [x], [y])
+    frame = pd.read_csv(tmp_path / "gap/repellent_response/rotation_center/no01/timeseries.csv")
+    primary_time = np.asarray(result["time_list"][0])
+    primary_av = np.asarray(result["angular_velocity_list"][0])
+    boundary = np.flatnonzero(np.diff(frame.segment_id.to_numpy()) != 0)
+    assert len(boundary) == 1
+    left_time = float(frame.time_sec.iloc[boundary[0]])
+    right_time = float(frame.time_sec.iloc[boundary[0] + 1])
+    marker = np.flatnonzero((primary_time > left_time) & (primary_time < right_time))
+    assert len(marker) == 1 and np.isnan(primary_av[marker[0]])
+    assert len(primary_time) == len(frame) + 1
+
+    _, cw_rate = repellent_response.calculate_angular_velocity_cw_rate(
+        result["time_list"], result["signed_angular_velocity_list"], missing_breaks_window=True
+    )
+    crossing = (primary_time >= left_time - 0.5) & (primary_time <= right_time)
+    assert np.isnan(np.asarray(cw_rate[0])[crossing]).any()
+
+
+def test_fluctuation_window_remains_missing_across_gap(monkeypatch):
+    time = (np.arange(10) / 10).tolist()
+    omega = [1.0] * 5 + [np.nan] + [-1.0] * 4
+    monkeypatch.setattr(param, "get_config", lambda day: (1, [10], [1.0]))
+    monkeypatch.setattr(param, "SD_window_width_list", [0.5])
+    monkeypatch.setattr(read_csv, "get_timelist", lambda day: [time])
+    result = fluctuation_analysis.get_sd_time_series(0, omega, "gap")
+    assert np.isfinite(result["No.1_0.5s_sd"].iloc[2])
+    assert result["No.1_0.5s_sd"].iloc[4:7].isna().all()
