@@ -223,6 +223,7 @@ def main(
         original_sample_indices=all_rot["valid_indices"],
         rise_time_list=all_rise_time_for_av,
         write_time_list=center_estimator == "v2",
+        source_frame_list=all_rot.get("source_frame_list"),
     )
     bg_for_av: list[list[float]] = []
     for idx in all_rot["valid_indices"]:
@@ -379,6 +380,11 @@ def main(
         mode="pre",
         rise_time_list=all_rise_time_for_centroid if center_estimator == "v2" else None,
     )
+    pre_source_frames = (
+        [frames[: len(t)] for frames, t in zip(all_rot["source_frame_list"], pre_av_time_list)]
+        if center_estimator == "v2"
+        else None
+    )
     repellent_response.save_segment_angular_velocity_outputs(
         day=day,
         segment_subdir="02_pre_rise_fluctuation",
@@ -386,6 +392,7 @@ def main(
         angle_list=pre_angle_list,
         angular_velocity_list=pre_av_list,
         original_sample_indices=all_rot["valid_indices"],
+        source_frame_list=pre_source_frames,
     )
     repellent_response.run_pre_rise_fluctuation(
         pre_time_list=pre_av_time_list,
@@ -468,6 +475,11 @@ def main(
         mode="post",
         rise_time_list=all_rise_time_for_centroid if center_estimator == "v2" else None,
     )
+    post_source_frames = (
+        [frames[len(frames) - len(t) :] for frames, t in zip(all_rot["source_frame_list"], post_av_time_list)]
+        if center_estimator == "v2"
+        else None
+    )
     repellent_response.save_segment_angular_velocity_outputs(
         day=day,
         segment_subdir="03_post_rise_analysis",
@@ -475,6 +487,7 @@ def main(
         angle_list=post_angle_list,
         angular_velocity_list=post_av_list,
         original_sample_indices=all_rot["valid_indices"],
+        source_frame_list=post_source_frames,
     )
 
     # Plot three modes as panel figures (x-y, x-t, y-t): before, center, corrected.

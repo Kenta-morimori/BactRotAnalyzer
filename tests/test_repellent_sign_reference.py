@@ -148,6 +148,7 @@ def test_empty_sample_saves_missing_coverage_and_diagnostic_schema(tmp_path, mon
     summary = pd.read_csv(folder / "summary.csv")
     assert result["valid_indices"] == [0]
     assert result["time_list"] == [[0, 0.005, 0.01]]
+    assert result["source_frame_list"] == [[1, 2, 3]]
     assert np.isnan(result["angle_list"]).all()
     assert np.isnan(result["angular_velocity_list"]).all()
     assert summary.evaluation_points.iloc[0] == 0
@@ -164,10 +165,15 @@ def test_empty_sample_retains_identity_in_primary_series(tmp_path, monkeypatch):
     x = 1 + 0.3 * np.cos(phase)
     y = 1 + 0.2 * np.sin(phase)
     _, _, result = repellent_sign_reference.analyze(
-        "mixed", [time, time], [np.full(len(time), np.nan), x], [np.full(len(time), np.nan), y]
+        "mixed",
+        [time, time],
+        [np.full(len(time), np.nan), x],
+        [np.full(len(time), np.nan), y],
+        source_starts=[201, 401],
     )
     assert result["valid_indices"] == [0, 1]
     assert result["time_list"][0] == time.tolist()
+    assert result["source_frame_list"][0] == list(range(201, 201 + len(time)))
     assert np.isnan(result["angle_list"][0]).all()
     assert np.isnan(result["angular_velocity_list"][0]).all()
     assert np.isfinite(result["angular_velocity_list"][1]).any()
@@ -179,13 +185,46 @@ def test_empty_sample_retains_identity_in_primary_series(tmp_path, monkeypatch):
         angle_list=result["angle_list"],
         angular_velocity_list=result["angular_velocity_list"],
         original_sample_indices=result["valid_indices"],
+        source_frame_list=result["source_frame_list"],
     )
     folder = tmp_path / "mixed/repellent_response/00_all_rotational_analysis"
     primary = pd.read_csv(folder / "angular_velocity/angular-velocity_time-series.csv")
     mapping = pd.read_csv(folder / "sample_index_map.csv")
+    source_frames = pd.read_csv(folder / "angular_velocity/source_frame_1based_time-series.csv")
     assert primary["No.1"].isna().all()
     assert primary["No.2"].notna().any()
     assert mapping.original_sample_no.tolist() == [1, 2]
+    assert source_frames["No.1"].tolist() == list(range(201, 201 + len(time)))
+    assert source_frames["No.2"].dropna().iloc[0] > 401
+
+    for mode, subdir in (("pre", "02_pre_rise_fluctuation"), ("post", "03_post_rise_analysis")):
+        split_time, split_angle, split_av = repellent_response.split_rotational_series_by_rise(
+            result["time_list"],
+            result["angle_list"],
+            result["angular_velocity_list"],
+            result["valid_indices"],
+            [0, 0],
+            mode,
+            rise_time_list=[1.0, 1.0],
+        )
+        split_sources = [
+            frames[: len(t)] if mode == "pre" else frames[len(frames) - len(t) :]
+            for frames, t in zip(result["source_frame_list"], split_time)
+        ]
+        repellent_response.save_segment_angular_velocity_outputs(
+            "mixed",
+            subdir,
+            split_time,
+            split_angle,
+            split_av,
+            original_sample_indices=result["valid_indices"],
+            source_frame_list=split_sources,
+        )
+        saved = pd.read_csv(
+            tmp_path / "mixed/repellent_response" / subdir / "angular_velocity/source_frame_1based_time-series.csv"
+        )
+        assert saved["No.1"].dropna().tolist() == split_sources[0]
+        assert saved["No.2"].dropna().tolist() == split_sources[1]
 
     _, cw_rate = repellent_response.calculate_angular_velocity_cw_rate(
         result["time_list"], result["signed_angular_velocity_list"]
@@ -215,6 +254,7 @@ def test_v2_primary_series_marks_coordinate_gap(tmp_path, monkeypatch):
     right_time = float(frame.time_sec.iloc[boundary[0] + 1])
     marker = np.flatnonzero((primary_time > left_time) & (primary_time < right_time))
     assert len(marker) == 1 and np.isnan(primary_av[marker[0]])
+    assert np.isnan(result["source_frame_list"][0][marker[0]])
     assert len(primary_time) == len(frame) + 1
 
     _, cw_rate = repellent_response.calculate_angular_velocity_cw_rate(

@@ -1319,6 +1319,7 @@ def save_segment_angular_velocity_outputs(
     original_sample_indices: Optional[Sequence[int]] = None,
     rise_time_list: Optional[Sequence[float]] = None,
     write_time_list: bool = True,
+    source_frame_list: Optional[Sequence[Sequence[float]]] = None,
 ) -> None:
     save_dir = f"{param.save_dir_bef}/{day}/repellent_response/{segment_subdir}/angular_velocity"
     os.makedirs(save_dir, exist_ok=True)
@@ -1334,6 +1335,11 @@ def save_segment_angular_velocity_outputs(
 
     pd.DataFrame(angle_df).to_csv(f"{save_dir}/angle_time-series.csv", index=False)
     pd.DataFrame(av_df).to_csv(f"{save_dir}/angular-velocity_time-series.csv", index=False)
+    if source_frame_list is not None:
+        if len(source_frame_list) != n or any(len(source_frame_list[i]) != len(time_list[i]) for i in range(n)):
+            raise ValueError("source_frame_list must match the saved time series")
+        source_df = {f"No.{i + 1}": pd.Series(source_frame_list[i], dtype="Int64") for i in range(n)}
+        pd.DataFrame(source_df).to_csv(f"{save_dir}/source_frame_1based_time-series.csv", index=False)
     if write_time_list:
         time_df = {}
         for i in range(n):
