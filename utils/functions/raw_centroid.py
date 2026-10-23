@@ -14,7 +14,7 @@ from utils import param
 from utils.functions import input_data
 from utils.functions.get_centroid_coordinate import contours
 
-METHOD = "standard-largest-contour-mean-threshold-120-v2"
+METHOD = "standard-largest-contour-area-centroid-threshold-120-v3"
 COLUMNS = ["source_frame_1based", "time_sec", "x_px", "y_px", "x_um", "y_um", "ellipse_angle_deg", "detected"]
 
 

@@ -24,6 +24,7 @@ from utils.functions import (
 
 
 def contours(img):
+    """Return the binary pixel centroid and ellipse of the largest external contour."""
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     _, img_binary = cv2.threshold(img_gray, 120, 255, cv2.THRESH_BINARY)
     contours, _ = cv2.findContours(img_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -31,11 +32,22 @@ def contours(img):
         return np.nan, np.nan, None
     max_contour = max(contours, key=cv2.contourArea)
 
-    # A contour with fewer than five points cannot provide either a reliable
-    # object region or the minimum input required by cv2.fitEllipse.
+    # Preserve the existing detection condition and cv2.fitEllipse requirement.
     if max_contour is not None and len(max_contour) >= 5:
-        mean_x = np.mean(max_contour[:, 0, 0].astype(float))
-        mean_y = np.mean(max_contour[:, 0, 1].astype(float))
+        # Use the selected 8-connected foreground component, preserving holes
+        # and excluding separate objects even when enclosed by this contour.
+        component_mask = np.zeros((img_binary.shape[0] + 2, img_binary.shape[1] + 2), dtype=np.uint8)
+        seed = tuple(int(value) for value in max_contour[0, 0])
+        cv2.floodFill(
+            img_binary,
+            component_mask,
+            seed,
+            0,
+            flags=8 | cv2.FLOODFILL_MASK_ONLY | (255 << 8),
+        )
+        moments = cv2.moments(component_mask[1:-1, 1:-1], binaryImage=True)
+        mean_x = moments["m10"] / moments["m00"]
+        mean_y = moments["m01"] / moments["m00"]
         ellipse = cv2.fitEllipse(max_contour)
         return mean_x, mean_y, ellipse
     return np.nan, np.nan, None
