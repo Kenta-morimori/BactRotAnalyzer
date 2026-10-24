@@ -2,14 +2,20 @@
 
 import json
 from dataclasses import asdict
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from utils import param
-from utils.functions.local_orbit_angular_velocity import _continuous_runs
+from utils.functions.repellent_output import annotate_figure, metadata, response_root
+from utils.functions.repellent_plotting import (
+    candidate_bands,
+    coordinate_component,
+    plot_series,
+    recording_gaps,
+    reference_series,
+    velocities,
+)
 from utils.functions.stopped_orbit_reference import StopReferenceConfig
 
 PRIMARY = "#286b9c"
@@ -23,22 +29,11 @@ LABELS = {
 
 
 def _gaps(axes, time, points):
-    runs = _continuous_runs(time, points)
-    for (_, left), (right, _) in zip(runs, runs[1:]):
-        for axis in axes:
-            axis.axvspan(time[left - 1], time[right], color="#dddddd", alpha=0.6)
-    for axis in axes:
-        axis.grid(alpha=0.15)
+    recording_gaps(axes, time, points)
 
 
 def _series(axis, frame, column, **kwargs):
-    label = kwargs.pop("label", None)
-    color = kwargs.pop("color", None)
-    for index, (_, part) in enumerate(frame.groupby("segment_id", sort=False)):
-        (line,) = axis.plot(
-            part.time_sec, part[column], color=color, label=label if index == 0 else "_nolegend_", **kwargs
-        )
-        color = line.get_color()
+    plot_series(axis, frame.time_sec, frame[column], segments=frame.segment_id, **kwargs)
 
 
 def _states(axis, frame):
@@ -50,49 +45,18 @@ def _states(axis, frame):
 
 def _coordinates(axes, time, points, frame):
     for component, axis in enumerate(axes):
-        for start, end in _continuous_runs(time, points):
-            axis.plot(time[start:end], points[start:end, component], color="#bfc6cb", lw=0.35)
-        _series(
-            axis,
-            frame,
-            ["reference_x_um", "reference_y_um"][component],
-            color=PRIMARY,
-            lw=1,
-            marker=".",
-            markersize=1,
-            label="V2 reference",
-        )
-        _series(
-            axis,
-            frame,
-            ["measurement_center_x_um", "measurement_center_y_um"][component],
-            color=STOP,
-            lw=1.2,
-            marker=".",
-            markersize=2,
-            label="Stop measurement reference",
-        )
+        plot_series(axis, time, coordinate_component(points, component), color="#bfc6cb", lw=0.35)
+        reference_series(axis, frame, component=component, components=True)
         axis.set_ylabel(["x (µm)", "y (µm)"][component])
 
 
 def _velocities(axis, frame):
-    _series(axis, frame, "angular_velocity_rad_s", color=PRIMARY, lw=0.65, label="Primary V2")
-    _series(
-        axis,
-        frame,
-        "stop_angular_velocity_rad_s",
-        color=STOP,
-        lw=0.8,
-        marker=".",
-        markersize=2,
-        label="Stop measurement (separate)",
-    )
-    axis.set_ylabel("CW+ ω (rad/s)")
-    axis.legend(loc="upper right", fontsize=7)
+    velocities(axis, frame)
 
 
 def _finish(fig, path):
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0.08, 1, 1))
+    annotate_figure(fig)
     fig.savefig(path, dpi=150)
     plt.close(fig)
 
@@ -109,18 +73,16 @@ def plot_sample(time, points, frame, episodes, sample, out):
     _states(axes[3], frame)
     _gaps(axes, time, points)
     axes[3].set_xlabel("Time (s); grey bands = recording gaps")
-    for start, end in _continuous_runs(time, points):
-        xy.plot(points[start:end, 0], points[start:end, 1], color="#bfc6cb", lw=0.3)
-    for _, part in frame.groupby("segment_id", sort=False):
-        xy.plot(part.reference_x_um, part.reference_y_um, color=PRIMARY, lw=1)
-        xy.plot(part.measurement_center_x_um, part.measurement_center_y_um, color=STOP, lw=1)
+    plot_series(xy, time, points, xy=True, color="#bfc6cb", lw=0.3)
+    reference_series(xy, frame, components=True)
+    candidate_bands(axes, episodes)
     xy.set(xlabel="x (µm)", ylabel="y (µm)", aspect="equal")
     text.axis("off")
     text.text(
         0,
         0.9,
         "Blue: accepted V2 reference\nOrange: inferred stop measurement reference\n"
-        "Blank: no accepted result; never filled\nStop candidate is not verified physical arrest\n"
+        "Blank: unavailable; orange x: low confidence\nStop candidate is not verified physical arrest\n"
         "Stop ω is excluded from primary CW/switching statistics",
         va="top",
         fontsize=9,
@@ -142,14 +104,15 @@ def plot_sample(time, points, frame, episodes, sample, out):
                 _series(axis, frame, column, lw=0.6, marker=".", markersize=1.5, label=column)
         axis.set_ylabel(ylabel)
         axis.legend(loc="upper right", fontsize=6, ncol=3)
-    reasons = list(dict.fromkeys(frame.decision_reason.tolist() + frame.measurement_reason.tolist()))
+    reasons = list(dict.fromkeys(frame.decision_reason.tolist() + frame.stop_velocity_reasons.tolist()))
     for row, reason in enumerate(reasons):
-        part = frame[frame.decision_reason.eq(reason) | frame.measurement_reason.eq(reason)]
+        part = frame[frame.decision_reason.eq(reason) | frame.stop_velocity_reasons.eq(reason)]
         axes[5].scatter(part.time_sec, np.full(len(part), row), s=3)
     axes[5].set(yticks=range(len(reasons)), yticklabels=reasons, ylabel="Decisions")
     axes[5].tick_params(axis="y", labelsize=6)
     _states(axes[6], frame)
     _gaps(axes, time, points)
+    candidate_bands(axes, episodes)
     axes[6].set_xlabel("Time (s)")
     fig.suptitle(f"No.{sample}: rotation support and measurement decisions")
     _finish(fig, out / "diagnostics.png")
@@ -161,22 +124,8 @@ def plot_sample(time, points, frame, episodes, sample, out):
         nearby = frame[frame.time_sec.between(lower, upper)]
         fig, axes = plt.subplots(5, 1, figsize=(13, 10), sharex=True)
         _coordinates(axes[:2], time[selected], points[selected], nearby)
-        if event.reference_status == "supported":
-            clock = frame.loc[frame.episode_id.eq(event.episode_id), "time_sec"].to_numpy(float)
-            weight = (clock - event.left_time_s) / (event.right_time_s - event.left_time_s)
-            for axis, component in zip(axes[:2], ["x", "y"]):
-                left, right = getattr(event, f"left_{component}_um"), getattr(event, f"right_{component}_um")
-                axis.plot(
-                    clock,
-                    left + weight * (right - left),
-                    color=STOP,
-                    ls=":",
-                    lw=1,
-                    label="Interpolation candidate (not necessarily accepted)",
-                )
-                axis.scatter([event.left_time_s, event.right_time_s], [left, right], color=PRIMARY, s=24)
         _velocities(axes[2], nearby)
-        _series(axes[3], nearby, "stop_angular_velocity_rad_s", color=STOP, lw=0.8, marker=".", markersize=2)
+        _velocities(axes[3], nearby)
         axes[3].set_ylabel("Stop ω (rad/s)")
         _states(axes[4], nearby)
         for axis in axes:
@@ -193,11 +142,33 @@ def plot_sample(time, points, frame, episodes, sample, out):
         _finish(fig, folder / f"stop_{event.episode_id+1:03d}.png")
 
 
+def reference_counts(frame):
+    """Counts use evaluation points for centers and candidate points for stop quality."""
+    count = len(frame)
+    candidates = frame.motion_label.eq("stop_candidate")
+    denominator = int(candidates.sum())
+    values: dict[str, float] = {"final_reference_denominator": count, "stop_quality_denominator": denominator}
+    for source in ("v2", "stop_interpolated", "missing"):
+        number = int(frame.final_reference_source.eq(source).sum())
+        values[f"final_reference_{source}_count"] = number
+        values[f"final_reference_{source}_fraction"] = number / count if count else np.nan
+    for quality in ("qualified", "low_confidence", "unavailable"):
+        number = int((candidates & frame.stop_velocity_quality.eq(quality)).sum())
+        values[f"stop_quality_{quality}_count"] = number
+        values[f"stop_quality_{quality}_fraction"] = number / denominator if denominator else np.nan
+    return values
+
+
 def save_results(day, samples, *, stop_measurement_enabled):
     """Write only generated local outputs; never upload observation tables."""
-    root = Path(param.save_dir_bef) / day / "repellent_response/rotation_center"
+    root = response_root(day) / "rotation_center"
     root.mkdir(parents=True, exist_ok=True)
     settings = dict(
+        output_schema_version=2,
+        final_reference="V2 accepted anchors, otherwise bracketed stop interpolation; no added evaluation points",
+        stop_velocity_raw="mathematically computable values, including low confidence; separate from primary",
+        stop_quality="qualified / low_confidence / unavailable; reasons are semicolon-separated in stable order",
+        summary_denominators="final_reference: evaluation_points; stop_quality: stop_candidates",
         center_estimator="v2",
         stop_measurement_enabled=bool(stop_measurement_enabled),
         stop_center_source="v2",
@@ -219,6 +190,7 @@ def save_results(day, samples, *, stop_measurement_enabled):
             minimum_phase_travel_rad=0.3,
         ),
     )
+    settings.update(metadata(day))
     (root / "settings.json").write_text(json.dumps(settings, ensure_ascii=False, indent=2) + "\n")
     rows = []
     for sample, (time, points, frame, episodes) in enumerate(samples, 1):
@@ -230,6 +202,7 @@ def save_results(day, samples, *, stop_measurement_enabled):
         accepted = int(frame.rotation_sign.notna().sum())
         rows.append(
             dict(
+                **reference_counts(frame),
                 sample_no=sample,
                 source_frames=len(time),
                 evaluation_points=count,

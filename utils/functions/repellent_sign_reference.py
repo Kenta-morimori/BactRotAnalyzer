@@ -114,4 +114,5 @@ def analyze(day, time_list, x_list, y_list, stop_indices=None, source_starts=Non
             result["signed_angular_velocity_list"].append(primary_omega.copy())
             result["source_frame_list"].append(primary_source_frame)
     save_results(day, samples, stop_measurement_enabled=stop_measurement_enabled)
+    result["reference_samples"] = samples
     return cx_all, cy_all, result

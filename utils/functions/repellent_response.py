@@ -1,4 +1,5 @@
 import configparser
+import json
 import math
 import os
 import shutil
@@ -7,6 +8,7 @@ import threading
 from datetime import datetime
 from typing import Dict, List, Literal, Optional, Sequence, Tuple, TypedDict
 
+import cv2
 import numpy as np
 import pandas as pd
 from PIL import Image
@@ -18,11 +20,12 @@ from utils.functions import (
     get_angular_velocity,
     get_centroid_coordinate,
     get_tiff_info,
+    input_data,
     make_graph,
-    read_csv,
     rot_df_manage,
     save2csv,
 )
+from utils.functions.repellent_output import response_root
 from utils.functions.rotation_center_candidates import estimate_center
 from utils.functions.validated_rotation_center import estimate_center_series
 
@@ -531,7 +534,7 @@ def save_repellent_segment_centroid_series(
     csv_name: str = "centroid_time_series.csv",
 ) -> None:
     n = min(len(time_list), len(x_list), len(y_list))
-    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/{segment_subdir}/centroid_coordinate"
+    save_dir = f"{response_root(day)}/{segment_subdir}/centroid_coordinate"
     os.makedirs(save_dir, exist_ok=True)
     csv_path = f"{save_dir}/{csv_name}"
 
@@ -556,7 +559,7 @@ def run_segment_rotational_analysis(
     run_fluctuation: bool = False,
     write_time_list: bool = True,
 ) -> RotationalAnalysisResult:
-    target_dir = f"{param.save_dir_bef}/{day}/repellent_response/{segment_subdir}"
+    target_dir = f"{response_root(day)}/{segment_subdir}"
     os.makedirs(target_dir, exist_ok=True)
 
     selected_time_list, selected_x_list, selected_y_list, valid_indices = _prepare_valid_rotational_inputs(
@@ -1140,7 +1143,7 @@ def save_segment_center_coordinate(
     center_y_list: Sequence[Sequence[float]],
 ) -> None:
     n = min(len(center_x_list), len(center_y_list))
-    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/{segment_subdir}/center_coordinate"
+    save_dir = f"{response_root(day)}/{segment_subdir}/center_coordinate"
     os.makedirs(save_dir, exist_ok=True)
     data = {}
     for i in range(n):
@@ -1151,7 +1154,7 @@ def save_segment_center_coordinate(
 
 def save_center_assessments(day: str, assessments: Sequence[dict]) -> None:
     """Save window decisions separately from the unchanged center CSV columns."""
-    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/00_all_rotational_analysis/center_coordinate"
+    save_dir = f"{response_root(day)}/00_all_rotational_analysis/center_coordinate"
     os.makedirs(save_dir, exist_ok=True)
     data = pd.DataFrame(assessments)
     required = ["sample_no", "anchor_frame_0based", "anchor_time_sec", "gate_pass", "gate_failure"]
@@ -1321,7 +1324,7 @@ def save_segment_angular_velocity_outputs(
     write_time_list: bool = True,
     source_frame_list: Optional[Sequence[Sequence[float]]] = None,
 ) -> None:
-    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/{segment_subdir}/angular_velocity"
+    save_dir = f"{response_root(day)}/{segment_subdir}/angular_velocity"
     os.makedirs(save_dir, exist_ok=True)
 
     n = min(len(time_list), len(angle_list), len(angular_velocity_list))
@@ -1344,9 +1347,7 @@ def save_segment_angular_velocity_outputs(
         time_df = {}
         for i in range(n):
             time_df[f"No.{i + 1}"] = pd.Series(np.asarray(time_list[i], dtype=float), dtype="float64")
-        pd.DataFrame(time_df).to_csv(
-            f"{param.save_dir_bef}/{day}/repellent_response/{segment_subdir}/time_list.csv", index=False
-        )
+        pd.DataFrame(time_df).to_csv(f"{response_root(day)}/{segment_subdir}/time_list.csv", index=False)
 
     if original_sample_indices is not None:
         map_df = pd.DataFrame(
@@ -1355,9 +1356,7 @@ def save_segment_angular_velocity_outputs(
                 "original_sample_no": [int(original_sample_indices[i]) + 1 for i in range(n)],
             }
         )
-        map_df.to_csv(
-            f"{param.save_dir_bef}/{day}/repellent_response/{segment_subdir}/sample_index_map.csv", index=False
-        )
+        map_df.to_csv(f"{response_root(day)}/{segment_subdir}/sample_index_map.csv", index=False)
 
     make_graph.plot_repellent_angular_velocity_onecol(
         time_list,
@@ -1390,7 +1389,7 @@ def run_pre_rise_fluctuation(
     day: str,
     original_sample_indices: Optional[Sequence[int]] = None,
 ) -> List[int]:
-    target_dir = f"{param.save_dir_bef}/{day}/repellent_response/02_pre_rise_fluctuation"
+    target_dir = f"{response_root(day)}/02_pre_rise_fluctuation"
     os.makedirs(target_dir, exist_ok=True)
 
     valid_indices = _get_valid_pre_rise_indices(pre_time_list, pre_angular_velocity_list)
@@ -1544,9 +1543,39 @@ def add_rise_time_to_results(
 
 
 def ensure_time_list(day: str) -> List[List[float]]:
+    # Reuse the canonical raw timeline; a response run never rewrites existing artifacts.
+    if os.path.isfile(f"{param.save_dir_bef}/{day}/time_list.csv"):
+        table = pd.read_csv(f"{param.save_dir_bef}/{day}/time_list.csv")
+        # Source-frame counts disambiguate ragged padding from unavailable final timestamps.
+        try:
+            avi_paths = input_data.get_ordered_avi_paths(day)
+        except FileNotFoundError:
+            avi_paths = []
+        timelines = []
+        for index, (_, column) in enumerate(table.items()):
+            valid_indices = np.flatnonzero(column.notna().to_numpy())
+            count = int(valid_indices[-1]) + 1 if len(valid_indices) else 0
+            if index < len(avi_paths):
+                name = os.path.splitext(os.path.basename(avi_paths[index]))[0]
+                sidecar = f"{param.save_dir_bef}/{day}/raw_centroid/{name}.json"
+                if os.path.isfile(sidecar):
+                    with open(sidecar, encoding="utf-8") as stream:
+                        source_count = int(json.load(stream)["frame_count"])
+                else:
+                    capture = cv2.VideoCapture(str(avi_paths[index]))
+                    try:
+                        source_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT)) if capture.isOpened() else 0
+                    finally:
+                        capture.release()
+                    if source_count <= 0:
+                        raise ValueError("Cannot establish the source-frame count for the cached timeline")
+                if count > source_count:
+                    raise ValueError("Cached timeline exceeds the raw source-frame count")
+                count = source_count
+            timelines.append(column.reindex(range(count)).to_list())
+        return timelines
     try:
         get_tiff_info.get_timelist(day)
-        return read_csv.get_timelist(day)
     except Exception:
         # Fallback: derive time list directly from TIFF metadata if config-based path is unavailable.
         tiff_root = f"{param.input_dir_bef}/{day}/tiff_data"
@@ -1576,20 +1605,25 @@ def ensure_time_list(day: str) -> List[List[float]]:
                 with Image.open(frame_path) as img:
                     metadata = getattr(img, "tag_v2", None)
                     if metadata is None:
+                        sample_time_list.append(np.nan)
                         continue
                     time_raw = metadata.get(306, None)
                     if time_raw is None:
+                        sample_time_list.append(np.nan)
                         continue
-                    frame_time = datetime.strptime(time_raw, "%m/%d/%Y %H:%M:%S.%f")
+                    try:
+                        frame_time = datetime.strptime(time_raw, "%m/%d/%Y %H:%M:%S.%f")
+                    except (TypeError, ValueError):
+                        sample_time_list.append(np.nan)
+                        continue
                     if base_time is None:
                         base_time = frame_time
                     sample_time_list.append((frame_time - base_time).total_seconds())
-            if not sample_time_list:
-                sample_time_list = [float(i) for i in range(len(frame_names))]
             time_list_all.append(sample_time_list)
 
         save2csv.save_time_list(time_list_all, day)
         return time_list_all
+    return ensure_time_list(day)
 
 
 def apply_analysis_frame_ranges(
@@ -1657,7 +1691,7 @@ def apply_analysis_frame_ranges(
 
 
 def cleanup_legacy_repellent_outputs(day: str) -> None:
-    root = f"{param.save_dir_bef}/{day}/repellent_response"
+    root = f"{response_root(day)}"
     # These directories are owned by this analysis.  Do not remove the root
     # itself: users may keep notes or other manual artifacts alongside them.
     generated_dirs = [
