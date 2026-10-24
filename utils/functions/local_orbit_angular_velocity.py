@@ -98,4 +98,21 @@ def estimate_local_orbit_velocity(
                     "motion_noise_ratio": snr,
                 }
             )
-    return pd.DataFrame(rows)
+    return pd.DataFrame(
+        rows,
+        columns=[
+            "segment_id",
+            "frame_0based",
+            "time_sec",
+            "local_reference_x_um",
+            "local_reference_y_um",
+            "window_seconds_requested",
+            "window_seconds_actual",
+            "window_frames",
+            "signed_angular_velocity_rad_s",
+            "direction_coherence",
+            "motion_rms_um",
+            "smoothing_residual_rms_um",
+            "motion_noise_ratio",
+        ],
+    )

@@ -1,7 +1,6 @@
 import argparse
 import json
 import os
-import shutil
 import sys
 from pathlib import Path
 from typing import Any, Optional, cast
@@ -21,6 +20,12 @@ from utils.functions import (  # noqa
     repellent_sign_reference,
     save2csv,
 )
+from utils.functions.repellent_output import (  # noqa
+    metadata,
+    response_root,
+    response_run,
+    set_ranges,
+)
 
 
 def resolve_center_options(center_estimator, stop_measurement_enabled):
@@ -33,7 +38,7 @@ def resolve_center_options(center_estimator, stop_measurement_enabled):
     return center_estimator, stop_measurement_enabled
 
 
-def main(
+def _main(
     day: str,
     baseline_ratio: float,
     sigma_threshold: float,
@@ -47,13 +52,9 @@ def main(
     stop_measurement_enabled: Optional[bool] = None,
 ):
     center_estimator, stop_measurement_enabled = resolve_center_options(center_estimator, stop_measurement_enabled)
-    base_save_dir = param.save_dir_bef
-    if output_suffix is not None and output_suffix != "":
-        param.save_dir_bef = f"{base_save_dir}/{output_suffix}"
     param.post_rise_center_mode = post_rise_center_mode
 
-    repellent_root = f"{param.save_dir_bef}/{day}/repellent_response"
-    repellent_response.cleanup_legacy_repellent_outputs(day)
+    repellent_root = str(response_root(day))
     os.makedirs(f"{repellent_root}/00_all_rotational_analysis", exist_ok=True)
     os.makedirs(f"{repellent_root}/00_time_list", exist_ok=True)
     os.makedirs(f"{repellent_root}/01_brightness_change", exist_ok=True)
@@ -66,12 +67,7 @@ def main(
 
     # Both analyses consume the same source-frame measurements. The standard
     # center-relative centroid_coordinate.csv is a separate compatibility file.
-    output_root = param.save_dir_bef
-    try:
-        param.save_dir_bef = base_save_dir
-        raw_frames = raw_centroid.load_all(day, time_list)
-    finally:
-        param.save_dir_bef = output_root
+    raw_frames = raw_centroid.load_all(day, time_list)
     x_list = [frame["x_um"].to_list() for frame in raw_frames]
     y_list = [frame["y_um"].to_list() for frame in raw_frames]
 
@@ -83,6 +79,7 @@ def main(
         frame_ranges=[] if all_frames else param.get_analysis_frame_ranges_config(day),
     )
     x_list, y_list, background_list = selected_series
+    set_ranges(day, range_rows)
     # The canonical outputs/<day>/time_list.csv remains the raw TIFF timeline;
     # every repellent-response artifact below uses this selected timeline.
     save2csv.save_repellent_time_list(time_list, day)
@@ -139,11 +136,6 @@ def main(
             source_starts=[int(cast(Any, row["source_start_frame_1based"])) for row in range_rows],
             stop_measurement_enabled=stop_measurement_enabled,
         )
-        # Frame-based FFT and velocity artifacts must not survive a point-sampled run.
-        for segment in ("00_all_rotational_analysis", "02_pre_rise_fluctuation", "03_post_rise_analysis"):
-            target = Path(repellent_root) / segment / "angular_velocity"
-            if target.exists():
-                shutil.rmtree(target)
     elif center_estimator == "validated":
         all_x_center_list, all_y_center_list, center_assessments = (
             repellent_response.estimate_rotation_center_validated(
@@ -229,10 +221,14 @@ def main(
     for idx in all_rot["valid_indices"]:
         if idx < len(background_list):
             if center_estimator == "v2":
+                sources = all_rot["source_frame_list"][len(bg_for_av)]
+                source_start = int(cast(Any, range_rows[idx]["source_start_frame_1based"]))
+                background = np.asarray(background_list[idx], float)
                 bg_for_av.append(
-                    np.interp(
-                        all_rot["time_list"][len(bg_for_av)], all_comp_time_list[idx], background_list[idx]
-                    ).tolist()
+                    [
+                        float(background[int(source) - source_start]) if np.isfinite(source) else np.nan
+                        for source in sources
+                    ]
                 )
             else:
                 bg_for_av.append(background_list[idx])
@@ -290,42 +286,31 @@ def main(
         rise_time_list=all_rise_time_for_av,
     )
 
-    legacy_switching_csv = (
-        f"{param.save_dir_bef}/{day}/repellent_response/03_post_rise_analysis/"
-        "angular_velocity/switching_frequency.csv"
-    )
-    legacy_switching_png = (
-        f"{param.save_dir_bef}/{day}/repellent_response/03_post_rise_analysis/"
-        "angular_velocity/switching_frequency.png"
-    )
-    if os.path.isfile(legacy_switching_csv):
-        os.remove(legacy_switching_csv)
-    if os.path.isfile(legacy_switching_png):
-        os.remove(legacy_switching_png)
-
     all_rise_time_for_centroid = [result.get("rise_time", float("nan")) for result in rise_results]
-    make_graph.plot_repellent_component_panels(
-        all_comp_time_list,
-        all_x_before_list,
-        all_y_before_list,
-        day,
-        "All-time Centroid Before Correction",
-        "centroid_before.png",
-        save_subdir="00_all_rotational_analysis/centroid_coordinate",
-        rise_time_list=all_rise_time_for_centroid,
-        overlay_x_list=all_x_center_list,
-        overlay_y_list=all_y_center_list,
-    )
-    make_graph.plot_repellent_component_panels(
-        all_comp_time_list,
-        all_x_center_list,
-        all_y_center_list,
-        day,
-        "All-time Rotation Center",
-        "rotation_center.png",
-        save_subdir="00_all_rotational_analysis/centroid_coordinate",
-        rise_time_list=all_rise_time_for_centroid,
-    )
+    if center_estimator != "v2":
+        make_graph.plot_repellent_component_panels(
+            all_comp_time_list,
+            all_x_before_list,
+            all_y_before_list,
+            day,
+            "All-time Centroid Before Correction",
+            "centroid_before.png",
+            save_subdir="00_all_rotational_analysis/centroid_coordinate",
+            rise_time_list=all_rise_time_for_centroid,
+            overlay_x_list=all_x_center_list,
+            overlay_y_list=all_y_center_list,
+        )
+    if center_estimator != "v2":
+        make_graph.plot_repellent_component_panels(
+            all_comp_time_list,
+            all_x_center_list,
+            all_y_center_list,
+            day,
+            "All-time Rotation Center",
+            "rotation_center.png",
+            save_subdir="00_all_rotational_analysis/centroid_coordinate",
+            rise_time_list=all_rise_time_for_centroid,
+        )
     make_graph.plot_repellent_component_panels(
         all_comp_time_list,
         all_x_corr_list,
@@ -401,26 +386,28 @@ def main(
         original_sample_indices=all_rot["valid_indices"],
     )
 
-    make_graph.plot_repellent_component_panels(
-        pre_time_list,
-        pre_x_raw_list,
-        pre_y_raw_list,
-        day,
-        "Pre-rise Centroid Before Correction",
-        "centroid_before.png",
-        save_subdir="02_pre_rise_fluctuation/centroid_coordinate",
-        overlay_x_list=pre_center_x_list,
-        overlay_y_list=pre_center_y_list,
-    )
-    make_graph.plot_repellent_component_panels(
-        pre_time_list,
-        pre_center_x_list,
-        pre_center_y_list,
-        day,
-        "Pre-rise Rotation Center",
-        "rotation_center.png",
-        save_subdir="02_pre_rise_fluctuation/centroid_coordinate",
-    )
+    if center_estimator != "v2":
+        make_graph.plot_repellent_component_panels(
+            pre_time_list,
+            pre_x_raw_list,
+            pre_y_raw_list,
+            day,
+            "Pre-rise Centroid Before Correction",
+            "centroid_before.png",
+            save_subdir="02_pre_rise_fluctuation/centroid_coordinate",
+            overlay_x_list=pre_center_x_list,
+            overlay_y_list=pre_center_y_list,
+        )
+    if center_estimator != "v2":
+        make_graph.plot_repellent_component_panels(
+            pre_time_list,
+            pre_center_x_list,
+            pre_center_y_list,
+            day,
+            "Pre-rise Rotation Center",
+            "rotation_center.png",
+            save_subdir="02_pre_rise_fluctuation/centroid_coordinate",
+        )
     make_graph.plot_repellent_component_panels(
         pre_time_list,
         pre_x_corr_list,
@@ -491,24 +478,26 @@ def main(
     )
 
     # Plot three modes as panel figures (x-y, x-t, y-t): before, center, corrected.
-    make_graph.plot_repellent_component_panels(
-        post_time_list,
-        post_x_raw_list,
-        post_y_raw_list,
-        day,
-        "Centroid Before Correction",
-        "centroid_before.png",
-        overlay_x_list=post_center_x_list,
-        overlay_y_list=post_center_y_list,
-    )
-    make_graph.plot_repellent_component_panels(
-        post_time_list,
-        post_center_x_list,
-        post_center_y_list,
-        day,
-        "Rotation Center",
-        "rotation_center.png",
-    )
+    if center_estimator != "v2":
+        make_graph.plot_repellent_component_panels(
+            post_time_list,
+            post_x_raw_list,
+            post_y_raw_list,
+            day,
+            "Centroid Before Correction",
+            "centroid_before.png",
+            overlay_x_list=post_center_x_list,
+            overlay_y_list=post_center_y_list,
+        )
+    if center_estimator != "v2":
+        make_graph.plot_repellent_component_panels(
+            post_time_list,
+            post_center_x_list,
+            post_center_y_list,
+            day,
+            "Rotation Center",
+            "rotation_center.png",
+        )
     make_graph.plot_repellent_component_panels(
         post_time_list,
         post_x_corr_list,
@@ -518,9 +507,21 @@ def main(
         "centroid_corrected.png",
     )
 
+    if center_estimator == "v2":
+        from utils.functions.repellent_plotting import phase_figures
+
+        phase_figures(
+            day,
+            all_rot["reference_samples"],
+            all_rise_time_for_centroid,
+            rise_indices=rise_indices,
+            source_starts=[int(cast(Any, row["source_start_frame_1based"])) for row in range_rows],
+        )
+
     (Path(repellent_root) / "analysis_method.json").write_text(
         json.dumps(
             {
+                **metadata(day),
                 "center_estimator": center_estimator,
                 "all_frames": all_frames,
                 "stop_measurement_enabled": bool(stop_measurement_enabled and center_estimator == "v2"),
@@ -531,6 +532,46 @@ def main(
         )
         + "\n"
     )
+
+
+def main(
+    day: str,
+    baseline_ratio: float,
+    sigma_threshold: float,
+    min_consecutive: int,
+    post_rise_center_mode: int,
+    stop_activity_ratio: float,
+    stop_min_duration_rotations: float,
+    output_suffix: Optional[str],
+    center_estimator: Optional[str] = None,
+    all_frames: bool = False,
+    stop_measurement_enabled: Optional[bool] = None,
+):
+    estimator, stopped = resolve_center_options(center_estimator, stop_measurement_enabled)
+    options = dict(
+        center_estimator=estimator,
+        stop_measurement_enabled=bool(stopped and estimator == "v2"),
+        input_centroid_method=raw_centroid.METHOD,
+    )
+    previous_mode = param.post_rise_center_mode
+    try:
+        with response_run(day, all_frames=all_frames, output_suffix=output_suffix, options=options) as output:
+            print(f"Response outputs: {output.root.resolve()}", flush=True)
+            _main(
+                day,
+                baseline_ratio,
+                sigma_threshold,
+                min_consecutive,
+                post_rise_center_mode,
+                stop_activity_ratio,
+                stop_min_duration_rotations,
+                output_suffix,
+                estimator,
+                all_frames,
+                stopped,
+            )
+    finally:
+        param.post_rise_center_mode = previous_mode
 
 
 def build_parser():
