@@ -172,6 +172,7 @@ def draw_panel(raw, mask, limits, title, binary=False):
         canvas = cv2.cvtColor(mask.astype(np.uint8) * 255, cv2.COLOR_GRAY2BGR)
     canvas = cv2.resize(canvas, None, fx=2, fy=2, interpolation=cv2.INTER_NEAREST)
     if mask is not None and not binary:
+        assert selected is not None
         for region, color in ((mask, (0, 220, 255)), (selected, (255, 220, 0))):
             outlines, _ = cv2.findContours(region.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             cv2.drawContours(canvas, [c * 2 for c in outlines], -1, color, 1)
