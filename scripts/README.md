@@ -221,3 +221,16 @@ V2では最終参照中心、低信頼値を含む停止角速度、品質・理
 切り出し位置を画像から推定・検証して、旧AVIと10倍拡大後の二値化を同座標で比較します。
 実験結果は `outputs/centroid_evaluation/` に実行ごとに保存します。通常解析への採用候補はなく、既存解析・キャッシュは保持します。
 [評価条件・実行手順・採用判断](../docs/centroid-evaluation.md)を参照してください。
+
+
+### 元TIFFの1点指定・自動ROI重心抽出
+
+```bash
+python3 scripts/tiff_roi_centroid.py --input data/example/tiff_frames \
+  --output outputs/tiff_centroid/run01
+```
+
+最初に対象内をクリックし、自動ROIを確認します。元TIFFを10倍線形補間してから固定閾値で抽出し、
+結合・曖昧・ROI端は欠測として、分離後の再捕捉を試みます。記録ギャップ後は再指定します。
+重心CSVと重ね合わせ動画を実行別に保存します。通常回転解析への接続は含みません。
+[操作・設定・欠測規則・検証範囲](../docs/tiff-roi-centroid.md)を参照してください。
