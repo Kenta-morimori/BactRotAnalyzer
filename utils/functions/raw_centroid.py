@@ -108,7 +108,7 @@ def load(day: str, sample_no: int, time_values: Sequence[float]) -> pd.DataFrame
     frame_no = np.arange(1, len(time_values) + 1)
     if not np.array_equal(frame["source_frame_1based"].to_numpy(), frame_no):
         raise ValueError(f"Frame numbers do not match TIFF time list: {path}")
-    if not np.allclose(frame["time_sec"].to_numpy(dtype=float), time_values, atol=1e-9, rtol=0):
+    if not np.allclose(frame["time_sec"].to_numpy(dtype=float), time_values, atol=1e-9, rtol=0, equal_nan=True):
         raise ValueError(f"Timestamps do not match TIFF time list: {path}")
     if not np.array_equal(
         frame["detected"].to_numpy(dtype=bool),

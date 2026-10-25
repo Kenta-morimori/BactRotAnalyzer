@@ -15,6 +15,8 @@ from utils.functions import (
     rot_df_manage,
     save2csv,
 )
+from utils.functions.repellent_output import annotate_figure, response_root
+from utils.functions.repellent_plotting import coordinate_component, plot_series
 
 font_size = 24
 fig_size_x = 20
@@ -1205,9 +1207,14 @@ def dev_plot_max_dist_stat(max_dists, max_dists_all, day):
     plt.close(fig)
 
 
+def _save_response_figure(path, **kwargs):
+    annotate_figure(plt.gcf())
+    plt.savefig(path, **kwargs)
+
+
 def plot_repellent_background_intensity(time_list, background_list, rise_indices, day):
     sample_num = min(len(time_list), len(background_list), len(rise_indices))
-    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/01_brightness_change"
+    save_dir = f"{response_root(day)}/01_brightness_change"
     os.makedirs(save_dir, exist_ok=True)
     title_fs = font_size + 6
     label_fs = font_size + 4
@@ -1227,7 +1234,7 @@ def plot_repellent_background_intensity(time_list, background_list, rise_indices
             time_arr, bg_arr = np.asarray(time_list[i], dtype=float), np.asarray(background_list[i], dtype=float)
             n = min(time_arr.size, bg_arr.size)
             time_arr, bg_arr = time_arr[:n], bg_arr[:n]
-            ax.plot(time_arr, bg_arr, linewidth=2)
+            plot_series(ax, time_arr, bg_arr, linewidth=2)
             rise_idx = rise_indices[i]
             if np.isfinite(rise_idx) and 0 <= int(rise_idx) < n:
                 ax.axvline(time_arr[int(rise_idx)], color="red", linestyle="--", alpha=0.8)
@@ -1237,7 +1244,7 @@ def plot_repellent_background_intensity(time_list, background_list, rise_indices
             ax.set_ylabel("Intensity", fontsize=label_fs)
             ax.tick_params(axis="both", which="major", labelsize=tick_fs)
         plt.tight_layout()
-        plt.savefig(_page_path(save_dir, "background_intensity_time_series.png", sample_num, part_number))
+        _save_response_figure(_page_path(save_dir, "background_intensity_time_series.png", sample_num, part_number))
         plt.close(fig)
 
 
@@ -1285,7 +1292,7 @@ def _plot_repellent_background_and_av_metric_stacked(
             )
         return
 
-    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/01_brightness_change"
+    save_dir = f"{response_root(day)}/01_brightness_change"
     os.makedirs(save_dir, exist_ok=True)
     title_fs = font_size + 4
     label_fs = font_size + 2
@@ -1329,9 +1336,9 @@ def _plot_repellent_background_and_av_metric_stacked(
         if sample_indices is not None and i < len(sample_indices):
             sample_no = int(sample_indices[i])
 
-        ax_bg.plot(t_bg, y_bg, linewidth=1.8)
-        ax_av.plot(t_av, y_av, linewidth=1.8)
-        ax_metric.plot(t_metric, y_metric, linewidth=1.8)
+        plot_series(ax_bg, t_bg, y_bg, linewidth=1.8)
+        plot_series(ax_av, t_av, y_av, linewidth=1.8)
+        plot_series(ax_metric, t_metric, y_metric, linewidth=1.8)
 
         rise_time = np.nan
         if rise_time_list is not None and i < len(rise_time_list) and np.isfinite(rise_time_list[i]):
@@ -1371,7 +1378,7 @@ def _plot_repellent_background_and_av_metric_stacked(
     # Reserve enough space for the enlarged bottom tick labels and x-axis
     # label; the previous 4.5% margin clipped "Time [s]" on this figure.
     fig.subplots_adjust(top=0.95, bottom=0.12, left=0.1, right=0.98)
-    plt.savefig(
+    _save_response_figure(
         _page_path(
             save_dir,
             output_filename,
@@ -1446,7 +1453,7 @@ def plot_repellent_component_panels(
     overlay_y_list=None,
 ):
     sample_num = min(len(time_list), len(x_list), len(y_list))
-    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/{save_subdir}"
+    save_dir = f"{response_root(day)}/{save_subdir}"
     os.makedirs(save_dir, exist_ok=True)
     title_fs = font_size + 6
     label_fs = font_size + 4
@@ -1473,19 +1480,21 @@ def plot_repellent_component_panels(
             else:
                 n = min(t.size, x.size, y.size)
             t, x, y = t[:n], x[:n], y[:n]
+            observations = np.column_stack((x, y))
+            x, y = coordinate_component(observations, 0), coordinate_component(observations, 1)
             if overlay:
                 assert ox is not None and oy is not None
                 ox, oy = ox[:n], oy[:n]
             rise_time = rise_time_list[i] if rise_time_list is not None and i < len(rise_time_list) else np.nan
             xy_ax, xt_ax, yt_ax = axs[row]
-            xy_ax.plot(
-                x, y, linewidth=1.8, marker="." if x.size and np.isfinite(x).mean() < 0.3 else None, markersize=2
-            )
+            plot_series(xy_ax, t, np.column_stack((x, y)), xy=True, linewidth=1.8)
             if overlay:
                 assert ox is not None and oy is not None
-                xy_ax.plot(
-                    ox,
-                    oy,
+                plot_series(
+                    xy_ax,
+                    t,
+                    np.column_stack((ox, oy)),
+                    xy=True,
                     color="orange",
                     linewidth=1.8,
                     alpha=0.9,
@@ -1498,7 +1507,8 @@ def plot_repellent_component_panels(
             xy_ax.set_xlabel(r"x [$\mu$m]", fontsize=label_fs)
             xy_ax.set_ylabel(r"y [$\mu$m]", fontsize=label_fs)
             for ax, values, label, suffix in ((xt_ax, x, r"x [$\mu$m]", "x-t"), (yt_ax, y, r"y [$\mu$m]", "y-t")):
-                ax.plot(
+                plot_series(
+                    ax,
                     t,
                     values,
                     linewidth=1.8,
@@ -1507,7 +1517,8 @@ def plot_repellent_component_panels(
                 )
                 if overlay:
                     assert ox is not None and oy is not None
-                    ax.plot(
+                    plot_series(
+                        ax,
                         t,
                         ox if suffix == "x-t" else oy,
                         color="orange",
@@ -1525,13 +1536,13 @@ def plot_repellent_component_panels(
             for ax in axs[row]:
                 ax.tick_params(axis="both", which="major", labelsize=tick_fs)
         plt.tight_layout()
-        plt.savefig(_page_path(save_dir, save_name, sample_num, part_number))
+        _save_response_figure(_page_path(save_dir, save_name, sample_num, part_number))
         plt.close(fig)
 
 
 def plot_repellent_time_list(time_list, day):
     sample_num = len(time_list)
-    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/00_time_list"
+    save_dir = f"{response_root(day)}/00_time_list"
     os.makedirs(save_dir, exist_ok=True)
     title_fs = font_size + 6
     label_fs = font_size + 4
@@ -1556,7 +1567,7 @@ def plot_repellent_time_list(time_list, day):
             ax.set_ylabel("Time [s]", fontsize=label_fs)
             ax.tick_params(axis="both", which="major", labelsize=tick_fs)
         plt.tight_layout()
-        plt.savefig(_page_path(save_dir, "time_list.png", sample_num, part_number))
+        _save_response_figure(_page_path(save_dir, "time_list.png", sample_num, part_number))
         plt.close(fig)
 
 
@@ -1583,7 +1594,7 @@ def plot_repellent_angular_velocity_onecol(time_list, angle_list, angular_veloci
                     ax.axis("off")
                     continue
                 t_arr, y_arr = t_arr[:n], y_arr[:n]
-                ax.plot(t_arr, y_arr, linewidth=1.8)
+                plot_series(ax, t_arr, y_arr, linewidth=1.8)
                 rise_time = rise_time_list[i] if rise_time_list is not None and i < len(rise_time_list) else np.nan
                 if np.isfinite(rise_time):
                     ax.axvline(rise_time, color="red", linestyle="--", linewidth=1.6, alpha=0.85)
@@ -1595,7 +1606,7 @@ def plot_repellent_angular_velocity_onecol(time_list, angle_list, angular_veloci
                     ax.set_xlim(float(np.nanmin(t_arr)), float(np.nanmax(t_arr)))
                 ax.tick_params(axis="both", which="major", labelsize=tick_fs)
             plt.tight_layout()
-            plt.savefig(_page_path(save_dir, save_name, sample_num, part_number))
+            _save_response_figure(_page_path(save_dir, save_name, sample_num, part_number))
             plt.close(fig)
 
     _plot_panel(
@@ -1632,7 +1643,7 @@ def plot_angular_velocity_switching_count(
     if sample_indices is None:
         sample_indices = [i + 1 for i in range(sample_num)]
 
-    save_dir = f"{param.save_dir_bef}/{day}/repellent_response/00_all_rotational_analysis/angular_velocity"
+    save_dir = f"{response_root(day)}/00_all_rotational_analysis/angular_velocity"
     os.makedirs(save_dir, exist_ok=True)
 
     cols = 2
@@ -1652,7 +1663,7 @@ def plot_angular_velocity_switching_count(
                 ax.axis("off")
                 continue
             t, c = t[:n], c[:n]
-            ax.plot(t, c)
+            plot_series(ax, t, c)
             ax.grid(True)
             ax.set_title(f"Switching Count Time-series No.{sample_indices[i]}", fontsize=font_size)
             ax.set_xlabel("Time [s]", fontsize=font_size)
@@ -1665,5 +1676,5 @@ def plot_angular_velocity_switching_count(
             if rise_time is not None and np.isfinite(rise_time):
                 ax.axvline(rise_time, color="red", linestyle="--", linewidth=2.5, alpha=0.85)
         plt.tight_layout()
-        plt.savefig(_page_path(save_dir, "switching_count.png", sample_num, part_number))
+        _save_response_figure(_page_path(save_dir, "switching_count.png", sample_num, part_number))
         plt.close(fig)

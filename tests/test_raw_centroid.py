@@ -9,7 +9,11 @@ from utils import param
 from utils.functions import raw_centroid, repellent_response
 
 
-def test_shared_raw_centroid_preserves_frames_and_cache(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    "time_values",
+    [[0.0, 0.005, 0.010, 0.015], [0.0, np.nan, 0.010, 0.015], [0.0, 0.005, np.nan, np.nan], [np.nan] * 4],
+)
+def test_shared_raw_centroid_preserves_frames_and_cache(tmp_path, monkeypatch, time_values):
     input_root = tmp_path / "data"
     output_root = tmp_path / "outputs"
     day_dir = input_root / "day"
@@ -31,7 +35,7 @@ def test_shared_raw_centroid_preserves_frames_and_cache(tmp_path, monkeypatch):
     writer.release()
     monkeypatch.setattr(param, "input_dir_bef", str(input_root))
     monkeypatch.setattr(param, "save_dir_bef", str(output_root))
-    times = [[0.0, 0.005, 0.010, 0.015]]
+    times = [time_values]
 
     standard = raw_centroid.load_all("day", times)[0]
     assert standard.source_frame_1based.tolist() == [1, 2, 3, 4]
@@ -47,7 +51,7 @@ def test_shared_raw_centroid_preserves_frames_and_cache(tmp_path, monkeypatch):
     selected_time, selected, _ = repellent_response.apply_analysis_frame_ranges(
         times, [[repellent.x_um.tolist()], [repellent.y_um.tolist()]], [(2, 4)]
     )
-    assert selected_time[0] == times[0][1:4]
+    np.testing.assert_allclose(selected_time[0], times[0][1:4], equal_nan=True)
     np.testing.assert_allclose(selected[0][0], standard.x_um.iloc[1:4], equal_nan=True)
     np.testing.assert_allclose(selected[1][0], standard.y_um.iloc[1:4], equal_nan=True)
     assert raw_centroid.load("day", 1, times[0]).equals(standard)

@@ -69,7 +69,9 @@ def estimate_sign_reference_v2(
         "sign_local",
     )
     if frame.empty:
-        return pd.DataFrame(columns=["frame_0based", "time_sec", "rotation_state", "decision_reason", *columns])
+        return pd.DataFrame(
+            columns=list(dict.fromkeys([*frame.columns, "rotation_state", "decision_reason", *columns]))
+        )
     short = estimate_local_orbit_velocity(time, points, window_seconds=0.1, smoothing_frames=5)
     short_lookup = short.set_index("frame_0based").signed_angular_velocity_rad_s
     local_sign = np.sign(frame.signed_angular_velocity_rad_s.to_numpy(float))

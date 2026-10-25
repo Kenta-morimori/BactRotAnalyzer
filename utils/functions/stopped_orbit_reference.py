@@ -175,6 +175,18 @@ def estimate_stopped_reference(
         "omega_noise_scale_rad_s",
     ):
         result[name] = np.nan
+    result["final_reference_x_um"] = np.nan
+    result["final_reference_y_um"] = np.nan
+    result["final_reference_source"] = "missing"
+    result["final_reference_reason"] = frame.decision_reason
+    primary = frame.rotation_sign.notna()
+    for component in ("x", "y"):
+        result.loc[primary, f"final_reference_{component}_um"] = frame.loc[primary, f"reference_{component}_um"]
+    result.loc[primary, "final_reference_source"] = "v2"
+    result.loc[primary, "final_reference_reason"] = "v2_supported"
+    result["stop_angular_velocity_raw_rad_s"] = np.nan
+    result["stop_velocity_quality"] = "unavailable"
+    result["stop_velocity_reasons"] = "not_stop_candidate" if enabled else "disabled"
     result["center_source"] = source
     result["center_strategy"] = strategy
     runs = {
@@ -188,6 +200,7 @@ def estimate_stopped_reference(
         indices = event["rows"]
         result.loc[indices, "episode_id"] = event["episode_id"]
         result.loc[indices, "measurement_reason"] = "candidate_boundary"
+        result.loc[indices, "stop_velocity_reasons"] = "candidate_boundary"
         record = {key: value for key, value in event.items() if key != "rows"}
         left = _anchor(time, points, frame, event, "left", source, config)
         right = _anchor(time, points, frame, event, "right", source, config)
@@ -200,6 +213,8 @@ def estimate_stopped_reference(
             reason = "missing_right_reference"
         if reason:
             result.loc[indices, "measurement_reason"] = reason
+            result.loc[indices, "final_reference_reason"] = reason
+            result.loc[indices, "stop_velocity_reasons"] = reason
             records.append({**record, "reference_status": reason, "measured_points": 0})
             continue
         for side, anchor in [("left", left), ("right", right)]:
@@ -221,6 +236,14 @@ def estimate_stopped_reference(
             weight = (clock - left["time"]) / (right["time"] - left["time"])
             return left["center"] + weight[:, None] * (right["center"] - left["center"])
 
+        # Persist every interpolable candidate anchor independently of velocity quality.
+        candidate_centers = reference(frame.loc[indices, "time_sec"].to_numpy(float))
+        interpolation_rows = indices[~primary.loc[indices].to_numpy()]
+        result.loc[interpolation_rows, ["final_reference_x_um", "final_reference_y_um"]] = candidate_centers[
+            ~primary.loc[indices].to_numpy()
+        ]
+        result.loc[interpolation_rows, "final_reference_source"] = "stop_interpolated"
+        result.loc[interpolation_rows, "final_reference_reason"] = "stop_interpolated"
         sensitivity = max(left["spread"], right["spread"])
         measured = 0
         for index in indices:
@@ -228,6 +251,9 @@ def estimate_stopped_reference(
             anchor = int(row.frame_0based)
             half = int(row.window_frames) // 2
             lower, upper = anchor - half, anchor + half + 1
+            if lower < start or upper > end:
+                result.loc[index, "stop_velocity_reasons"] = "recording_boundary"
+                continue
             if time[lower] < event["start_s"] or time[upper - 1] > event["end_s"]:
                 continue
             clock = time[lower:upper]
@@ -241,18 +267,32 @@ def estimate_stopped_reference(
                 lever,
                 sensitivity,
             )
+            quality_reasons = []
             if lever <= max(
                 config.radius_noise_multiplier * noise + sensitivity,
                 config.minimum_lever_fraction * event["rotation_motion_scale_um"],
             ):
-                result.loc[index, "measurement_reason"] = "unresolved_lever_arm"
-                continue
+                quality_reasons.append("unresolved_lever_arm")
             if np.ptp(radii) > config.maximum_radial_change_R * event["rotation_motion_scale_um"] + 6 * noise:
-                result.loc[index, "measurement_reason"] = "inconsistent_radial_motion"
+                quality_reasons.append("inconsistent_radial_motion")
+            if quality_reasons:
+                result.loc[index, "measurement_reason"] = quality_reasons[0]
+            # Only numerical zero is undefined; lever-arm quality is assessed separately.
+            tolerance = np.finfo(float).eps * max(1.0, float(np.max(np.abs(centers)))) * 8
+            if np.any(radii <= tolerance):
+                result.loc[index, "stop_velocity_reasons"] = ";".join(["undefined_angle", *quality_reasons])
                 continue
             angle = np.unwrap(np.arctan2(relative[:, 1], relative[:, 0]))
             offsets = clock - clock.mean()
             slope = float(np.dot(offsets, angle - angle.mean()) / np.dot(offsets, offsets))
+            if not np.isfinite(slope):
+                result.loc[index, "stop_velocity_reasons"] = "nonfinite_velocity"
+                continue
+            result.loc[index, "stop_angular_velocity_raw_rad_s"] = slope
+            result.loc[index, "stop_velocity_quality"] = "low_confidence" if quality_reasons else "qualified"
+            result.loc[index, "stop_velocity_reasons"] = ";".join(quality_reasons) if quality_reasons else "qualified"
+            if quality_reasons:
+                continue
             noise_scale = noise / lever / np.sqrt(np.dot(offsets, offsets))
             center = reference(np.array([time[anchor]]))[0]
             result.loc[

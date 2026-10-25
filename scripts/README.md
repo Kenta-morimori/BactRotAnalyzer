@@ -201,3 +201,13 @@ CLI指定を優先し、従来の採否付き楕円は`--center-estimator valida
 実測値には中心・回転方向の独立した真値がない。評価と既知の限界は[Issue #44](https://github.com/Kenta-morimori/BactRotAnalyzer/issues/44)へ記録する。
 
 生成物はローカル出力とし、Gitへ追加しない。入力データと`raw_centroid`は保持する。
+
+### 最終参照中心・停止角速度と実行別出力
+
+忌避応答解析は実行ごとに
+`outputs/[suffix/]<day>/repellent_response/runs/<configured|all_frames>/<日本時間の実行ID>/`
+へ保存します。`--all-frames` と通常解析は別領域になり、既存成果物を削除・移動しません。
+`run.json` に成功／失敗と原フレーム範囲を記録します。
+V2では最終参照中心、低信頼値を含む停止角速度、品質・理由の追加列と図を保存します。
+主角速度・CW率・切替数・揺らぎ解析の入力は従来の主系列を維持します。
+[列・理由・図・検証の詳細](../docs/analysis/repellent-reference-output.md)を参照してください。
