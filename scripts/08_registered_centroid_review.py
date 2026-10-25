@@ -7,6 +7,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, cast
 from uuid import uuid4
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
@@ -166,6 +167,8 @@ def draw_panel(raw, mask, limits, title, binary=False):
     canvas = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
     selected, point, eligible = describe(mask) if mask is not None else (None, None, False)
     if binary:
+        if mask is None:
+            raise ValueError("Binary display requires a mask")
         canvas = cv2.cvtColor(mask.astype(np.uint8) * 255, cv2.COLOR_GRAY2BGR)
     canvas = cv2.resize(canvas, None, fx=2, fy=2, interpolation=cv2.INTER_NEAREST)
     if mask is not None and not binary:
@@ -410,7 +413,8 @@ def run(args):
         # Inspect old extraction outliers and missing frames without treating
         # displacement from a median as ground-truth error.
         cached_path = args.raw_centroids / f"{sample}.csv"
-        cached = np.genfromtxt(cached_path, delimiter=",", names=True, dtype=None, encoding="utf-8")
+        # NumPy's scalar/float-array overload does not describe named CSV fields.
+        cached = cast(Any, np.genfromtxt(cached_path, delimiter=",", names=True, dtype=None, encoding="utf-8"))
         if not np.array_equal(cached["source_frame_1based"], np.arange(1, len(timeline) + 1)):
             raise ValueError("Cached original-frame identity differs")
         if not np.allclose(cached["time_sec"], [row["time_sec"] for row in timeline], atol=1e-9, rtol=0):
