@@ -388,7 +388,9 @@ def run(args):
     samples = sorted(p.stem for p in args.dataset.glob("*.avi"))
     if not samples:
         raise ValueError("No AVI inputs in the requested dataset")
-    for sample_no, sample in enumerate(samples, 1):
+    for sample in samples:
+        manifest = json.loads((args.diagnostics / sample / "manifest.json").read_text())
+        sample_no = manifest["sample_no"]
         timeline = json.loads((args.diagnostics / sample / "timeline.json").read_text())
         stack, transform, record = fit_and_verify(args.dataset, sample, timeline, args.output)
         print(
