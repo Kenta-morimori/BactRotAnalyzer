@@ -1,0 +1,168 @@
+{
+  "protocol_version": 3,
+  "stage": "B",
+  "sample_roles": {
+    "1": "development",
+    "2": "validation"
+  },
+  "synthetic_seeds": {
+    "development": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
+    ],
+    "validation": [
+      1000,
+      1001,
+      1002,
+      1003,
+      1004,
+      1005,
+      1006,
+      1007,
+      1008,
+      1009,
+      1010,
+      1011,
+      1012,
+      1013,
+      1014,
+      1015,
+      1016,
+      1017,
+      1018,
+      1019
+    ]
+  },
+  "nominal_dt_sec": 0.005,
+  "coverage_stride": 256,
+  "diagnostic_threshold_native": 2000,
+  "diagnostic_threshold_status": "diagnostic_only_not_an_adopted_method",
+  "comparison_conditions": {
+    "segmentation": [
+      "saved_AVI_baseline",
+      "resize_10x_then_threshold",
+      "native_threshold_then_nearest_resize"
+    ],
+    "resize_interpolation_candidates": [
+      "nearest",
+      "linear",
+      "cubic"
+    ],
+    "selection": [
+      "largest_external_contour",
+      "initial_target_with_constraints"
+    ],
+    "additional_methods": "Only after a documented failure of simpler candidates"
+  },
+  "metrics": [
+    "mask_agreement",
+    "merge",
+    "oversplit",
+    "target_loss",
+    "wrong_id",
+    "reidentification_failure",
+    "position_median",
+    "position_p95",
+    "position_max",
+    "position_over_target_radius",
+    "accepted_fraction_all_target_frames",
+    "normal_regression",
+    "manual_actions",
+    "wall_time_with_io",
+    "processing_time",
+    "fps_input_resolution",
+    "peak_memory",
+    "cold_and_reused_runs"
+  ],
+  "acceptance": {
+    "status": "agreed",
+    "pixel_mean_atol": 1e-10,
+    "identifiable_synthetic_position_p95_native_px": 0.5,
+    "identifiable_synthetic_position_p95_over_radius": 0.1,
+    "minimum_accepted_fraction_per_identifiable_condition": 0.95,
+    "maximum_wrong_target_count": 0,
+    "unidentifiable_finite_output_count": 0,
+    "normal_regression_max_added_missing": 0,
+    "normal_regression_max_position_change_px": 0,
+    "speed_target": null,
+    "speed_policy": "Report only; accuracy and identity take priority",
+    "measured_precision_claim": "No independent positional truth; consistency only",
+    "agreed_on": "2026-10-25 Asia/Tokyo"
+  },
+  "comparison": {
+    "methods": [
+      {
+        "name": "native_fixed",
+        "scale": 1,
+        "interpolation": "nearest",
+        "threshold_mode": "fixed",
+        "threshold": 9000
+      },
+      {
+        "name": "resize10_nearest_fixed",
+        "scale": 10,
+        "interpolation": "nearest",
+        "threshold_mode": "fixed",
+        "threshold": 9000
+      },
+      {
+        "name": "resize10_linear_fixed",
+        "scale": 10,
+        "interpolation": "linear",
+        "threshold_mode": "fixed",
+        "threshold": 9000
+      },
+      {
+        "name": "resize10_cubic_fixed",
+        "scale": 10,
+        "interpolation": "cubic",
+        "threshold_mode": "fixed",
+        "threshold": 9000
+      },
+      {
+        "name": "native_background_relative",
+        "scale": 1,
+        "interpolation": "nearest",
+        "threshold_mode": "background_relative",
+        "threshold": 4000
+      }
+    ],
+    "selector": {
+      "min_area_px": 3,
+      "min_aspect": 0.25,
+      "max_aspect": 4.0,
+      "min_area_ratio": 0.6,
+      "max_area_ratio": 1.6,
+      "max_displacement_px": 12.0,
+      "max_dt_sec": 0.0075
+    },
+    "manual_seed_policy": "Synthetic: initial identifiable frame of each recording segment only; no automatic re-seeding after dropout. Seeds are simulated annotations, not counted as algorithmic identification.",
+    "measured_fixed_threshold": 2000,
+    "measured_window_radius_frames": 12,
+    "evaluation_order": [
+      "development",
+      "freeze",
+      "validation"
+    ],
+    "no_tuning_on_validation": true
+  },
+  "synthetic_observability": "Isolated-mask area centroid is scoreable when no target foreground pixels are hidden. Adjacency alone is scoreable; hidden shape is not inferred from circle/ellipse priors. Object-ID scoring is separate."
+}
