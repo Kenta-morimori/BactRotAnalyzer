@@ -211,3 +211,13 @@ CLI指定を優先し、従来の採否付き楕円は`--center-estimator valida
 V2では最終参照中心、低信頼値を含む停止角速度、品質・理由の追加列と図を保存します。
 主角速度・CW率・切替数・揺らぎ解析の入力は従来の主系列を維持します。
 [列・理由・図・検証の詳細](../docs/analysis/repellent-reference-output.md)を参照してください。
+
+### 重心の画像診断・手法比較
+
+`05_centroid_diagnostics.py` は原画像・マスク・生重心の診断、
+`06_centroid_comparison.py` は合意済み基準での分離・対象選択の比較と採用判断に使用します。
+`07_centroid_review.py` は元TIFF上に候補マスク・保存済み重心を重ねたローカル比較動画を出力します。
+`08_registered_centroid_review.py` は保存済み二値TIFFのフレームラベルと旧AVIを照合し、
+切り出し位置を画像から推定・検証して、旧AVIと10倍拡大後の二値化を同座標で比較します。
+実験結果は `outputs/centroid_evaluation/` に実行ごとに保存します。通常解析への採用候補はなく、既存解析・キャッシュは保持します。
+[評価条件・実行手順・採用判断](../docs/centroid-evaluation.md)を参照してください。
