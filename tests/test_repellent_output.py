@@ -151,6 +151,52 @@ def test_phase_tables_and_plots_share_original_values(tmp_path, monkeypatch):
     np.testing.assert_allclose(tables[0].final_reference_x_um, frame.final_reference_x_um, equal_nan=True)
 
 
+def test_phase_split_uses_rise_frame_when_its_timestamp_is_missing(tmp_path, monkeypatch):
+    monkeypatch.setattr(param, "save_dir_bef", str(tmp_path))
+    data = generate(Case("quiet"), 10400)
+    clock = data["time"].copy()
+    cut, source_start = 720, 201
+    boundary = clock[cut]
+    clock[cut] = np.nan
+    _, frame, episodes = analyze_sample(clock, data["observed"], source_start=source_start)
+    assert frame.frame_0based.lt(cut).any() and frame.frame_0based.ge(cut).any()
+    saved = []
+
+    def capture(fig, path, **kwargs):
+        phase = Path(path).parent.parent.name
+        saved.append(phase)
+        for axis in fig.axes:
+            if not axis.get_xlabel().startswith("Time"):
+                continue
+            for line in axis.lines:
+                times = np.asarray(line.get_xdata(), float)
+                if phase == "02_pre_rise_fluctuation":
+                    assert np.all(times < boundary)
+                elif phase == "03_post_rise_analysis":
+                    assert np.all(times >= boundary)
+        plt.close(fig)
+
+    monkeypatch.setattr(plotting, "save_figure", capture)
+    with response_run("day") as run:
+        plotting.phase_figures(
+            "day",
+            [(clock, data["observed"], frame, episodes)],
+            [np.nan],
+            source_starts=[source_start],
+            rise_indices=[cut],
+        )
+    tables = [
+        pd.read_csv(run.root / segment / "rotation_center/no01/timeseries.csv")
+        for segment in ("00_all_rotational_analysis", "02_pre_rise_fluctuation", "03_post_rise_analysis")
+    ]
+    assert len(saved) == 15
+    assert tables[1].source_frame_1based.lt(source_start + cut).all()
+    assert tables[2].source_frame_1based.ge(source_start + cut).all()
+    for table, mask in zip(tables[1:], (frame.frame_0based.lt(cut), frame.frame_0based.ge(cut))):
+        pd.testing.assert_frame_equal(table, frame.loc[mask].reset_index(drop=True), check_dtype=False)
+    pd.testing.assert_frame_equal(tables[0], pd.concat(tables[1:], ignore_index=True))
+
+
 def test_cached_timeline_keeps_internal_missing_timestamp(tmp_path, monkeypatch):
     from utils.functions.repellent_response import ensure_time_list
 

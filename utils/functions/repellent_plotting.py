@@ -171,7 +171,9 @@ def phase_figures(day, samples, rise_times, *, source_starts=None, rise_indices=
                 if rise_indices is not None and np.isfinite(rise_indices[sample_index])
                 else (int(np.searchsorted(time, rise)) if np.isfinite(rise) else len(time))
             )
-            table_cut = int(np.searchsorted(frame.time_sec.to_numpy(float), rise)) if np.isfinite(rise) else len(frame)
+            # Evaluation rows use the same original-frame boundary as the observations,
+            # including when the rise frame has no timestamp.
+            table_cut = int(np.searchsorted(frame.frame_0based.to_numpy(int), cut))
             selected = np.zeros(len(time), bool)
             chosen = np.zeros(len(frame), bool)
             if phase == "all":
