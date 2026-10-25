@@ -1,5 +1,13 @@
 ## Code Review Rules
 
+### PR artifact cleanup
+
+- Before requesting review and before merging, inspect the complete PR diff for temporary debugging or comparison helpers, one-off scripts, work logs, hard-coded local paths, and files named for the PR or issue rather than their continuing purpose.
+- Remove artifacts needed only to prepare or review the PR. Keep reusable feature code, regression tests, specifications, operating instructions, and validation evidence; a PR or issue reference alone is not a reason to delete them.
+- Organize permanent documentation by feature or concept so it remains understandable without the PR discussion. Keep development chronology and review receipts in the issue/PR or local notes, rather than production documentation or runtime code.
+- Remove unused code, options, dependencies, and obsolete references; update links and check that the remaining documentation and commands refer to existing files. Summarize this cleanup in the PR checklist.
+- Do not include or delete unrelated work or existing experimental artifacts during cleanup. Preserve the experimental data boundary below.
+
 ### GitHub Codex review requests
 
 - Request a GitHub Codex review manually at most once per PR by default. Check the PR's existing Codex review history before posting `@codex review`; a new head does not reset the count.
