@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+from argparse import Namespace
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -13,6 +14,8 @@ from PIL import Image
 
 from utils.functions import repellent_input as inputs
 from utils.functions.repellent_workflow import recalculate_manifest
+from utils.run_context import input_inventory
+from utils.run_inputs import manifest_inputs, repellent_inputs, tiff_inputs
 
 
 def recording(tmp_path, *, frames=80, gap=False):
@@ -270,3 +273,26 @@ def test_analysis_cli_generates_a_manifest_and_publishes_grouped_outputs(tmp_pat
         module.main(**dict(options, input_source=None))
     with pytest.raises(ValueError, match="mutually exclusive"):
         module.main(**options, measurement_input="other.json")
+
+
+def test_execution_inventory_includes_external_settings_tiffs_background_and_manifest_sources(tmp_path):
+    path, settings = settings_file(tmp_path, frames=10)
+    settings["samples"][0]["background"] = dict(csv="background.csv")
+    (tmp_path / "background.csv").write_text("synthetic background")
+    inputs._write(path, settings)
+    args = Namespace(input_settings=str(path), input_samples=[7], input_source="tiff", output_suffix=None, day="day")
+    saved = input_inventory(repellent_inputs(args))
+    files = {item["path"] for item in saved["files"]}
+    assert str(path) in files and str(tmp_path / "background.csv") in files
+    assert len([name for name in files if name.endswith(".tif")]) == 10
+    settings["samples"][0]["background"] = None
+    inputs._write(path, settings)
+    # The standalone TIFF manifest has different references, but the same path rules as its loader.
+    descriptor = tmp_path / "tiff.json"
+    frame = next((tmp_path / "data").rglob("*.tif"))
+    descriptor.write_text(json.dumps(dict(samples=[dict(frames=[dict(path=str(frame))])])))
+    assert set(tiff_inputs(Namespace(manifest=descriptor))) == {descriptor, frame}
+    manifest = prepare(path)
+    inventory = input_inventory(manifest_inputs(manifest, "measurement"))
+    assert str(path) in {item["path"] for item in inventory["files"]}
+    assert len([item for item in inventory["files"] if item["path"].endswith(".tif")]) == 10

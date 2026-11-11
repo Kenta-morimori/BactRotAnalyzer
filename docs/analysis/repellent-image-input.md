@@ -1,8 +1,10 @@
 # 生TIFF・AVIから標準解析へ接続する
 
-[入力契約のADR](../adr/0004-image-input-settings.md)と[標準解析・出力](repellent-workflow.md)を参照する。
+[入力契約のADR](../adr/0005-image-input-settings.md)と[標準解析・出力](repellent-workflow.md)を参照する。
 config.iniは任意。設定JSONの草案作成、対象設定、解析実行の順に進める。
 背景輝度の解析はユーザーが行い、この入口では自動抽出・上昇検出・背景補正を実行しない。
+解析CLIには[コミット済みのclean Git状態と実行履歴](../development-environment.md)の契約を適用する。
+設定エディタの`--init`と`--configure`は解析結果を作らない。設定JSONはGit管理外へ保存する。
 
 ## TIFFの設定と実行
 

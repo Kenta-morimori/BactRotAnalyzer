@@ -24,6 +24,8 @@ from tests.synthetic.images import CASES, generate_images  # noqa: E402
 from utils.functions import centroid_comparison as comparison  # noqa: E402
 from utils.functions import centroid_diagnostics as diagnostic  # noqa: E402
 from utils.functions.get_centroid_coordinate import contours  # noqa: E402
+from utils.run_context import analysis_run
+from utils.run_inputs import diagnostic_inputs
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -417,51 +419,54 @@ def main(argv=None):
         output_root = diagnostic.private_output_root(ROOT, args.output_root)
     except ValueError as exc:
         parser.error(str(exc))
-    config = json.loads(args.config.read_text())
-    diagnostic.validate_config(config)
-    if config["acceptance"]["status"] != "agreed":
-        parser.error("Comparison requires agreed numerical criteria")
-    identity = protocol_identity(config)
-    if args.command == "synthetic" and args.partition == "validation":
-        if args.freeze is None or json.loads(args.freeze.read_text())["identity"] != identity:
-            parser.error("Validation requires an unchanged development freeze record")
-    if args.command == "measured" and (args.manifest_root is None or args.annotations is None):
-        parser.error("Measured comparison requires stage-A manifest and independent original-image annotations")
-    if args.command == "decision" and args.evidence is None:
-        parser.error("Decision requires development, validation, regression and measured directories")
-    output = output_root / (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "_" + uuid4().hex[:8])
-    output.mkdir(parents=True, exist_ok=False)
-    diagnostic.write_json(output / "identity.json", identity)
-    if args.command == "synthetic" and args.partition == "validation":
-        diagnostic.write_json(output / "validation_source.json", diagnostic.fingerprint(args.freeze))
-    diagnostic.write_json(output / "run.json", dict(status="running", command=args.command))
-    print(output, flush=True)
-    cv2.setNumThreads(1)
-    try:
-        if args.command == "synthetic":
-            run_synthetic(config, output, args.partition)
-            if args.partition == "development":
-                diagnostic.write_json(
-                    output / "freeze.json",
-                    dict(
-                        identity=identity,
-                        candidate_policy="All preregistered methods, unchanged after development",
-                        created_after_development=True,
-                    ),
-                )
-        elif args.command == "regression":
-            run_normal_regression(config, output)
-        elif args.command == "measured":
-            run_measured(config, output, args.manifest_root, args.annotations)
-        else:
-            record_decision(config, output, args.evidence)
-    except (Exception, KeyboardInterrupt) as exc:
-        diagnostic.write_json(
-            output / "run.json",
-            dict(status="interrupted" if isinstance(exc, KeyboardInterrupt) else "failed", error=str(exc)),
-        )
-        raise
-    diagnostic.write_json(output / "run.json", dict(status="complete", command=args.command))
+    with analysis_run(
+        parameters=vars(args), inputs=diagnostic_inputs(args, ROOT), outputs=[output_root], repository=ROOT
+    ):
+        config = json.loads(args.config.read_text())
+        diagnostic.validate_config(config)
+        if config["acceptance"]["status"] != "agreed":
+            parser.error("Comparison requires agreed numerical criteria")
+        identity = protocol_identity(config)
+        if args.command == "synthetic" and args.partition == "validation":
+            if args.freeze is None or json.loads(args.freeze.read_text())["identity"] != identity:
+                parser.error("Validation requires an unchanged development freeze record")
+        if args.command == "measured" and (args.manifest_root is None or args.annotations is None):
+            parser.error("Measured comparison requires stage-A manifest and independent original-image annotations")
+        if args.command == "decision" and args.evidence is None:
+            parser.error("Decision requires development, validation, regression and measured directories")
+        output = output_root / (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "_" + uuid4().hex[:8])
+        output.mkdir(parents=True, exist_ok=False)
+        diagnostic.write_json(output / "identity.json", identity)
+        if args.command == "synthetic" and args.partition == "validation":
+            diagnostic.write_json(output / "validation_source.json", diagnostic.fingerprint(args.freeze))
+        diagnostic.write_json(output / "run.json", dict(status="running", command=args.command))
+        print(output, flush=True)
+        cv2.setNumThreads(1)
+        try:
+            if args.command == "synthetic":
+                run_synthetic(config, output, args.partition)
+                if args.partition == "development":
+                    diagnostic.write_json(
+                        output / "freeze.json",
+                        dict(
+                            identity=identity,
+                            candidate_policy="All preregistered methods, unchanged after development",
+                            created_after_development=True,
+                        ),
+                    )
+            elif args.command == "regression":
+                run_normal_regression(config, output)
+            elif args.command == "measured":
+                run_measured(config, output, args.manifest_root, args.annotations)
+            else:
+                record_decision(config, output, args.evidence)
+        except (Exception, KeyboardInterrupt) as exc:
+            diagnostic.write_json(
+                output / "run.json",
+                dict(status="interrupted" if isinstance(exc, KeyboardInterrupt) else "failed", error=str(exc)),
+            )
+            raise
+        diagnostic.write_json(output / "run.json", dict(status="complete", command=args.command))
 
 
 if __name__ == "__main__":

@@ -1,3 +1,4 @@
+import argparse
 import math
 import os
 import sys
@@ -658,5 +659,12 @@ def main():
 
 
 if __name__ == "__main__":
-    # TODO: select directory (and data number) to analyze
-    main()
+    from utils.run_context import analysis_run
+
+    argparse.ArgumentParser(description="Analyze the configured angular velocity datasets.").parse_args()
+    with analysis_run(
+        parameters={"data_keys": DATA_KEYS},
+        inputs=[*AV_DIR_DICT.values(), *TIME_DIR_DICT.values()],
+        outputs=[Path(param.save_dir_bef) / "03_av_analysis"],
+    ):
+        main()

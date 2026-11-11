@@ -4,11 +4,16 @@
 
 Information about the scripts.
 
+Analysis CLIs require committed, clean Git sources and save `manifest.json` / `run.log` under `outputs/_runs/`.
+See the [development and execution guide](../docs/development-environment.md).
+
 ## 1. Setting up the environment
 
 To install the required libraries, run the following:
 ```bash
-pip3 install -r requirements.txt
+python3.10 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+source .venv/bin/activate
 ```
 
 ## 2. Execution
@@ -86,12 +91,17 @@ Generated outputs are saved in `outputs/{day}/repellent_response/`:
 
 解析スクリプトに関する情報です。
 
+解析CLIは未コミット変更がある場合に停止し、実行時のブランチ・commit・入力hash・環境・終了状態を
+`outputs/_runs/` に保存します。[環境構築と実行履歴](../docs/development-environment.md)を参照してください。
+
 ## 1. 環境構築
 
 必要なライブラリをインストールするには以下を実行してください:
 
 ```bash
-pip3 install -r requirements.txt
+python3.10 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+source .venv/bin/activate
 ```
 
 ## 2. 実行方法

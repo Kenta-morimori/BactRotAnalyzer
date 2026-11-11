@@ -9,6 +9,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from utils.functions.centroid_diagnostics import private_output_root
 from utils.functions.tiff_roi_io import directory_rows, process
+from utils.run_context import analysis_run
+from utils.run_inputs import tiff_inputs
 
 
 def main():
@@ -26,6 +28,11 @@ def main():
     parser.add_argument("--no-video", action="store_true")
     parser.add_argument("--video-fps", type=int, default=50)
     args = parser.parse_args()
+    with analysis_run(parameters=vars(args), inputs=tiff_inputs(args), outputs=[args.output]):
+        run(args, parser)
+
+
+def run(args, parser):
     output = private_output_root(Path(__file__).resolve().parents[1], args.output)
     if args.manifest:
         if args.seed is not None or args.roi is not None:
