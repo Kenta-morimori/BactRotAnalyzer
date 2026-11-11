@@ -1,3 +1,4 @@
+import argparse
 import csv
 import math
 import os
@@ -565,5 +566,16 @@ def main(day):
 
 
 if __name__ == "__main__":
-    day = sys.argv[1]
-    main(day)
+    from utils.run_context import analysis_run
+    from utils.run_inputs import dataset_inputs
+
+    parser = argparse.ArgumentParser(description="Extract source-aligned centroid coordinates.")
+    parser.add_argument("day")
+    args = parser.parse_args()
+    day = args.day
+    with analysis_run(
+        parameters=vars(args),
+        inputs=dataset_inputs(args.day, os.getcwd()),
+        outputs=[f"{param.save_dir_bef}/{args.day}"],
+    ):
+        main(args.day)

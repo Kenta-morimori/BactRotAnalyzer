@@ -20,6 +20,8 @@ from PIL import Image  # noqa: E402
 from tests.synthetic.images import CASES, generate_images  # noqa: E402
 from utils.functions import centroid_diagnostics as diagnostic  # noqa: E402
 from utils.functions.get_centroid_coordinate import contours  # noqa: E402
+from utils.run_context import analysis_run
+from utils.run_inputs import diagnostic_inputs
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -194,54 +196,58 @@ def main(argv=None):
     parser.add_argument("--config", type=Path, default=ROOT / "configs" / "centroid_evaluation.json")
     parser.add_argument("--output-root", type=Path, default=ROOT / "outputs" / "centroid_evaluation")
     args = parser.parse_args(argv)
-    config = json.loads(args.config.read_text())
-    diagnostic.validate_config(config)
     try:
         output_root = diagnostic.private_output_root(ROOT, args.output_root)
     except ValueError as exc:
         parser.error(str(exc))
     if args.command == "inspect" and args.dataset is None:
         parser.error("Image inspection requires an explicit --dataset")
-    output = output_root / (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "_" + uuid4().hex[:8])
-    output.mkdir(parents=True, exist_ok=False)
-    diagnostic.write_json(output / "protocol.json", config)
-    diagnostic.write_json(output / "run.json", {"status": "running", "command": args.command})
-    print(output, flush=True)
-    try:
-        if args.command == "inspect":
-            assert args.dataset is not None
-            dataset = args.dataset.resolve()
-            settings = configparser.ConfigParser()
-            settings.read(dataset / "config.ini")
-            names = [name.strip() for name in settings.get("Tiff_info", "tiff_data").split(",")]
-            if len(names) != 2:
-                raise ValueError("This registered protocol requires exactly two measured samples")
-            result = [
-                inspect_sample(dataset, dataset / f"{name}.avi", i, config, output) for i, name in enumerate(names, 1)
-            ]
-            diagnostic.write_json(output / "summary.json", result)
-        elif args.command == "regression":
-            if not run_regression((args.dataset or ROOT / "data" / "test_data").resolve(), output):
-                raise ValueError("Frame count or independent pixel-mean regression failed")
-        else:
-            # Development seeds only: generating holdout evidence would expose it.
-            for seed in config["synthetic_seeds"]["development"]:
-                for case in CASES:
-                    sequence = generate_images(case, seed)
-                    np.savez_compressed(output / f"{case}_{seed}.npz", **vars(sequence))
-            diagnostic.write_json(
-                output / "synthetic.json",
-                dict(
-                    cases=list(CASES),
-                    seeds=config["synthetic_seeds"]["development"],
-                    stage="A",
-                    performance_comparison=False,
-                ),
-            )
-    except (Exception, KeyboardInterrupt) as exc:
-        diagnostic.write_json(output / "run.json", {"status": "failed", "error": str(exc)})
-        raise
-    diagnostic.write_json(output / "run.json", {"status": "complete", "command": args.command})
+    with analysis_run(
+        parameters=vars(args), inputs=diagnostic_inputs(args, ROOT), outputs=[output_root], repository=ROOT
+    ):
+        config = json.loads(args.config.read_text())
+        diagnostic.validate_config(config)
+        output = output_root / (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "_" + uuid4().hex[:8])
+        output.mkdir(parents=True, exist_ok=False)
+        diagnostic.write_json(output / "protocol.json", config)
+        diagnostic.write_json(output / "run.json", {"status": "running", "command": args.command})
+        print(output, flush=True)
+        try:
+            if args.command == "inspect":
+                assert args.dataset is not None
+                dataset = args.dataset.resolve()
+                settings = configparser.ConfigParser()
+                settings.read(dataset / "config.ini")
+                names = [name.strip() for name in settings.get("Tiff_info", "tiff_data").split(",")]
+                if len(names) != 2:
+                    raise ValueError("This registered protocol requires exactly two measured samples")
+                result = [
+                    inspect_sample(dataset, dataset / f"{name}.avi", i, config, output)
+                    for i, name in enumerate(names, 1)
+                ]
+                diagnostic.write_json(output / "summary.json", result)
+            elif args.command == "regression":
+                if not run_regression((args.dataset or ROOT / "data" / "test_data").resolve(), output):
+                    raise ValueError("Frame count or independent pixel-mean regression failed")
+            else:
+                # Development seeds only: generating holdout evidence would expose it.
+                for seed in config["synthetic_seeds"]["development"]:
+                    for case in CASES:
+                        sequence = generate_images(case, seed)
+                        np.savez_compressed(output / f"{case}_{seed}.npz", **vars(sequence))
+                diagnostic.write_json(
+                    output / "synthetic.json",
+                    dict(
+                        cases=list(CASES),
+                        seeds=config["synthetic_seeds"]["development"],
+                        stage="A",
+                        performance_comparison=False,
+                    ),
+                )
+        except (Exception, KeyboardInterrupt) as exc:
+            diagnostic.write_json(output / "run.json", {"status": "failed", "error": str(exc)})
+            raise
+        diagnostic.write_json(output / "run.json", {"status": "complete", "command": args.command})
 
 
 if __name__ == "__main__":

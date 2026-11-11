@@ -16,6 +16,10 @@ prompts/
 *.sh
 
 venv/
+.venv/
+__pycache__/
+*.py[cod]
+.ruff_cache/
 utils/__pycache__
 utils/functions/__pycache__
 

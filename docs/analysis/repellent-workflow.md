@@ -20,6 +20,9 @@
 
 リポジトリのルートで実行する。
 
+解析CLIはcommit済みのcleanなGit作業ツリーを要求する。ブランチ・SHA・入力hash・環境・終了状態は
+`outputs/_runs/` に保存する。[実行履歴の契約](../development-environment.md)と[ADR 0004](../adr/0004-execution-provenance.md)を参照。
+
 ```bash
 python3 scripts/04_repellent_response_analysis.py --day repellent-response/<dataset>
 python3 scripts/04_repellent_response_analysis.py --day repellent-response/<dataset> --all-frames --output-suffix comparison

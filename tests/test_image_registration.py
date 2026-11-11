@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -79,6 +80,14 @@ def test_failed_registered_review_records_failure_and_preserves_existing_output(
     prior = tmp_path / "prior"
     prior.mkdir()
     (prior / "index.json").write_text("[]")
+    # CLI execution gates are tested independently of the developer tree.
+    (tmp_path / ".gitignore").write_text("outputs/\n")
+    for git_arguments in (
+        ["init"],
+        ["add", "."],
+        ["-c", "user.name=Synthetic Test", "-c", "user.email=test@example.invalid", "commit", "-m", "Fixture"],
+    ):
+        subprocess.run(["git", "-C", str(tmp_path), *git_arguments], check=True, capture_output=True)
     output = tmp_path / "outputs" / "private" / "failed"
     arguments = [
         "--dataset",

@@ -2,6 +2,8 @@
 # BactRotAnalyzer
 Bacterial Rotation Data Analysis Script
 
+Development setup, clean-Git execution requirements, and local run logs: [development guide](docs/development-environment.md).
+
 ## 1. Overview
 This project analyzes the rotation data of bacteria. The input is binarized video data.
 
@@ -16,14 +18,13 @@ In fluctuation analysis, fluctuations are evaluated using a unique analysis meth
 ![image](outputs/test_data/fluctuation_analysis/SD-time-series/SD-time-series_all_standardized.png)
 
 ## 2. Setup
-The following libraries are required for this project. Please install them using 'requirements.txt'.
-- numpy==1.24.4
-- opencv-python==4.8.0
-- pandas==2.0.3
-- matplotlib==3.7.2
+Use Python 3.10, matching CI. Dependency versions are defined in `requirements.txt`.
+Create an isolated virtual environment:
 
 ```bash
-pip3 install -r requirements.txt
+python3.10 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+source .venv/bin/activate
 ```
 
 ## 3. Execution
@@ -54,6 +55,8 @@ This project is licensed under the Creative Commons CC BY-NC-SA 4.0 License.
 # BactRotAnalyzer
 バクテリアの回転データ解析スクリプト
 
+開発環境・未コミット時の実行防止・入力やブランチを残す実行ログは[開発ガイド](docs/development-environment.md)を参照してください。
+
 ## 1. 概要
 本プロジェクトでは，バクテリアの回転データを解析する．入力は二値化後の動画像データである．
 
@@ -69,14 +72,12 @@ This project is licensed under the Creative Commons CC BY-NC-SA 4.0 License.
 
 
 ## 2. 実行環境設定
-本プロジェクトでは，以下のライブラリが必須である．'requirements.txt'を用いてインストールください．
-- numpy==1.24.4
-- opencv-python==4.8.0.74
-- pandas==2.0.3
-- matplotlib==3.7.2
+CIと同じPython 3.10を使用する．依存パッケージと版条件の正本は `requirements.txt` とし，専用の仮想環境へ導入する．
 
 ```bash
-pip3 install -r requirements.txt
+python3.10 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+source .venv/bin/activate
 ```
 
 ## 3. 実行方法

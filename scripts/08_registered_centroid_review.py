@@ -21,6 +21,8 @@ from PIL import Image
 from utils.functions import centroid_diagnostics as diagnostic
 from utils.functions import centroid_review as review
 from utils.functions import image_registration as registration
+from utils.run_context import analysis_run
+from utils.run_inputs import diagnostic_inputs
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -370,14 +372,17 @@ def main(argv=None):
         args.output = diagnostic.private_output_root(ROOT, args.output)
     except ValueError as exc:
         parser.error(str(exc))
-    args.output.mkdir(parents=True, exist_ok=False)
-    diagnostic.write_json(args.output / "run.json", dict(status="running", purpose="image correspondence review"))
-    try:
-        run(args)
-    except (Exception, KeyboardInterrupt) as exc:
-        diagnostic.write_json(args.output / "run.json", dict(status="failed", error=str(exc)))
-        raise
-    diagnostic.write_json(args.output / "run.json", dict(status="complete", purpose="image correspondence review"))
+    with analysis_run(
+        parameters=vars(args), inputs=diagnostic_inputs(args, ROOT), outputs=[args.output], repository=ROOT
+    ):
+        args.output.mkdir(parents=True, exist_ok=False)
+        diagnostic.write_json(args.output / "run.json", dict(status="running", purpose="image correspondence review"))
+        try:
+            run(args)
+        except (Exception, KeyboardInterrupt) as exc:
+            diagnostic.write_json(args.output / "run.json", dict(status="failed", error=str(exc)))
+            raise
+        diagnostic.write_json(args.output / "run.json", dict(status="complete", purpose="image correspondence review"))
 
 
 def run(args):
