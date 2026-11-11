@@ -17,10 +17,12 @@ from PIL import Image
 from utils.functions import tiff_roi_io as images
 from utils.functions.centroid_review import display_limits, gray_display
 from utils.functions.repellent_input import (
+    TIFF_INITIAL_THRESHOLD,
     _hash,
     _load,
     _resolve,
     _write,
+    initial_threshold,
     selected_samples,
 )
 from utils.functions.tiff_roi import (
@@ -54,6 +56,7 @@ class Editor:
             order_confirmed=settings["order_confirmed"] or self.confirm_order,
             samples=selected_samples(settings, self.numbers),
             revision=_hash(self.path),
+            defaults=dict(threshold=TIFF_INITIAL_THRESHOLD),
         )
 
     def recording(self, number):
@@ -82,7 +85,7 @@ class Editor:
             raise ValueError("frame slider index is outside this recording")
         row = rows[index]
         plane = images.load_image(row["path"])
-        threshold = float(request.get("threshold", sample.get("threshold") or 2000))
+        threshold = float(initial_threshold(request) if "threshold" in request else initial_threshold(sample))
         roi_values = request.get("roi") or sample.get("roi") or [0, 0, plane.shape[1], plane.shape[0]]
         roi = ROI(*roi_values)
         roi.validate(plane.shape)

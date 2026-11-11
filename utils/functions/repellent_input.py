@@ -21,6 +21,13 @@ from utils.functions.tiff_roi import ROI, Tracker, nominal_max_dt
 
 TIFF_METHOD = "tiff-seeded-fixed-roi-area-centroid-v1"
 AVI_METHOD = "avi-largest-contour-area-centroid-threshold-120-v3"
+TIFF_INITIAL_THRESHOLD = 2000
+
+
+def initial_threshold(sample):
+    """Reuse a saved choice; only an unset threshold gets the report's candidate."""
+    value = sample.get("threshold")
+    return TIFF_INITIAL_THRESHOLD if value is None else value
 
 
 def _hash(path):
@@ -149,7 +156,7 @@ def attach_brightness_settings(path, *, numbers=None, brightness_root=None):
     return settings
 
 
-def choose_threshold(image, seed, initial=2000):
+def choose_threshold(image, seed, initial=TIFF_INITIAL_THRESHOLD):
     """Preview the actual 10x mask and explicitly accept its fixed threshold."""
     from utils.functions.centroid_review import display_limits, gray_display
     from utils.functions.tiff_roi import binary_regions
@@ -189,7 +196,7 @@ def configure_settings(path, *, numbers=None, confirm_order=False):
         rows = io.directory_rows(_resolve(path, sample["tiff_directory"]))
         image = io.load_image(rows[0]["path"])
         seed = io.pick_target(image)
-        threshold = choose_threshold(image, seed, sample.get("threshold") or 2000)
+        threshold = choose_threshold(image, seed, initial_threshold(sample))
         configured = dict(sample, frames=rows, seeds={str(rows[0]["source_frame_1based"]): seed}, threshold=threshold)
         roi, seeds, _, _, _ = io.prepare(configured, interactive=True)
         maximum = nominal_max_dt(rows)

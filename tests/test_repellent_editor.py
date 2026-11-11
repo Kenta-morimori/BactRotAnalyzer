@@ -19,6 +19,32 @@ from utils.functions.repellent_editor import Editor, editor_server
 from utils.functions.repellent_input import _write
 
 
+def test_unset_threshold_uses_report_candidate_without_writing_or_replacing_saved_roi(tmp_path):
+    path, settings = settings_file(tmp_path)
+    sample = settings["samples"][0]
+    sample.update(threshold=None, roi=None, seeds={}, target_confirmed=False)
+    _write(path, settings)
+    before = path.read_bytes()
+    editor = Editor(path)
+    assert editor.settings()["defaults"] == dict(threshold=2000)
+    default = editor.preview(dict(sample_no=7))
+    explicit = editor.preview(dict(sample_no=7, threshold=2000))
+    assert default["mask"] == explicit["mask"]
+    assert editor.settings()["samples"][0]["roi"] is None
+    assert path.read_bytes() == before
+    sample.update(threshold=12000, roi=[15, 15, 34, 34])
+    _write(path, settings)
+    saved = path.read_bytes()
+    reused = editor.preview(dict(sample_no=7))
+    explicit = editor.preview(dict(sample_no=7, threshold=12000, roi=sample["roi"]))
+    assert reused["mask"] == explicit["mask"] and reused["mask"] != default["mask"]
+    assert editor.settings()["samples"][0]["threshold"] == 12000
+    assert editor.settings()["samples"][0]["roi"] == sample["roi"]
+    assert path.read_bytes() == saved
+    with pytest.raises(ValueError, match="Positive threshold"):
+        editor.preview(dict(sample_no=7, threshold=0))
+
+
 def test_full_record_slider_keeps_source_gaps_and_missing_clock(tmp_path):
     path, _ = settings_file(tmp_path, gap=True)
     editor = Editor(path)
