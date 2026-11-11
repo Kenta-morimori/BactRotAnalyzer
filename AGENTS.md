@@ -65,8 +65,13 @@
 ### Primary rotation and stop measurements
 
 - For V2 repellent-response output, treat the V2 sign, reference center, and angular velocity as the primary rotating series. Stop-candidate center and angular velocity are separate measurements: they must not fill missing primary values or enter primary CW rate and switching counts. If the required references or lever arm are unavailable, retain a missing stop measurement with its reason.
-- AVI centroid coordinates use a downward-positive y axis. In this image space, a visually clockwise orbit has positive angular change; repellent-response output reports CW as positive for V2, validated, and legacy estimators.
+- AVI centroid coordinates use a downward-positive y axis. In this image space, a visually clockwise orbit has positive angular change; the grouped repellent-response output reports CCW as positive and CW as negative. Compatibility V2/validated/legacy backends retain their internal CW-positive convention and convert once at the export boundary.
 
 ### Experimental data boundary
 
 - Do not commit or post measured coordinates, raw images or videos, reproducible measured time series, or generated plots derived from them. Keep those artifacts local. Use synthetic data and aggregate, non-reconstructable summaries for tests and public issue or PR evidence.
+
+### Analysis decision records
+
+- Record important changes to analysis methods, observation/time identity, units/sign, center inference/completion, primary metrics, or default output contracts in `docs/adr/` alongside the implementation. Keep the ADR index current.
+- Include the decision, alternatives, consequences/limits, and validation approach. Keep work chronology and review receipts out of ADRs. Link operating documentation to the applicable ADR; supersede a decision explicitly when the scientific contract changes.

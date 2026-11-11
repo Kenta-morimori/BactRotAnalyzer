@@ -6,8 +6,27 @@ import re
 import pandas as pd
 
 # Repellent-response defaults; explicit CLI options take precedence.
-center_estimator = "v2"
+center_estimator = "local_conic"
 stop_measurement_enabled = True
+
+# Frozen local-conic v1 settings; changes affect the inference method and must be recorded.
+repellent_center_parameters = {
+    "windows_s": [0.2, 0.4, 0.8, 1.6, 3.2, 6.4],
+    "center_degrees": [1, 2],
+    "relative_error_limit": 0.05,
+    "relative_residual_limit": 0.3,
+    "gaussian_se_multiplier": 2.45,
+    "validation_gap_rows": 4,
+    "anchor_step_frames": 20,
+    "default_evaluation_step_frames": 20,
+    "model_switch_review_ratio": 0.05,
+}
+repellent_center_completion_points = 3
+repellent_diagnostic_switch_window_s = 1.0
+
+# Phase-grouped outputs; figures combine samples and split into pages only.
+repellent_samples_per_page = 10
+repellent_details_enabled = False
 
 # directory information
 curr_dir = os.getcwd()

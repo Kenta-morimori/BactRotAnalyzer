@@ -17,6 +17,7 @@ from utils.functions import (
 )
 from utils.functions.repellent_output import annotate_figure, response_root
 from utils.functions.repellent_plotting import coordinate_component, plot_series
+from utils.functions.repellent_result_export import plot_log_spectrum
 
 font_size = 24
 fig_size_x = 20
@@ -46,14 +47,6 @@ def _page_save_name(filename, sample_num, part_number, samples_per_file=PLOT_SAM
 
 def _page_path(save_dir, filename, sample_num, part_number, samples_per_file=PLOT_SAMPLES_PER_FILE):
     return os.path.join(save_dir, _page_save_name(filename, sample_num, part_number, samples_per_file))
-
-
-def _set_log_y_if_positive(ax, *series) -> None:
-    for values in series:
-        arr = np.asarray(values, dtype=float)
-        if np.any(np.isfinite(arr) & (arr > 0)):
-            ax.set_yscale("log")
-            return
 
 
 def plot_coordinate(x_list, y_list, day, mode):
@@ -545,7 +538,7 @@ def plot_fft(freq_list, Amp_list, save_dir, save_name, day, flag_add_peak=False)
                 peak_list.append(np.nan)
             continue
 
-        axs[row, col].plot(freq_arr, amp_arr)
+        plot_log_spectrum(axs[row, col], freq_arr, amp_arr)
         if flag_add_peak:
             finite_amp_mask = np.isfinite(amp_arr)
             if np.any(finite_amp_mask):
@@ -556,14 +549,9 @@ def plot_fft(freq_list, Amp_list, save_dir, save_name, day, flag_add_peak=False)
             else:
                 peak_list.append(np.nan)
         axs[row, col].grid(True)
-        freq_max = float(np.nanmax(freq_arr))
-        if np.isfinite(freq_max) and freq_max > 0:
-            axs[row, col].set_xlim(0, freq_max)
         axs[row, col].set_title(f"No.{i+1}", fontsize=font_size)
         axs[row, col].set_xlabel("Frequency [Hz]", fontsize=font_size)
         axs[row, col].set_ylabel("Amp", fontsize=font_size)
-        # axs[row, col].set_xscale("log")
-        _set_log_y_if_positive(axs[row, col], amp_arr)
         axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
     plt.tight_layout()
     plt.savefig(f"{save_dir}/{save_name}")
@@ -680,20 +668,11 @@ def plot_sd_mean(df, day):
     plt.close(fig)
 
 
-def _max_available_frequency(sample_frequencies):
-    last_frequencies = [float(freq[-1]) for freq in sample_frequencies if len(freq)]
-    return max(last_frequencies, default=1.0)
-
-
 def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
     sample_num, _, _ = param.get_config(day)
     width_time_list = param.SD_window_width_list
     save_dir = f"{param.save_dir_bef}/{day}/fluctuation_analysis/SD-time-series/{param.get_SD_mode_label()}_FFT"
     os.makedirs(save_dir, exist_ok=True)
-
-    max_x_lim_list = []
-    for i in range(sample_num):
-        max_x_lim_list.append(_max_available_frequency(freq_list[i]))
 
     cols = 2
     rows = max(1, math.ceil(sample_num / cols))
@@ -704,17 +683,14 @@ def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
         for j in range(sample_num):
             row = j // cols
             col = j % cols
-            axs[row, col].plot(freq_list[j][i], Amp_list[j][i])
+            plot_log_spectrum(axs[row, col], freq_list[j][i], Amp_list[j][i])
             axs[row, col].grid(True)
             if flag_std:
                 axs[row, col].set_title(f"Standardized SD time-series No.{j+1}", fontsize=font_size)
             else:
                 axs[row, col].set_title(f"SD Time-series No.{j+1}", fontsize=font_size)
-            axs[row, col].set_xlim(0, max_x_lim_list[j])
             axs[row, col].set_xlabel("Freqency [Hz]", fontsize=font_size)
             axs[row, col].set_ylabel("Amp", fontsize=font_size)
-            # axs[row, col].set_xscale("log")
-            _set_log_y_if_positive(axs[row, col], Amp_list[j][i])
             axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
         plt.tight_layout()
         if flag_std:
@@ -735,17 +711,16 @@ def plot_SD_list_fft(freq_list, Amp_list, day, flag_std):
         for j in range(sample_num):
             row = j // cols
             col = j % cols
-            axs[row, col].plot(freq_list[j][i], Amp_list[j][i], label=f"SD {width_time}s", c=color_list[i], alpha=0.7)
+            plot_log_spectrum(
+                axs[row, col], freq_list[j][i], Amp_list[j][i], label=f"SD {width_time}s", c=color_list[i], alpha=0.7
+            )
             axs[row, col].grid(True)
             if flag_std:
                 axs[row, col].set_title(f"Standardized SD Time-series No.{j+1}", fontsize=font_size)
             else:
                 axs[row, col].set_title(f"SD Time-series No.{j+1}", fontsize=font_size)
-            axs[row, col].set_xlim(0, max_x_lim_list[j])
             axs[row, col].set_xlabel("Freqency [Hz]", fontsize=font_size)
             axs[row, col].set_ylabel("Amp", fontsize=font_size)
-            # axs[row, col].set_xscale("log")
-            _set_log_y_if_positive(axs[row, col], Amp_list[j][i])
             axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
         axs[-1][-1].legend(plot_label_list, loc="upper left", bbox_to_anchor=(1, 1))
     plt.tight_layout()
@@ -1097,10 +1072,6 @@ def dev_plot_sd_FFT_with_rotation(freq_list, Amp_list, day):
     for width_time in width_time_list:
         plot_label_list.append(f"SD {width_time}s")
 
-    max_x_lim_list = []
-    for i in range(sample_num):
-        max_x_lim_list.append(_max_available_frequency(freq_list[i]))
-
     cols = 2
     rows = max(1, math.ceil(sample_num / cols))
     fig, axs = plt.subplots(rows, cols, figsize=(fig_size_x, fig_size_y + 2))
@@ -1110,14 +1081,11 @@ def dev_plot_sd_FFT_with_rotation(freq_list, Amp_list, day):
     for j in range(sample_num):
         row = j // cols
         col = j % cols
-        axs[row, col].plot(av_freq_list[j], av_Amp_list[j], label="Rotation Data", c="black", alpha=0.8)
+        plot_log_spectrum(axs[row, col], av_freq_list[j], av_Amp_list[j], label="Rotation Data", c="black", alpha=0.8)
         axs[row, col].grid(True)
         axs[row, col].set_title(f"Standardized SD Time-series No.{j+1}", fontsize=font_size)
-        axs[row, col].set_xlim(0, max_x_lim_list[j])
         axs[row, col].set_xlabel("Freqency [Hz]", fontsize=font_size)
         axs[row, col].set_ylabel("Amp", fontsize=font_size)
-        # axs[row, col].set_xscale("log")
-        _set_log_y_if_positive(axs[row, col], av_Amp_list[j], *[Amp_list[j][i] for i in range(len(width_time_list))])
         axs[row, col].tick_params(axis="both", which="major", labelsize=font_size)
 
     # SD
@@ -1125,7 +1093,9 @@ def dev_plot_sd_FFT_with_rotation(freq_list, Amp_list, day):
         for j in range(sample_num):
             row = j // cols
             col = j % cols
-            axs[row, col].plot(freq_list[j][i], Amp_list[j][i], label=f"SD {width_time}s", c=color_list[i], alpha=0.7)
+            plot_log_spectrum(
+                axs[row, col], freq_list[j][i], Amp_list[j][i], label=f"SD {width_time}s", c=color_list[i], alpha=0.7
+            )
         axs[-1][-1].legend(plot_label_list, loc="upper left", bbox_to_anchor=(1, 1))
     plt.tight_layout()
     plt.savefig(f"{save_dir}/SD-time-series_FFT_all_standardized_with_av.png")
@@ -1164,8 +1134,7 @@ def dev_plot_fft_coordinates(X, Y, day):
                 y_ax.axis("off")
                 continue
             for ax, freq, amp, xy in ((x_ax, x_freq_list, x_Amp_list, "x"), (y_ax, y_freq_list, y_Amp_list, "y")):
-                ax.plot(freq, amp)
-                ax.set_xlim(0, freq[-1])
+                plot_log_spectrum(ax, freq, amp)
                 ax.grid(True)
                 ax.axvline(x=peak, color="r", alpha=0.6)
                 ax.set_title(
@@ -1174,7 +1143,6 @@ def dev_plot_fft_coordinates(X, Y, day):
                 )
                 ax.set_xlabel("Freqency [Hz]", fontsize=font_size)
                 ax.set_ylabel("Amp", fontsize=font_size)
-                _set_log_y_if_positive(ax, amp)
                 ax.tick_params(axis="both", which="major", labelsize=font_size)
         plt.tight_layout()
         plt.savefig(_page_path(save_dir, save_name, sample_num, part_number))

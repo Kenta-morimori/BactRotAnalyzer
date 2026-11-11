@@ -71,11 +71,11 @@ def test_entry_failure_restores_configuration_and_records_resolved_options(tmp_p
 
     monkeypatch.setattr(entry, "_main", fail)
     with pytest.raises(ValueError, match="synthetic failure"):
-        entry.main("day", 0.5, 3, 3, 1, 0.2, 1, "comparison", all_frames=True)
-    records = list(tmp_path.glob("comparison/day/repellent_response/runs/all_frames/*/run.json"))
-    assert len(records) == 1
-    record = json.loads(records[0].read_text())
+        entry.main("day", 0.5, 3, 3, 1, 0.2, 1, "comparison", all_frames=True, center_estimator="v2")
+    destination = tmp_path / "comparison/day/repellent_response"
+    record = json.loads((destination / "settings.json").read_text())
     assert record["status"] == "failed" and record["center_estimator"] == "v2"
+    assert not (destination / "runs").exists()
     assert param.post_rise_center_mode == original and current() is None
 
 
