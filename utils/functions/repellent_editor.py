@@ -4,6 +4,7 @@ import base64
 import io as buffers
 import json
 import secrets
+import shlex
 import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -183,6 +184,7 @@ def editor_server(path, numbers=None, confirm_order=False):
     if editor.settings()["source"] != "tiff":
         raise ValueError("HTML対象設定はTIFF入力用です")
     token = secrets.token_urlsafe(32)
+    closing = threading.Event()
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -229,6 +231,18 @@ def editor_server(path, numbers=None, confirm_order=False):
                 if not 0 < length <= 1_000_000:
                     raise ValueError("invalid request size")
                 request = json.loads(self.rfile.read(length))
+                if urlparse(self.path).path == "/exit":
+                    with editor.lock:
+                        if closing.is_set():
+                            self.reply(409, {"error": "設定画面は終了中です"})
+                            return
+                        closing.set()
+                        command = analysis_command(editor.settings()["day"])
+                        try:
+                            self.reply(200, dict(command=command))
+                        finally:
+                            threading.Thread(target=server.shutdown, daemon=True).start()
+                    return
                 actions = {
                     "/settings": editor.refresh,
                     "/preview": lambda: editor.preview(request),
@@ -240,6 +254,9 @@ def editor_server(path, numbers=None, confirm_order=False):
                 if action is None:
                     raise ValueError("unknown editor action")
                 with editor.lock:
+                    if closing.is_set():
+                        self.reply(409, {"error": "設定画面は終了中です"})
+                        return
                     self.reply(200, action())
             except (ValueError, KeyError, TypeError, OSError) as error:
                 self.reply(400, {"error": str(error)})
@@ -248,14 +265,22 @@ def editor_server(path, numbers=None, confirm_order=False):
     return server
 
 
+def analysis_command(day):
+    return "python scripts/04_repellent_response_analysis.py --day " + shlex.quote(day)
+
+
 def serve_editor(path, numbers=None, confirm_order=False):
     server = editor_server(path, numbers, confirm_order)
     url = f"http://127.0.0.1:{server.server_port}/"
-    print(f"サンプル設定画面: {url}\n保存はNo.単位です。終了はこの端末でCtrl-C。", flush=True)
-    webbrowser.open(url)
+    print(f"サンプル設定画面: {url}\n保存はNo.単位です。終了は画面の終了ボタン（Ctrl-Cも可）。", flush=True)
     try:
+        webbrowser.open(url)
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
         server.server_close()
+        print(
+            "設定画面を終了しました。確認済み設定で解析するコマンド:\n" + analysis_command(_load(path)["day"]),
+            flush=True,
+        )

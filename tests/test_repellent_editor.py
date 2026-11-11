@@ -4,9 +4,11 @@ import copy
 import importlib.util
 import json
 import re
+import socket
 import sys
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -157,3 +159,57 @@ def test_configure_opens_html_for_only_requested_samples(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "argv", [str(script), "--configure", "--settings", str(path), "--samples", "7"])
     module.main()
     assert opened == [(path, [7], False)]
+
+
+def test_exit_returns_to_caller_closes_port_and_preserves_json(tmp_path, monkeypatch, capsys):
+    from utils.functions import repellent_editor
+
+    path, _ = settings_file(tmp_path)
+    before = path.read_bytes()
+    opened = threading.Event()
+    addresses = []
+
+    def browser(url):
+        addresses.append(url)
+        opened.set()
+
+    monkeypatch.setattr(repellent_editor.webbrowser, "open", browser)
+    thread = threading.Thread(target=repellent_editor.serve_editor, args=(path,), daemon=True)
+    thread.start()
+    assert opened.wait(5)
+    base = addresses[0].rstrip("/")
+    with urlopen(base, timeout=5) as response:
+        page = response.read().decode()
+    matched = re.search(r"const token='([^']+)'", page)
+    assert matched is not None
+    with pytest.raises(HTTPError) as denied:
+        urlopen(Request(base + "/exit", data=b"{}"), timeout=5)
+    assert denied.value.code == 403 and thread.is_alive()
+    with urlopen(
+        Request(base + "/exit", data=b"{}", headers={"X-Editor-Token": matched.group(1)}), timeout=5
+    ) as response:
+        result = json.load(response)
+    assert result["command"] == "python scripts/04_repellent_response_analysis.py --day day"
+    thread.join(5)
+    assert not thread.is_alive() and path.read_bytes() == before
+    port = int(base.rsplit(":", 1)[1])
+    with pytest.raises(OSError):
+        socket.create_connection(("127.0.0.1", port), timeout=1)
+    assert "設定画面を終了しました" in capsys.readouterr().out
+
+
+def test_ctrl_c_remains_available_without_saving(tmp_path, monkeypatch):
+    from utils.functions import repellent_editor
+
+    path, _ = settings_file(tmp_path)
+    before = path.read_bytes()
+    closed = []
+
+    def interrupted():
+        raise KeyboardInterrupt
+
+    server = SimpleNamespace(server_port=12345, serve_forever=interrupted, server_close=lambda: closed.append(True))
+    monkeypatch.setattr(repellent_editor, "editor_server", lambda *args: server)
+    monkeypatch.setattr(repellent_editor.webbrowser, "open", lambda url: None)
+    repellent_editor.serve_editor(path)
+    assert closed == [True] and path.read_bytes() == before
