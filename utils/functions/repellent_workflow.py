@@ -29,6 +29,8 @@ from utils.functions.repellent_metrics import (
 def acquisition_policy(image):
     with tifffile.TiffFile(image) as tif:
         page = tif.pages[0]
+        if not isinstance(page, tifffile.TiffPage):
+            raise ValueError("first TIFF page must expose acquisition metadata")
         value = page.tags["XPComment"].value
         text = value.decode("utf-16le") if isinstance(value, bytes) else str(value)
         stamp = str(page.tags["DateTime"].value)
