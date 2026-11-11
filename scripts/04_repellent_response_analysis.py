@@ -28,7 +28,7 @@ from utils.functions.repellent_output import (  # noqa
     set_ranges,
 )
 from utils.run_context import analysis_run
-from utils.run_inputs import repellent_inputs
+from utils.run_inputs import repellent_inputs, resolve_image_settings
 
 
 def resolve_center_options(center_estimator, stop_measurement_enabled):
@@ -575,6 +575,8 @@ def main(
 ):
     from utils.functions.repellent_result_export import export_bundle, export_results
 
+    if measurement_input is None and results_bundle is None:
+        input_settings, input_source = resolve_image_settings(day, input_settings, input_source)
     base = Path(param.save_dir_bef)
     if input_settings is not None and output_suffix is None:
         output_suffix = f"reanalysis_{input_source}" if input_source in {"avi", "tiff"} else None

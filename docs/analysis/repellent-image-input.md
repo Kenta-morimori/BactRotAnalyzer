@@ -6,6 +6,24 @@ config.iniは任意。設定JSONの草案作成、対象設定、解析実行の
 解析CLIには[コミット済みのclean Git状態と実行履歴](../development-environment.md)の契約を適用する。
 設定エディタの`--init`と`--configure`は解析結果を作らない。設定JSONはGit管理外へ保存する。
 
+## 既定のJSONで簡単に実行する
+
+JSONの既定位置は`data/<day>/repellent_input.json`。
+初回作成では入力源とその校正を指定する。対象・閾値・ROIは対話で確認する。
+
+```bash
+python scripts/prepare_repellent_input.py --init --day repellent-response/20261027_23 --source tiff --px2um 0.2 0.2
+# 撮影順を確認してから --confirm-order を付ける
+python scripts/prepare_repellent_input.py --configure --confirm-order --day repellent-response/20261027_23
+python scripts/04_repellent_response_analysis.py --day repellent-response/20261027_23
+```
+
+既定JSONが作成済みならinitは不要。背景CSVの後日追加も`--attach-brightness --day <day>`だけで登録できる。
+実行時のJSONパスと入力源は省略でき、JSONのsourceを使う。明示JSONは既定より優先し、CLI入力源も指定された場合は一致を検査する。
+既定JSONがなければ従来のAVI入口を維持する。不正なJSONや未確認の設定を無視して別方式へ切り替えない。
+再計算manifest・結果bundleを明示した場合は既定JSONを読まない。[ADR 0007](../adr/0007-default-image-settings.md)を参照する。
+以下の明示パスによる操作も、方式比較・複数設定の保存用として継続利用できる。
+
 ## TIFFの設定と実行
 
 リポジトリ直下で実行する。校正は**入力源の元画素**に対して指定する。
@@ -103,7 +121,7 @@ TIFF元時刻を使い、AVI内順序番号と元TIFF接尾辞の対応をCSVに
 |---|---|
 | config.ini | 新しい画像入力入口では任意。存在すれば草案作成時に撮影順・解析範囲・AVI校正を参照する |
 | 共通JSON | 必須。入力源、元試料番号、対象・閾値・ROI、校正、範囲、背景入力を保存する |
-| `--input-source tiff` / `avi` | 実行する入力源を明示し、JSONの`source`との一致を検査する |
+| `--input-source tiff` / `avi` | 任意。省略時はJSONのsourceを使い、指定時は一致を検査する |
 
 JSON指定後の実行は元config.iniを必要としない。設定なしで対象や物理校正を確定する機能ではないため、JSON草案の作成・確認は必要である。
 

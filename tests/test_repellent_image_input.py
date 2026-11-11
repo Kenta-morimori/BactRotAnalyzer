@@ -16,7 +16,13 @@ from utils.functions import repellent_input as inputs
 from utils.functions.repellent_response import detect_rise_index
 from utils.functions.repellent_workflow import recalculate_manifest
 from utils.run_context import input_inventory
-from utils.run_inputs import manifest_inputs, repellent_inputs, tiff_inputs
+from utils.run_inputs import (
+    default_image_settings,
+    manifest_inputs,
+    repellent_inputs,
+    resolve_image_settings,
+    tiff_inputs,
+)
 
 
 def recording(tmp_path, *, frames=80, gap=False):
@@ -278,10 +284,28 @@ def test_analysis_cli_generates_a_manifest_and_publishes_grouped_outputs(tmp_pat
     module.main(**options)
     assert exported[0][0] == tmp_path / "outputs/reanalysis_tiff/day/repellent_response"
     assert exported[0][1]["observations"].sample_no.eq(7).all()
-    with pytest.raises(ValueError, match="explicit input-source"):
-        module.main(**dict(options, input_source=None))
+    module.main(**dict(options, input_source=None))
+    assert exported[-1][0] == exported[0][0]
     with pytest.raises(ValueError, match="mutually exclusive"):
         module.main(**options, measurement_input="other.json")
+
+
+def test_default_settings_resolution_is_opt_in_and_validates_source_and_day(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert resolve_image_settings("day") == (None, None)
+    with pytest.raises(ValueError, match="--init"):
+        resolve_image_settings("day", source="tiff")
+    default = default_image_settings("day")
+    inputs._write(default, dict(day="day", source="tiff"))
+    assert resolve_image_settings("day") == (str(default.resolve()), "tiff")
+    with pytest.raises(ValueError, match="differs"):
+        resolve_image_settings("day", source="avi")
+    alternate = tmp_path / "alternate.json"
+    inputs._write(alternate, dict(day="day", source="avi"))
+    assert resolve_image_settings("day", alternate)[1] == "avi"
+    inputs._write(default, dict(day="other", source="tiff"))
+    with pytest.raises(ValueError, match="requested day"):
+        resolve_image_settings("day")
 
 
 def test_execution_inventory_includes_external_settings_tiffs_background_and_manifest_sources(tmp_path):

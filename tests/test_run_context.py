@@ -369,28 +369,27 @@ def test_real_repellent_cli_logs_synthetic_run_and_rejects_dirty_repeat(cli_repo
     assert len(list((cli_repository / "outputs/_runs").glob("*/*/manifest.json"))) == 1
 
 
-@pytest.mark.parametrize("with_brightness", [False, True])
-def test_image_input_cli_logs_original_tiffs_and_exports_grouped_measurements(cli_repository, with_brightness):
+@pytest.mark.parametrize("with_brightness,implicit", [(False, False), (True, False), (True, True)])
+def test_image_input_cli_logs_original_tiffs_and_exports_grouped_measurements(
+    cli_repository, with_brightness, implicit
+):
     from tests.test_repellent_image_input import mean_csv, settings_file
 
     draft, _ = settings_file(cli_repository)
-    settings = cli_repository / "data/settings.json"
+    settings = cli_repository / ("data/day/repellent_input.json" if implicit else "data/settings.json")
     draft.replace(settings)
     if with_brightness:
         mean_csv(cli_repository)
-        registered = run_cli(
-            cli_repository, "scripts/prepare_repellent_input.py", "--attach-brightness", "--settings", settings
-        )
+        selection = ["--day", "day"] if implicit else ["--settings", settings]
+        registered = run_cli(cli_repository, "scripts/prepare_repellent_input.py", "--attach-brightness", *selection)
         assert registered.returncode == 0, registered.stderr
+    selection = [] if implicit else ["--input-settings", settings, "--input-source", "tiff"]
     result = run_cli(
         cli_repository,
         "scripts/04_repellent_response_analysis.py",
         "--day",
         "day",
-        "--input-settings",
-        settings,
-        "--input-source",
-        "tiff",
+        *selection,
         "--baseline-ratio",
         "0.4",
         "--sigma-threshold",
@@ -402,7 +401,8 @@ def test_image_input_cli_logs_original_tiffs_and_exports_grouped_measurements(cl
     records = list((cli_repository / "outputs/_runs").glob("*/*/manifest.json"))
     assert len(records) == 1
     saved = json.loads(records[0].read_text())
-    assert saved["status"] == "complete" and saved["parameters"]["input_source"] == "tiff"
+    assert saved["status"] == "complete"
+    assert saved["parameters"]["input_source"] == (None if implicit else "tiff")
     files = {item["path"] for item in saved["inputs"]["files"]}
     assert str(settings) in files and len([p for p in files if p.endswith(".tif")]) == 80
     output = cli_repository / "outputs/reanalysis_tiff/day/repellent_response"
@@ -421,3 +421,19 @@ def test_image_input_cli_logs_original_tiffs_and_exports_grouped_measurements(cl
         assert int(summary["rise_source_frame_1based"]) == detection["rise_source_frame"]
         assert str(cli_repository / "data/day/brightness_data/recording.csv") in files
         assert not (cli_repository / "data/day/config.ini").exists()
+
+
+def test_settings_cli_creates_default_json_without_overwriting_prior_choices(cli_repository):
+    from tests.test_repellent_image_input import recording
+
+    recording(cli_repository, frames=10)
+    arguments = ["--init", "--day", "day", "--source", "tiff", "--px2um", "0.2", "0.2"]
+    result = run_cli(cli_repository, "scripts/prepare_repellent_input.py", *arguments)
+    assert result.returncode == 0, result.stderr
+    path = cli_repository / "data/day/repellent_input.json"
+    saved = path.read_bytes()
+    document = json.loads(saved)
+    assert document["source"] == "tiff" and not document["order_confirmed"]
+    assert document["samples"][0]["target_confirmed"] is False
+    repeated = run_cli(cli_repository, "scripts/prepare_repellent_input.py", *arguments)
+    assert repeated.returncode != 0 and path.read_bytes() == saved

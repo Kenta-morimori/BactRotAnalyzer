@@ -6,6 +6,29 @@ from pathlib import Path
 from utils.run_context import REPOSITORY
 
 
+def default_image_settings(day, data_root=None):
+    relative = Path(day)
+    if relative.is_absolute() or ".." in relative.parts or relative.parts[:1] == ("outputs",):
+        raise ValueError("day must be a data identifier without parent traversal")
+    return Path(data_root or Path.cwd() / "data") / relative / "repellent_input.json"
+
+
+def resolve_image_settings(day, path=None, source=None):
+    """An explicit descriptor wins; otherwise use the dataset's single active settings file."""
+    candidate = Path(path) if path is not None else default_image_settings(day)
+    if path is None and not candidate.is_file():
+        if source is not None:
+            raise ValueError("create dataset settings with prepare_repellent_input.py --init first")
+        return None, None
+    document = json.loads(candidate.read_text(encoding="utf-8"))
+    selected = document.get("source")
+    if selected not in {"tiff", "avi"} or document.get("day") != day:
+        raise ValueError("input settings must identify the requested day and TIFF/AVI source")
+    if source is not None and source != selected:
+        raise ValueError("CLI source differs from settings source")
+    return str(candidate.resolve()), selected
+
+
 def dataset_inputs(day, repository=REPOSITORY):
     """Raw dataset plus existing shared caches that may supply observations."""
     root = Path(repository)
@@ -45,8 +68,12 @@ def manifest_inputs(path, kind):
 
 
 def repellent_inputs(args):
-    if getattr(args, "input_settings", None):
-        path = Path(args.input_settings).resolve()
+    settings_path = getattr(args, "input_settings", None)
+    selected_source = getattr(args, "input_source", None)
+    if not getattr(args, "measurement_input", None) and not getattr(args, "results_bundle", None):
+        settings_path, selected_source = resolve_image_settings(args.day, settings_path, selected_source)
+    if settings_path:
+        path = Path(settings_path).resolve()
         yield path
         document = json.loads(path.read_text(encoding="utf-8"))
         numbers = getattr(args, "input_samples", None)
@@ -60,7 +87,7 @@ def repellent_inputs(args):
                 yield path.parent / sample["background"]["csv"]
         suffix = getattr(args, "output_suffix", None)
         if suffix is None:
-            suffix = f"reanalysis_{getattr(args, 'input_source', None)}"
+            suffix = f"reanalysis_{selected_source}"
         yield Path.cwd() / "outputs" / suffix / args.day / "raw_centroid"
     elif args.measurement_input:
         yield from manifest_inputs(args.measurement_input, "measurement")
