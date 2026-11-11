@@ -58,6 +58,8 @@ def settings_file(tmp_path, **kwargs):
                 mask = np.asarray(image) > 2000
                 y, x = np.nonzero(mask)
                 settings["samples"][0]["seeds"][no] = [float(x.mean()), float(y.mean())]
+        else:
+            del settings["samples"][0]["seeds"][no]
     path = tmp_path / "settings.json"
     inputs._write(path, settings)
     return path, settings

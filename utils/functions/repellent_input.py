@@ -7,6 +7,7 @@ measurements. Background extraction and rise detection belong to the user.
 import configparser
 import hashlib
 import json
+from importlib.metadata import version
 from pathlib import Path
 
 import cv2
@@ -310,7 +311,9 @@ def prepare_measurements(path, output_root, *, source, day, numbers=None, all_fr
             code_sha256=code,
             all_frames=all_frames,
             acquisition_policy=policy,
-            runtime_versions={name: __import__(name).__version__ for name in ("cv2", "numpy", "pandas")},
+            runtime_versions={
+                name: version(name) for name in ("opencv-python", "numpy", "pandas", "Pillow", "tifffile")
+            },
         )
         key = hashlib.sha256(json.dumps(provenance, sort_keys=True).encode()).hexdigest()
         cache = output_root / "raw_centroid" / method / key

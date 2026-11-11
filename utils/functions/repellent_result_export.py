@@ -66,6 +66,8 @@ def _validate(table):
 
 
 def _edges(group):
+    if group.empty:
+        return np.empty(0, dtype=bool)
     t = group.time_sec.to_numpy(float)
     f = group.source_frame_1based.to_numpy(float)
     dt = np.diff(t)

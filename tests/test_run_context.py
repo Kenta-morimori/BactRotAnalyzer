@@ -367,3 +367,31 @@ def test_real_repellent_cli_logs_synthetic_run_and_rejects_dirty_repeat(cli_repo
     result = run_cli(cli_repository, script, *arguments)
     assert result.returncode != 0 and "未コミット" in result.stderr
     assert len(list((cli_repository / "outputs/_runs").glob("*/*/manifest.json"))) == 1
+
+
+def test_image_input_cli_logs_original_tiffs_and_exports_grouped_measurements(cli_repository):
+    from tests.test_repellent_image_input import settings_file
+
+    draft, _ = settings_file(cli_repository)
+    settings = cli_repository / "data/settings.json"
+    draft.replace(settings)
+    result = run_cli(
+        cli_repository,
+        "scripts/04_repellent_response_analysis.py",
+        "--day",
+        "day",
+        "--input-settings",
+        settings,
+        "--input-source",
+        "tiff",
+    )
+    assert result.returncode == 0, result.stderr
+    records = list((cli_repository / "outputs/_runs").glob("*/*/manifest.json"))
+    assert len(records) == 1
+    saved = json.loads(records[0].read_text())
+    assert saved["status"] == "complete" and saved["parameters"]["input_source"] == "tiff"
+    files = {item["path"] for item in saved["inputs"]["files"]}
+    assert str(settings) in files and len([p for p in files if p.endswith(".tif")]) == 80
+    output = cli_repository / "outputs/reanalysis_tiff/day/repellent_response"
+    assert (output / "output_manifest.csv").exists() and (output / "index.html").exists()
+    assert (output / "00_all_rotational_analysis/centroid_coordinate/centroid_time_series.csv").exists()
