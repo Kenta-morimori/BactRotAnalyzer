@@ -250,3 +250,33 @@ def test_empty_spectrum_is_labeled_without_inventing_positive_data():
     assert any("No positive finite spectrum" in t.get_text() for t in axis.texts)
     fig.canvas.draw()
     plt.close(fig)
+
+
+@pytest.mark.parametrize("estimator", ["validated", "legacy"])
+def test_compatibility_absolute_display_uses_signed_measurement_for_ccw_export(tmp_path, monkeypatch, estimator):
+    monkeypatch.setattr(param, "save_dir_bef", str(tmp_path))
+    monkeypatch.setattr(param, "flag_evaluate_angular_velocity_abs", True)
+    raw = pd.DataFrame(dict(x_um=np.arange(17), y_um=np.arange(17)))
+    rotation = dict(
+        valid_indices=[0],
+        angular_velocity_list=[[2, 3]],
+        signed_angular_velocity_list=[[2, -3]],
+        source_frame_list=[[12, 16]],
+    )
+    result = collect_results(
+        "day",
+        [dict(source_start_frame_1based=11)],
+        [raw],
+        [[0, 0.005, 0.01, 0.5, 0.505, 0.51, 0.515]],
+        [[1] * 7],
+        [[2] * 7],
+        [[0.8] * 7],
+        [[1.8] * 7],
+        rotation,
+        [[100] * 7],
+        [dict(rise_index=3)],
+        estimator,
+    )
+    finite = result["observations"].dropna(subset=["angular_velocity_rad_s"])
+    assert finite.source_frame_1based.tolist() == [12, 16]
+    assert finite.angular_velocity_rad_s.tolist() == [-2, 3]

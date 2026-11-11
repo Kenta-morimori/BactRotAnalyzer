@@ -147,3 +147,44 @@ def test_cli_rejects_output_containing_a_measurement_input(tmp_path, monkeypatch
         entry.main("day", 0.5, 3, 3, 1, 0.2, 1, None, measurement_input="synthetic.json")
     assert source.read_text() == "original measured input"
     assert not (tmp_path / "day/repellent_response/output_manifest.csv").exists()
+
+
+@pytest.mark.parametrize("invalid", ["coordinates", "clock", "detection"])
+def test_all_missing_pixel_observations_remain_source_aligned_and_unavailable(invalid):
+    raw, _ = observations()
+    raw["x_px"] = raw.x_um / 0.02
+    raw["y_px"] = raw.y_um / 0.02
+    if invalid == "coordinates":
+        raw[["x_um", "y_um", "x_px", "y_px"]] = np.nan
+    elif invalid == "clock":
+        raw["time_sec"] = np.nan
+    else:
+        raw["detected"] = False
+    frame, support, _ = workflow.analyze_sample(
+        raw,
+        sample_no=1,
+        source_id="missing",
+        centroid_method="synthetic",
+        frame_period_s=0.005,
+        timestamp_quantum_s=1e-6,
+        identity="known",
+    )
+    assert len(frame) == len(raw) == len(support)
+    assert frame[["center_x_um", "center_y_um", "angular_velocity_rad_s"]].isna().all().all()
+    assert frame.center_status.eq("unavailable").all()
+    np.testing.assert_array_equal(frame.source_frame_1based, raw.source_frame_1based)
+
+
+def test_unknown_source_segment_is_not_converted_into_a_known_track():
+    raw, _ = observations()
+    raw["segment_id"] = "unknown"
+    frame, _, _ = workflow.analyze_sample(
+        raw,
+        sample_no=1,
+        source_id="unknown-segment",
+        centroid_method="synthetic",
+        frame_period_s=0.005,
+        timestamp_quantum_s=1e-6,
+        identity="track assumption",
+    )
+    assert frame[["center_x_um", "center_y_um", "angular_velocity_rad_s"]].isna().all().all()

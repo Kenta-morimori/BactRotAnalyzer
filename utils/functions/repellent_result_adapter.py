@@ -62,7 +62,8 @@ def collect_results(
         )
         if i in evaluated:
             k = evaluated[i]
-            velocity = np.asarray(rotation["angular_velocity_list"][k], float)
+            signed = rotation.get("signed_angular_velocity_list", rotation["angular_velocity_list"])
+            velocity = np.asarray(signed[k], float)
             if "source_frame_list" in rotation:
                 right = np.asarray(rotation["source_frame_list"][k], float)
             else:

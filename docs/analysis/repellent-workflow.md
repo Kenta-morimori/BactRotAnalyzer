@@ -78,7 +78,7 @@ outputs/[suffix/]<day>/repellent_response/
 ├── 01_brightness_change/
 │   ├── rise_summary.csv
 │   ├── background_intensity_time_series.csv
-│   └── background_intensity.png
+│   └── background_intensity_time_series.png
 ├── 00_all_rotational_analysis/
 │   ├── centroid_coordinate/  # 重心、欠測理由、XY・時系列図
 │   ├── center_coordinate/    # 中心、推定採否・理由、補完状態、支持点

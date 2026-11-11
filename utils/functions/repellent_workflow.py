@@ -51,6 +51,13 @@ def _sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def _known_id(values):
+    labels = pd.Series(values)
+    return (
+        labels.notna() & ~labels.astype(str).str.strip().str.lower().isin(["", "none", "nan", "unknown", "<na>"])
+    ).to_numpy()
+
+
 def analyze_sample(
     raw,
     *,
@@ -84,7 +91,10 @@ def analyze_sample(
         for axis in range(2):
             use = np.isfinite(fit_xy[:, axis]) & np.isfinite(p[:, axis]) & (fit_xy[:, axis] != 0)
             if not use.any():
-                raise ValueError("pixel to micrometer calibration unavailable")
+                # A missing/zero axis has no nonzero conversion to infer. The
+                # consistency check below still rejects conflicting coordinates.
+                scale[axis] = 1.0
+                continue
             scale[axis] = np.median(p[use, axis] / fit_xy[use, axis])
         if (
             not np.isfinite(scale).all()
@@ -104,11 +114,11 @@ def analyze_sample(
     if "segment_id" in raw:
         values = raw.segment_id.to_numpy()
         segments += np.cumsum(np.r_[False, values[1:] != values[:-1]])
-        valid &= pd.notna(values)
+        valid &= _known_id(values)
     if "target_id" in raw:
         values = raw.target_id.to_numpy()
         segments += np.cumsum(np.r_[False, values[1:] != values[:-1]])
-        valid &= pd.notna(values) & ~pd.Series(values).astype(str).str.lower().isin(["unknown", "none", ""]).to_numpy()
+        valid &= _known_id(values)
     if not identity:
         raise ValueError("explicit observed-track identity or declared assumption required")
     options = dict(param.repellent_center_parameters if parameters is None else parameters)
@@ -205,6 +215,20 @@ def analyze_sample(
                     distance_to_nearest_support_s=min(abs(t[i] - v) for v in times) if times else np.nan,
                 )
             )
+    for i in np.flatnonzero(result["run_id"] < 0):
+        supports.append(
+            dict(
+                sample_no=sample_no,
+                source_frame_1based=f[i],
+                time_sec=t[i],
+                completion_status="unavailable",
+                left_support_count=0,
+                right_support_count=0,
+                left_frames="[]",
+                right_frames="[]",
+                distance_to_nearest_support_s=np.nan,
+            )
+        )
     for i in np.flatnonzero(np.isfinite(baseline).all(1)):
         a, b = result["left_support_row"][i], result["right_support_row"][i]
         supports.append(
