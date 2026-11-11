@@ -1,7 +1,7 @@
 """Explicit image inputs for the source-aligned repellent measurement workflow.
 
 Local settings describe user choices; immutable CSV/JSON cache pairs describe
-measurements. Background extraction and rise detection belong to the user.
+measurements. User-provided Mean CSVs feed the existing background-rise detector.
 """
 
 import configparser
@@ -85,6 +85,9 @@ def draft_settings(day, source, data_root, *, px2um=None):
             if not avi.is_file():
                 raise ValueError(f"missing AVI corresponding to recording: {name}")
             sample["avi"] = str(avi)
+        brightness = root / "brightness_data" / (name + ".csv")
+        if brightness.is_file():
+            sample["background"] = dict(csv=str(brightness), format="imagej_mean", rise_detection="auto")
         samples.append(sample)
     return dict(
         version=1,
@@ -120,6 +123,29 @@ def _load(path, source=None, day=None):
         raise ValueError("CLI day differs from settings day")
     if settings.get("background_policy") != "external_only":
         raise ValueError("background must be externally supplied")
+    return settings
+
+
+def attach_brightness_settings(path, *, numbers=None, brightness_root=None):
+    """Register same-name Mean CSVs without changing target or recording choices."""
+    settings = _load(path)
+    for sample in selected_samples(settings, numbers):
+        root = (
+            Path(brightness_root).resolve()
+            if brightness_root is not None
+            else _resolve(path, sample["tiff_directory"]).parent.parent / "brightness_data"
+        )
+        csv = root / (sample["input_id"] + ".csv")
+        if not csv.is_file():
+            raise FileNotFoundError(f"missing same-name Mean CSV for No.{sample['sample_no']}: {csv}")
+        header = pd.read_csv(csv, nrows=0, encoding="utf-8-sig")
+        if not {"[inch]", "Mean"}.issubset(header):
+            raise ValueError("brightness_data CSV requires [inch] and Mean columns")
+        background = dict(csv=str(csv), format="imagej_mean", rise_detection="auto")
+        if sample.get("background") not in (None, background):
+            raise ValueError("existing background choices differ; edit the JSON explicitly to replace them")
+        sample["background"] = background
+    _write(path, settings)
     return settings
 
 
@@ -264,7 +290,68 @@ def _extract(sample, rows, source, settings_path):
     return pd.DataFrame(records)
 
 
-def prepare_measurements(path, output_root, *, source, day, numbers=None, all_frames=False, force=False):
+def _background_series(background, path, rows, sample, raw, all_frames):
+    bg_path = _resolve(path, background["csv"])
+    bg = pd.read_csv(bg_path, float_precision="round_trip", encoding="utf-8-sig")
+    format_name = background.get("format", "source_aligned")
+    if format_name == "imagej_mean":
+        if not {"[inch]", "Mean"}.issubset(bg) or len(bg) != len(rows):
+            raise ValueError("Mean CSV requires [inch]/Mean columns and exactly one row per saved TIFF")
+        # The ImageJ plot axis is not a clock or a source frame. Reuse the
+        # established saved-stack row convention and retain its assumption.
+        bg = pd.DataFrame(
+            dict(
+                source_frame_1based=[row["source_frame_1based"] for row in rows],
+                time_sec=[row["time_sec"] for row in rows],
+                background_intensity=pd.to_numeric(bg.Mean, errors="coerce"),
+            )
+        )
+    elif format_name != "source_aligned":
+        raise ValueError("background format must be imagej_mean or source_aligned")
+    if not {"source_frame_1based", "time_sec", "background_intensity"}.issubset(bg):
+        raise ValueError("source-aligned background requires original frames, timestamps and intensity")
+    bg = _scope(bg, sample, all_frames).reset_index(drop=True)
+    if not np.array_equal(bg.source_frame_1based, raw.source_frame_1based) or not np.array_equal(
+        bg.time_sec.to_numpy(), raw.time_sec.to_numpy(), equal_nan=True
+    ):
+        raise ValueError("external background must match original frames and timestamps exactly")
+    return bg
+
+
+def _background_rise(background, bg, options):
+    from utils.functions.repellent_response import detect_rise_index
+
+    manual = background.get("rise_source_frame")
+    mode = "manual" if manual is not None else background.get("rise_detection", "none")
+    summary = dict(method=mode, status="not_requested", rise_source_frame=None)
+    if mode == "auto":
+        result = detect_rise_index(bg.background_intensity.to_numpy(float), **options)
+        summary.update(
+            status="not_detected",
+            parameters=options,
+            diagnostics={name: float(value) if np.isfinite(value) else None for name, value in result.items()},
+        )
+        index = result["rise_index"]
+        if np.isfinite(index):
+            row = bg.iloc[int(index)]
+            if np.isfinite(row.time_sec) and np.isfinite(row.background_intensity):
+                summary.update(status="detected", rise_source_frame=int(row.source_frame_1based))
+            else:
+                summary["status"] = "invalid_boundary_observation"
+    elif mode == "manual":
+        if type(manual) is not int or manual not in bg.source_frame_1based.to_numpy():
+            raise ValueError("manual rise must identify an existing original frame within the analysis range")
+        if not np.isfinite(bg.loc[bg.source_frame_1based.eq(manual), "time_sec"].iloc[0]):
+            raise ValueError("manual rise frame requires an available original timestamp")
+        summary.update(status="provided", rise_source_frame=manual)
+    elif mode != "none":
+        raise ValueError("rise_detection must be auto or none; manual rise_source_frame overrides it")
+    return summary
+
+
+def prepare_measurements(
+    path, output_root, *, source, day, numbers=None, all_frames=False, force=False, rise_detection=None
+):
     """Generate canonical measurements and a manifest, without touching legacy caches."""
     path, output_root = Path(path).resolve(), Path(output_root).resolve()
     settings = _load(path, source, day)
@@ -295,6 +382,11 @@ def prepare_measurements(path, output_root, *, source, day, numbers=None, all_fr
     code = {p.name: _hash(p) for p in code_paths}
     input_hashes = {str(path): _hash(path)}
     entries = []
+    rise_results = {}
+    background_sources = {}
+    rise_options = dict(baseline_ratio=0.5, sigma_threshold=3.0, min_consecutive=3)
+    if rise_detection is not None:
+        rise_options.update(rise_detection)
     for sample in samples:
         rows = io.directory_rows(_resolve(path, sample["tiff_directory"]))
         policy = acquisition_policy(rows[0]["path"])
@@ -364,21 +456,29 @@ def prepare_measurements(path, output_root, *, source, day, numbers=None, all_fr
         if background is not None:
             bg_path = _resolve(path, background["csv"])
             input_hashes[str(bg_path)] = _hash(bg_path)
-            bg = pd.read_csv(bg_path, float_precision="round_trip")
-            bg = _scope(bg, sample, all_frames)
-            if not np.array_equal(bg.source_frame_1based, raw.source_frame_1based) or not np.array_equal(
-                bg.time_sec.to_numpy(), raw.time_sec.to_numpy(), equal_nan=True
-            ):
-                raise ValueError("external background must match original frames and timestamps exactly")
-            bg_cache = cache.with_suffix(".background.csv")
-            bg_key = hashlib.sha256((key + _hash(bg_path)).encode()).hexdigest()
-            bg_cache = bg_cache.with_name(bg_key + ".background.csv")
+            bg = _background_series(background, path, rows, sample, raw, all_frames)
+            format_name = background.get("format", "source_aligned")
+            background_sources[str(sample["sample_no"])] = dict(
+                csv=str(bg_path),
+                format=format_name,
+                row_mapping=(
+                    "same recording name and saved TIFF row order; no independent CSV frame identity"
+                    if format_name == "imagej_mean"
+                    else "explicit original frames and timestamps"
+                ),
+            )
+            rise = _background_rise(background, bg, rise_options)
+            rise_results[str(sample["sample_no"])] = rise
+            bg_key = hashlib.sha256(
+                (key + _hash(bg_path) + background.get("format", "source_aligned")).encode()
+            ).hexdigest()
+            bg_cache = cache.with_name(bg_key + ".background.csv")
             bg.to_csv(bg_cache, index=False, float_format="%.17g")
             entry.update(
                 background=str(bg_cache),
                 background_time_column="time_sec",
                 background_column="background_intensity",
-                rise_source_frame=background.get("rise_source_frame"),
+                rise_source_frame=rise["rise_source_frame"],
             )
         entries.append(entry)
     if any(_hash(name) != value for name, value in input_hashes.items()):
@@ -391,6 +491,8 @@ def prepare_measurements(path, output_root, *, source, day, numbers=None, all_fr
             input_hashes=input_hashes,
             source_settings=str(path),
             background_policy="external_only",
+            rise_results=rise_results,
+            background_sources=background_sources,
         ),
     )
     for option in ("details", "samples_per_page", "zoom_ranges"):

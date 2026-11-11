@@ -13,6 +13,7 @@ import pytest
 from PIL import Image
 
 from utils.functions import repellent_input as inputs
+from utils.functions.repellent_response import detect_rise_index
 from utils.functions.repellent_workflow import recalculate_manifest
 from utils.run_context import input_inventory
 from utils.run_inputs import manifest_inputs, repellent_inputs, tiff_inputs
@@ -304,3 +305,106 @@ def test_execution_inventory_includes_external_settings_tiffs_background_and_man
     inventory = input_inventory(manifest_inputs(manifest, "measurement"))
     assert str(path) in {item["path"] for item in inventory["files"]}
     assert len([item for item in inventory["files"] if item["path"].endswith(".tif")]) == 10
+
+
+def mean_csv(tmp_path, count=80, values=None):
+    root = tmp_path / "data/day/brightness_data"
+    root.mkdir(exist_ok=True)
+    path = root / "recording.csv"
+    if values is None:
+        values = np.r_[np.full(count // 2, 100.0), np.full(count - count // 2, 200.0)]
+    pd.DataFrame({"[inch]": np.linspace(0, 256, count), "Mean": values}).to_csv(path, index=False, float_format="%.17g")
+    return path
+
+
+def test_mean_csv_draft_and_attachment_preserve_target_and_require_same_name(tmp_path):
+    path, settings = settings_file(tmp_path)
+    csv = mean_csv(tmp_path)
+    draft = inputs.draft_settings("day", "tiff", tmp_path / "data", px2um=[0.2, 0.2])
+    expected = dict(csv=str(csv), format="imagej_mean", rise_detection="auto")
+    assert draft["samples"][0]["background"] == expected
+    updated = inputs.attach_brightness_settings(path)
+    sample = updated["samples"][0]
+    assert sample["background"] == expected and sample["seeds"] == settings["samples"][0]["seeds"]
+    assert sample["sample_no"] == 7 and updated["order_confirmed"] is True
+    saved = path.read_bytes()
+    assert inputs.attach_brightness_settings(path) == updated
+    csv.rename(csv.with_name("different-recording.csv"))
+    with pytest.raises(FileNotFoundError, match="same-name"):
+        inputs.attach_brightness_settings(path)
+    assert path.read_bytes() == saved
+
+
+def test_mean_csv_maps_saved_tiff_order_and_real_clocks_before_existing_detection(tmp_path, monkeypatch):
+    path, settings = settings_file(tmp_path, gap=True)
+    settings["samples"][0]["analysis_frame_range"] = [11, 70]
+    inputs._write(path, settings)
+    csv = mean_csv(tmp_path)
+    initial_manifest = prepare(path)
+    initial_csv = json.loads(initial_manifest.read_text())["samples"][0]["centroids"]
+    inputs.attach_brightness_settings(path)
+    options = dict(baseline_ratio=0.4, sigma_threshold=2.5, min_consecutive=4)
+    with monkeypatch.context() as scope:
+        scope.setattr(inputs, "_extract", lambda *args: pytest.fail("brightness must reuse centroid measurements"))
+        manifest = prepare(path, rise_detection=options)
+    document = json.loads(manifest.read_text())
+    entry = document["samples"][0]
+    assert entry["centroids"] == initial_csv
+    bg = pd.read_csv(entry["background"], float_precision="round_trip")
+    assert len(bg) == 59 and 41 not in bg.source_frame_1based.to_list()
+    assert bg.loc[bg.source_frame_1based.eq(31), "time_sec"].isna().all()
+    assert bg.time_sec.iloc[-1] == pytest.approx(69 / 200)  # never use the CSV's inch axis
+    result = detect_rise_index(
+        bg.background_intensity.to_numpy(), baseline_ratio=0.4, sigma_threshold=2.5, min_consecutive=4
+    )
+    expected_frame = int(bg.source_frame_1based.iloc[int(result["rise_index"])])
+    assert entry["rise_source_frame"] == expected_frame
+    summary = document["image_input"]["rise_results"]["7"]
+    assert summary["method"] == "auto" and summary["status"] == "detected" and summary["parameters"] == options
+    assert str(csv) in document["image_input"]["input_hashes"]
+    bundle, _ = recalculate_manifest(manifest)
+    assert bundle["settings"]["rise_source_frames"] == {"7": expected_frame}
+    np.testing.assert_allclose(bundle["observations"].time_sec, bg.time_sec, equal_nan=True)
+
+
+def test_mean_csv_count_mismatch_fails_and_manual_boundary_overrides_auto(tmp_path):
+    path, settings = settings_file(tmp_path)
+    mean_csv(tmp_path)
+    attached = inputs.attach_brightness_settings(path)
+    attached["samples"][0]["background"]["rise_source_frame"] = 45
+    inputs._write(path, attached)
+    document = json.loads(prepare(path).read_text())
+    assert document["samples"][0]["rise_source_frame"] == 45
+    assert document["image_input"]["rise_results"]["7"]["method"] == "manual"
+    mean_csv(tmp_path, count=79)
+    with pytest.raises(ValueError, match="one row per saved TIFF"):
+        prepare(path)
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_mean_csv_no_detectable_rise_stays_unavailable(tmp_path, missing):
+    path, _ = settings_file(tmp_path)
+    mean_csv(tmp_path, values=np.full(80, np.nan if missing else 100.0))
+    inputs.attach_brightness_settings(path)
+    manifest = prepare(path)
+    document = json.loads(manifest.read_text())
+    assert document["samples"][0]["rise_source_frame"] is None
+    assert document["image_input"]["rise_results"]["7"]["status"] == "not_detected"
+    bundle, features = recalculate_manifest(manifest)
+    assert bundle["settings"]["rise_source_frames"] == {} and features is None
+
+
+def test_mean_csv_missing_boundary_timestamp_is_not_fabricated(tmp_path, monkeypatch):
+    path, _ = settings_file(tmp_path)
+    mean_csv(tmp_path)
+    inputs.attach_brightness_settings(path)
+    from utils.functions import repellent_response
+
+    monkeypatch.setattr(
+        repellent_response,
+        "detect_rise_index",
+        lambda values, **options: dict(rise_index=30.0, baseline_mean=100.0, baseline_std=0.0, threshold=100.0),
+    )
+    document = json.loads(prepare(path).read_text())
+    assert document["samples"][0]["rise_source_frame"] is None
+    assert document["image_input"]["rise_results"]["7"]["status"] == "invalid_boundary_observation"

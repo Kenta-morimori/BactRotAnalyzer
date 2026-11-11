@@ -211,5 +211,5 @@ python3 scripts/tiff_roi_centroid.py --input data/example/tiff_frames \
 `prepare_repellent_input.py --init`でconfig任意のローカルJSONを作り、`--configure`で対象・閾値・固定ROIを確認します。
 `04_repellent_response_analysis.py --input-settings <JSON> --input-source tiff|avi`は、
 入力源別の校正・キャッシュを使って元画像から標準measurement manifestを生成し、中心以降を再計算します。
-背景解析はユーザーが行い、未提供の背景前後指標は未実行です。
+ユーザー作成の`brightness_data/<撮影名>.csv`を登録し、従来の自動処理で上昇点を検出します。背景未提供・未検出の前後指標は未実行です。
 [対象2データのコマンド・設定・外部背景の契約](../docs/analysis/repellent-image-input.md)を参照してください。

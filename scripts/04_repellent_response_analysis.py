@@ -600,6 +600,9 @@ def main(
                 numbers=input_samples,
                 all_frames=all_frames,
                 force=force_extract,
+                rise_detection=dict(
+                    baseline_ratio=baseline_ratio, sigma_threshold=sigma_threshold, min_consecutive=min_consecutive
+                ),
             )
         )
         all_frames = False  # The generated manifest now owns the resolved source scope.

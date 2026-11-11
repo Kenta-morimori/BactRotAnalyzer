@@ -369,12 +369,19 @@ def test_real_repellent_cli_logs_synthetic_run_and_rejects_dirty_repeat(cli_repo
     assert len(list((cli_repository / "outputs/_runs").glob("*/*/manifest.json"))) == 1
 
 
-def test_image_input_cli_logs_original_tiffs_and_exports_grouped_measurements(cli_repository):
-    from tests.test_repellent_image_input import settings_file
+@pytest.mark.parametrize("with_brightness", [False, True])
+def test_image_input_cli_logs_original_tiffs_and_exports_grouped_measurements(cli_repository, with_brightness):
+    from tests.test_repellent_image_input import mean_csv, settings_file
 
     draft, _ = settings_file(cli_repository)
     settings = cli_repository / "data/settings.json"
     draft.replace(settings)
+    if with_brightness:
+        mean_csv(cli_repository)
+        registered = run_cli(
+            cli_repository, "scripts/prepare_repellent_input.py", "--attach-brightness", "--settings", settings
+        )
+        assert registered.returncode == 0, registered.stderr
     result = run_cli(
         cli_repository,
         "scripts/04_repellent_response_analysis.py",
@@ -384,6 +391,12 @@ def test_image_input_cli_logs_original_tiffs_and_exports_grouped_measurements(cl
         settings,
         "--input-source",
         "tiff",
+        "--baseline-ratio",
+        "0.4",
+        "--sigma-threshold",
+        "2.5",
+        "--min-consecutive",
+        "4",
     )
     assert result.returncode == 0, result.stderr
     records = list((cli_repository / "outputs/_runs").glob("*/*/manifest.json"))
@@ -395,3 +408,16 @@ def test_image_input_cli_logs_original_tiffs_and_exports_grouped_measurements(cl
     output = cli_repository / "outputs/reanalysis_tiff/day/repellent_response"
     assert (output / "output_manifest.csv").exists() and (output / "index.html").exists()
     assert (output / "00_all_rotational_analysis/centroid_coordinate/centroid_time_series.csv").exists()
+    if with_brightness:
+        import csv
+
+        exported = json.loads((output / "settings.json").read_text())
+        detection = exported["image_input"]["rise_results"]["7"]
+        assert detection["method"] == "auto" and detection["status"] == "detected"
+        assert detection["parameters"] == dict(baseline_ratio=0.4, sigma_threshold=2.5, min_consecutive=4)
+        with (output / "01_brightness_change/rise_summary.csv").open() as stream:
+            summary = next(csv.DictReader(stream))
+        assert summary["rise_detection_method"] == "auto" and summary["rise_detection_status"] == "detected"
+        assert int(summary["rise_source_frame_1based"]) == detection["rise_source_frame"]
+        assert str(cli_repository / "data/day/brightness_data/recording.csv") in files
+        assert not (cli_repository / "data/day/config.ini").exists()

@@ -420,6 +420,9 @@ def export_results(
                 status="provided" if cut is not None else "unavailable",
             )
         )
+        detection = settings.get("image_input", {}).get("rise_results", {}).get(str(no))
+        if detection is not None:
+            rises[-1].update(rise_detection_method=detection["method"], rise_detection_status=detection["status"])
     write("00_time_list/analysis_frame_ranges.csv", pd.DataFrame(ranges), "source-frame phase boundaries")
     write("01_brightness_change/rise_summary.csv", pd.DataFrame(rises), "provided rise boundary; no redetection")
     if "background_intensity" in table:
