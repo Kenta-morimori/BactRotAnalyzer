@@ -152,7 +152,7 @@ def analyze_sample(
             center_y_um=completion["center"][:, 1],
             center_status=status,
             angular_velocity_rad_s=completion["omega"],
-            primary_angular_velocity_rad_s=baseline_omega,
+            uncompleted_angular_velocity_rad_s=baseline_omega,
             completion_boundary_edge=completion["boundary"],
             source_run_id=completion["run"],
             max_gap_s=gap,
@@ -343,7 +343,7 @@ def recalculate_manifest(path):
     manifest = json.loads(path.read_text())
     if not manifest.get("samples"):
         raise ValueError("measurement manifest requires samples")
-    observations, supports, methods, hashes, rise_frames = [], [], {}, {}, {}
+    observations, supports, methods, hashes, rise_frames = [], [], {}, {str(path): _sha(path)}, {}
 
     def source(name):
         value = (path.parent / name).resolve()

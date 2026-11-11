@@ -60,7 +60,7 @@ python3 scripts/04_repellent_response_analysis.py --day repellent-response/<data
 
 `centroids.csv` は `source_frame_1based,time_sec,x_um,y_um` を必須とする。元画素座標 `x_px,y_px` があればその座標で中心を推定し、μm座標との校正整合を検査する。`detected,reacquired,segment_id,target_id` がある場合は採否・境界を保持する。metadataは `sample_no,frame_count,method` と、元画素座標がある場合の `px2um_x,px2um_y` を保存する。
 
-撮影周期と時刻精度はTIFFメタデータから読む。背景CSVは元重心の全時刻と一致させる。背景・上昇境界は省略可能だが、未指定なら前後解析は未実行とする。元の試料番号は保持し、選択した試料を再採番しない。入力ファイルのhash、入力重心の方式、中心設定を `settings.json` に保存する。
+撮影周期と時刻精度はTIFFメタデータから読む。背景CSVは元重心の全時刻と一致させる。背景・上昇境界は省略可能だが、未指定なら前後解析は未実行とする。元の試料番号は保持し、選択した試料を再採番しない。入力ファイルのhash、入力重心の方式、中心設定を `settings.json` に保存する。入力を含む出力先への書き戻しは拒否するため、元結果を入力にする場合は別のsuffixを指定する。
 
 この経路は中心・補完・角速度・SD・FFTを計算し直す。既計算結果の再描画だけの場合は `--results-bundle <bundle.json>` を使う。両者は同時指定できない。結果bundleの表は [出力writer](../../utils/functions/repellent_result_export.py) の契約に従う。
 
@@ -105,3 +105,5 @@ outputs/[suffix/]<day>/repellent_response/
 ## 互換実行
 
 `--center-estimator v2|validated|legacy` は過去の計算との互換確認用。標準の採用手法ではない。V2内部は従来のCW正だが、集約出力への変換時に一度だけCCW正へ変換する。停止測定は別列で保存し、主系列の欠測へ補充しない。[互換測定列の契約](repellent-reference-output.md) を参照。
+
+補完後の角速度は `angular_velocity_rad_s`、補完前の参照による診断値は `uncompleted_angular_velocity_rad_s` に保存する。後者をV2主系列や補完後の角速度と混同しない。

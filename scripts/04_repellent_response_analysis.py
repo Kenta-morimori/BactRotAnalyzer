@@ -603,6 +603,9 @@ def main(
                 sigma_threshold=sigma_threshold,
                 min_consecutive=min_consecutive,
             )
+        for source in bundle["settings"].get("input_hashes", {}):
+            if Path(source).resolve().is_relative_to(destination.resolve()):
+                raise ValueError("output contains a measurement input; choose a separate output-suffix")
         export_results(destination, fft_features=features, **bundle)
         print(f"Response outputs: {destination.resolve()}", flush=True)
         return

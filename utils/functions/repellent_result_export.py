@@ -372,7 +372,12 @@ def export_results(
     )
     angular_cols = KEYS + [
         c
-        for c in ("angular_velocity_rad_s", "primary_angular_velocity_rad_s", "completion_boundary_edge")
+        for c in (
+            "angular_velocity_rad_s",
+            "primary_angular_velocity_rad_s",
+            "uncompleted_angular_velocity_rad_s",
+            "completion_boundary_edge",
+        )
         if c in table
     ]
     angular_cols += [c for c in table if c.startswith("stop_")]

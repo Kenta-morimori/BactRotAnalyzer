@@ -58,7 +58,7 @@ def test_target_change_missing_and_reacquisition_break_measurements():
         identity="known",
         parameters=configuration()["parameters"],
     )
-    for col in ["angular_velocity_rad_s", "primary_angular_velocity_rad_s"]:
+    for col in ["angular_velocity_rad_s", "uncompleted_angular_velocity_rad_s"]:
         assert frame[col].iloc[[80, 100, 101, 120, 121]].isna().all()
     assert frame[["center_x_um", "center_y_um"]].iloc[[100, 120]].isna().all().all()
 
@@ -117,3 +117,33 @@ def test_normal_day_route_keeps_configured_source_scope_and_background_boundary(
     assert set(bundle["settings"]["runtime_versions"]) == {"numpy", "pandas", "scipy"}
     assert all(row.startswith("utils/") for row in bundle["settings"]["code_sha256"])
     assert features is not None
+
+
+def test_cli_rejects_output_containing_a_measurement_input(tmp_path, monkeypatch):
+    import importlib.util
+    from pathlib import Path
+
+    from tests.test_repellent_result_export import observations as result_observations
+    from tests.test_repellent_result_export import settings
+    from utils import param
+
+    path = Path(__file__).parents[1] / "scripts/04_repellent_response_analysis.py"
+    spec = importlib.util.spec_from_file_location("input_separation_entry", path)
+    assert spec is not None and spec.loader is not None
+    entry = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(entry)
+    monkeypatch.setattr(param, "save_dir_bef", str(tmp_path))
+    source = tmp_path / "day/repellent_response/01_brightness_change/background.csv"
+    source.parent.mkdir(parents=True)
+    source.write_text("original measured input")
+    options = settings()
+    options["input_hashes"] = {str(source): "synthetic"}
+    monkeypatch.setattr(
+        workflow,
+        "recalculate_manifest",
+        lambda path: (dict(observations=result_observations(), settings=options), None),
+    )
+    with pytest.raises(ValueError, match="output contains a measurement input"):
+        entry.main("day", 0.5, 3, 3, 1, 0.2, 1, None, measurement_input="synthetic.json")
+    assert source.read_text() == "original measured input"
+    assert not (tmp_path / "day/repellent_response/output_manifest.csv").exists()
