@@ -24,7 +24,9 @@ def dataset_inputs(day, repository=REPOSITORY):
 
 def manifest_inputs(path, kind):
     """Include files referenced by supported portable input descriptors."""
-    path = Path(path).resolve()
+    # The measurement loader resolves the descriptor first; the result exporter
+    # opens relative tables beside the supplied path, including a file symlink.
+    path = Path(path).resolve() if kind == "measurement" else Path(path)
     yield path
     document = json.loads(path.read_text(encoding="utf-8"))
     if kind == "measurement":

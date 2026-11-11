@@ -57,11 +57,13 @@ outputs/_runs/YYYY-MM-DD/HHMMSS_microseconds_random/
 | 環境 | Python、OS、インストール済みパッケージ名と版 |
 | 出力 | 指定した出力先または出力範囲。実際の詳細パスはrun.logと機能別manifestを参照 |
 | 経過 | 開始・終了時刻、経過秒、running / complete / failed / interrupted |
-| 診断 | stdout、stderr、root loggerへ伝播するログ、例外とtraceback |
+| 診断 | テキストstdout/stderrのwrite・writelines、root loggerへ伝播するログ、例外とtraceback |
 
 通常解析ではデータセット全体と共有キャッシュ候補を列挙する。
 再計算・再描画の入力manifestは、descriptor自身だけでなく参照する座標・メタデータ・
 背景・TIFF・結果表もhash化する。診断CLIでは指定した診断bundleとtimelineの外部TIFFも含める。
+相対参照は既存ローダーに合わせ、measurement-inputは実体JSONの親、results-bundleは指定したJSONパスの親を基準にする。
+JSONへのファイルsymlinkを指定した場合も、実際に読み込む表をhash化する。
 ディレクトリsymlinkも参照先を辿り、同じ実ディレクトリは一度だけ列挙する。
 入力範囲の一覧は**実行前に存在した入力候補の集合**であり、OSレベルのファイルアクセス履歴ではない。
 再利用されなかったキャッシュや未選択のフレームを含む場合がある。
@@ -69,6 +71,7 @@ outputs/_runs/YYYY-MM-DD/HHMMSS_microseconds_random/
 入力hashの計算中にファイルのサイズ・更新時刻が変われば停止する。
 全動画・TIFFを読むため、大きなデータセットでは解析前のI/O時間が増える。
 Git状態は入力列挙後と解析終了時にも検査し、差異があればfailedにする。
+`SystemExit(0)` 等の正常終了要求でも終端検査を通し、正常な終了要求自体はerrorとして記録しない。
 入力ファイル自体のロック・実行中の全入力再hashは行わないため、解析中にデータを書き換えない。
 実行中のコード変更も避ける。終端検査までに変更を戻す操作まで検出する仕組みではない。
 

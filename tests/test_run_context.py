@@ -84,6 +84,8 @@ def test_success_records_revision_inputs_environment_and_streams(repository, cap
     with analysis_run(repository=repository, parameters={"day": "synthetic"}, inputs=[data, source]) as root:
         print("progress message")
         print("stderr message", file=sys.stderr)
+        sys.stdout.writelines(["stdout line one\n", "stdout line two\n"])
+        sys.stderr.writelines(["stderr line one\n", "stderr line two\n"])
         logging.warning("logging message")
         assert json.loads((root / "manifest.json").read_text())["status"] == "running"
     saved = json.loads((root / "manifest.json").read_text())
@@ -103,6 +105,8 @@ def test_success_records_revision_inputs_environment_and_streams(repository, cap
     ]
     log = (root / "run.log").read_text()
     assert all(message in log for message in ("progress message", "stderr message", "logging message", "Run complete"))
+    assert "stdout line one\nstdout line two\n" in log
+    assert "stderr line one\nstderr line two\n" in log
     console = capsys.readouterr()
     assert "progress message" in console.out and "stderr message" in console.err
     assert logging.getLogger().handlers == original_handlers
@@ -110,7 +114,8 @@ def test_success_records_revision_inputs_environment_and_streams(repository, cap
 
 
 @pytest.mark.parametrize(
-    "exception,status", [(ValueError("synthetic failure"), "failed"), (KeyboardInterrupt(), "interrupted")]
+    "exception,status",
+    [(ValueError("synthetic failure"), "failed"), (KeyboardInterrupt(), "interrupted"), (SystemExit(2), "failed")],
 )
 def test_failure_and_interruption_are_durable(repository, exception, status):
     with pytest.raises(type(exception)):
@@ -120,6 +125,29 @@ def test_failure_and_interruption_are_durable(repository, exception, status):
     assert saved["status"] == status and saved["error"]["type"] == type(exception).__name__
     assert type(exception).__name__ in (root / "run.log").read_text()
     assert saved["finished_at"]
+
+
+@pytest.mark.parametrize("exit_code", [None, 0])
+def test_successful_system_exit_records_completion_without_an_error(repository, exit_code):
+    with pytest.raises(SystemExit) as caught:
+        with analysis_run(repository=repository, parameters={}) as root:
+            raise SystemExit(exit_code)
+    assert caught.value.code == exit_code
+    saved = json.loads((root / "manifest.json").read_text())
+    assert saved["status"] == "complete" and "error" not in saved
+    assert "SystemExit" not in (root / "run.log").read_text()
+
+
+@pytest.mark.parametrize("change", ["uncommitted", "committed"])
+def test_zero_exit_cannot_skip_the_final_revision_check(repository, change):
+    with pytest.raises(RuntimeError):
+        with analysis_run(repository=repository, parameters={}) as root:
+            (repository / "analysis.py").write_text("# changed before exit\n")
+            if change == "committed":
+                commit(repository)
+            raise SystemExit(0)
+    saved = json.loads((root / "manifest.json").read_text())
+    assert saved["status"] == "failed" and saved["error"]["type"] == "RuntimeError"
 
 
 def test_bad_input_inventory_records_failure_before_analysis(repository):
@@ -181,6 +209,39 @@ def test_manifest_transitive_inputs_are_hashed(tmp_path, kind, document, filenam
         (tmp_path / name).write_bytes(b"synthetic")
     saved = input_inventory(manifest_inputs(descriptor, kind))
     assert {Path(item["path"]).name for item in saved["files"]} == {"inputs.json", *filenames}
+
+
+@pytest.mark.parametrize("kind,expected_value", [("measurement", 1), ("results", 2)])
+def test_descriptor_symlink_uses_the_same_relative_references_as_its_loader(
+    tmp_path, monkeypatch, kind, expected_value
+):
+    from utils.functions import repellent_result_export
+
+    original = tmp_path / "original"
+    selected = tmp_path / "selected"
+    original.mkdir()
+    selected.mkdir()
+    descriptor = original / "bundle.json"
+    descriptor.write_text(
+        json.dumps({"observations": "rows.csv", "settings": {}, "samples": [{"centroids": "rows.csv"}]})
+    )
+    (original / "rows.csv").write_text("marker\n1\n")
+    (selected / "rows.csv").write_text("marker\n2\n")
+    alias = selected / "bundle.json"
+    alias.symlink_to(descriptor)
+    saved = input_inventory(manifest_inputs(alias, kind))
+    expected = (original if kind == "measurement" else selected) / "rows.csv"
+    assert {item["path"] for item in saved["files"]} == {str(descriptor), str(expected)}
+    assert (
+        next(item["sha256"] for item in saved["files"] if item["path"] == str(expected))
+        == hashlib.sha256(expected.read_bytes()).hexdigest()
+    )
+    if kind == "results":
+        monkeypatch.setattr(
+            repellent_result_export, "export_results", lambda root, *, settings, **tables: tables["observations"]
+        )
+        actual = repellent_result_export.export_bundle(alias, tmp_path / "out")
+        assert actual.marker.tolist() == [expected_value]
 
 
 def test_rerender_does_not_inventory_unrelated_raw_dataset(tmp_path):

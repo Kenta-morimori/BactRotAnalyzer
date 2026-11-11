@@ -114,6 +114,10 @@ class _Tee:
         self.console.flush()
         self.logfile.flush()
 
+    def writelines(self, lines):
+        for line in lines:
+            self.write(line)
+
     def __getattr__(self, name):
         return getattr(self.console, name)
 
@@ -179,14 +183,22 @@ def analysis_run(*, parameters, inputs=(), outputs=(), repository=None):
                     if require_clean_git(repository) != git:
                         raise RuntimeError("Git revision changed during input inventory")
                     _write_json(manifest, record)
-                    yield root
+                    exit_request = None
+                    try:
+                        yield root
+                    except SystemExit as exc:
+                        if exc.code not in (None, 0):
+                            raise
+                        exit_request = exc
                     if require_clean_git(repository) != git:
                         raise RuntimeError("Git revision changed during execution")
                     record["status"] = "complete"
+                    if exit_request is not None:
+                        raise exit_request
                 except BaseException as exc:
+                    if isinstance(exc, SystemExit) and exc.code in (None, 0) and record["status"] == "complete":
+                        raise
                     record["status"] = "interrupted" if isinstance(exc, KeyboardInterrupt) else "failed"
-                    if isinstance(exc, SystemExit) and exc.code in (None, 0):
-                        record["status"] = "complete"
                     record["error"] = {"type": type(exc).__name__, "message": str(exc)}
                     traceback.print_exc(file=logfile)
                     raise
