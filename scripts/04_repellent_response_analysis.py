@@ -27,6 +27,8 @@ from utils.functions.repellent_output import (  # noqa
     response_run,
     set_ranges,
 )
+from utils.run_context import analysis_run
+from utils.run_inputs import repellent_inputs
 
 
 def resolve_center_options(center_estimator, stop_measurement_enabled):
@@ -692,18 +694,19 @@ def build_parser():
 if __name__ == "__main__":
     args = build_parser().parse_args()
 
-    main(
-        day=args.day,
-        baseline_ratio=args.baseline_ratio,
-        sigma_threshold=args.sigma_threshold,
-        min_consecutive=args.min_consecutive,
-        post_rise_center_mode=args.post_rise_center_mode,
-        stop_activity_ratio=args.stop_activity_ratio,
-        stop_min_duration_rotations=args.stop_min_duration_rotations,
-        output_suffix=args.output_suffix,
-        center_estimator=args.center_estimator,
-        all_frames=args.all_frames,
-        stop_measurement_enabled=args.stop_measurement,
-        results_bundle=args.results_bundle,
-        measurement_input=args.measurement_input,
-    )
+    with analysis_run(parameters=vars(args), inputs=repellent_inputs(args), outputs=[param.save_dir_bef]):
+        main(
+            day=args.day,
+            baseline_ratio=args.baseline_ratio,
+            sigma_threshold=args.sigma_threshold,
+            min_consecutive=args.min_consecutive,
+            post_rise_center_mode=args.post_rise_center_mode,
+            stop_activity_ratio=args.stop_activity_ratio,
+            stop_min_duration_rotations=args.stop_min_duration_rotations,
+            output_suffix=args.output_suffix,
+            center_estimator=args.center_estimator,
+            all_frames=args.all_frames,
+            stop_measurement_enabled=args.stop_measurement,
+            results_bundle=args.results_bundle,
+            measurement_input=args.measurement_input,
+        )

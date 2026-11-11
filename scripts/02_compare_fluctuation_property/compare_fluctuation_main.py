@@ -157,6 +157,10 @@ def main(day_list, plot_labels=None):
 
 
 if __name__ == "__main__":
+    from pathlib import Path
+
+    from utils.run_context import analysis_run
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--days", nargs="+", type=str, help="data labels")
     parser.add_argument("--plot-labels", nargs="+", type=str, help="data labels")
@@ -165,4 +169,9 @@ if __name__ == "__main__":
     day_list = args.days
     plot_labels = args.plot_labels
 
-    main(day_list, plot_labels)
+    with analysis_run(
+        parameters=vars(args),
+        inputs=[Path(param.save_dir_bef) / day / "fluctuation_analysis/rot_df.csv" for day in day_list or []],
+        outputs=[Path(param.save_dir_bef) / "-".join(day_list or [])],
+    ):
+        main(day_list, plot_labels)

@@ -18,6 +18,8 @@ from PIL import Image  # noqa: E402
 from utils.functions import centroid_comparison as comparison  # noqa: E402
 from utils.functions import centroid_diagnostics as diagnostic  # noqa: E402
 from utils.functions import centroid_review as review  # noqa: E402
+from utils.run_context import analysis_run
+from utils.run_inputs import diagnostic_inputs
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -199,44 +201,53 @@ def main(argv=None):
         parser.error(str(exc))
     if args.repeats < 1:
         parser.error("repeats must be positive")
-    identity = json.loads((args.comparison / "identity.json").read_text())
-    if identity["runtime"]["numpy"] != np.__version__ or identity["runtime"]["opencv"] != getattr(cv2, "__version__"):
-        parser.error("Use the same NumPy/OpenCV versions as the saved comparison")
-    for path in (ROOT / "utils/functions/centroid_comparison.py", ROOT / "utils/functions/centroid_diagnostics.py"):
-        if identity["code"][str(path.relative_to(ROOT))] != diagnostic.fingerprint(path)["sha256"]:
-            parser.error("Comparison implementation changed; foreground cannot be reproduced for this review")
-    result = json.loads((args.comparison / "measured_comparison.json").read_text())
-    output = output_root / ("review_" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "_" + uuid4().hex[:8])
-    output.mkdir(parents=True, exist_ok=False)
-    diagnostic.write_json(
-        output / "run.json",
-        dict(status="running", comparison=diagnostic.fingerprint(args.comparison / "identity.json")),
-    )
-    print(output, flush=True)
-    cv2.setNumThreads(1)
-    entries = []
-    try:
-        manifests = {}
-        for path in args.manifest_root.glob("*/manifest.json"):
-            manifest = json.loads(path.read_text())
-            manifests[manifest["sample_no"]] = json.loads((path.parent / "timeline.json").read_text())
-        groups = sorted({(entry["sample_no"], entry["window_start"]) for entry in result["windows"]})
-        for sample, start in groups:
-            group = [
-                entry for entry in result["windows"] if entry["sample_no"] == sample and entry["window_start"] == start
-            ]
-            entries.append(
-                export_window(sample, start, group, manifests[sample], args.comparison, output, args.repeats)
-            )
-            print(f"review video {len(entries)}/{len(groups)}", flush=True)
-        review.write_gallery(output, entries)
-    except (Exception, KeyboardInterrupt) as exc:
-        diagnostic.write_json(output / "run.json", dict(status="failed", error=str(exc)))
-        raise
-    diagnostic.write_json(
-        output / "run.json",
-        dict(status="complete", videos=len(entries), purpose="qualitative review only; criteria unchanged"),
-    )
+    with analysis_run(
+        parameters=vars(args), inputs=diagnostic_inputs(args, ROOT), outputs=[output_root], repository=ROOT
+    ):
+        identity = json.loads((args.comparison / "identity.json").read_text())
+        if identity["runtime"]["numpy"] != np.__version__ or identity["runtime"]["opencv"] != getattr(
+            cv2, "__version__"
+        ):
+            parser.error("Use the same NumPy/OpenCV versions as the saved comparison")
+        for path in (ROOT / "utils/functions/centroid_comparison.py", ROOT / "utils/functions/centroid_diagnostics.py"):
+            if identity["code"][str(path.relative_to(ROOT))] != diagnostic.fingerprint(path)["sha256"]:
+                parser.error("Comparison implementation changed; foreground cannot be reproduced for this review")
+        result = json.loads((args.comparison / "measured_comparison.json").read_text())
+        output = output_root / (
+            "review_" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "_" + uuid4().hex[:8]
+        )
+        output.mkdir(parents=True, exist_ok=False)
+        diagnostic.write_json(
+            output / "run.json",
+            dict(status="running", comparison=diagnostic.fingerprint(args.comparison / "identity.json")),
+        )
+        print(output, flush=True)
+        cv2.setNumThreads(1)
+        entries = []
+        try:
+            manifests = {}
+            for path in args.manifest_root.glob("*/manifest.json"):
+                manifest = json.loads(path.read_text())
+                manifests[manifest["sample_no"]] = json.loads((path.parent / "timeline.json").read_text())
+            groups = sorted({(entry["sample_no"], entry["window_start"]) for entry in result["windows"]})
+            for sample, start in groups:
+                group = [
+                    entry
+                    for entry in result["windows"]
+                    if entry["sample_no"] == sample and entry["window_start"] == start
+                ]
+                entries.append(
+                    export_window(sample, start, group, manifests[sample], args.comparison, output, args.repeats)
+                )
+                print(f"review video {len(entries)}/{len(groups)}", flush=True)
+            review.write_gallery(output, entries)
+        except (Exception, KeyboardInterrupt) as exc:
+            diagnostic.write_json(output / "run.json", dict(status="failed", error=str(exc)))
+            raise
+        diagnostic.write_json(
+            output / "run.json",
+            dict(status="complete", videos=len(entries), purpose="qualitative review only; criteria unchanged"),
+        )
 
 
 if __name__ == "__main__":

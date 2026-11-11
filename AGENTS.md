@@ -75,3 +75,9 @@
 
 - Record important changes to analysis methods, observation/time identity, units/sign, center inference/completion, primary metrics, or default output contracts in `docs/adr/` alongside the implementation. Keep the ADR index current.
 - Include the decision, alternatives, consequences/limits, and validation approach. Keep work chronology and review receipts out of ADRs. Link operating documentation to the applicable ADR; supersede a decision explicitly when the scientific contract changes.
+
+### Reproducible execution
+
+- Analysis CLIs must use `utils.run_context.analysis_run` before creating analysis outputs. Require a clean committed Git tree; do not add a dirty-run bypass. Record branch, commit, parameters, input identities, environment, and completion status in private run logs.
+- Tests may run on uncommitted code. Use temporary Git repositories and synthetic inputs to validate execution gates; do not commit unrelated changes or experimental data just to pass the gate.
+- Record important execution-provenance changes in `docs/adr/`. Follow `docs/development-environment.md` for setup, validation, and log handling.

@@ -14,6 +14,8 @@ from utils.functions import (  # noqa
     read_csv,
     rot_df_manage,
 )
+from utils.run_context import analysis_run
+from utils.run_inputs import dataset_inputs
 
 
 def main(
@@ -49,7 +51,10 @@ if __name__ == "__main__":
     day = args.day
     flag_fluctuation_analysis = args.fluc
 
-    main(
-        day=day,
-        flag_flctuation_analysis=flag_fluctuation_analysis,
-    )
+    with analysis_run(
+        parameters=vars(args), inputs=dataset_inputs(day, os.getcwd()), outputs=[f"{os.getcwd()}/outputs/{day}"]
+    ):
+        main(
+            day=day,
+            flag_flctuation_analysis=flag_fluctuation_analysis,
+        )
