@@ -26,7 +26,7 @@ def source_path(day: str, sample_no: int) -> Path:
 
 
 def coordinate_path(day: str, sample_no: int) -> Path:
-    return Path(param.save_dir_bef) / day / "raw_centroid" / f"{source_path(day, sample_no).stem}.csv"
+    return Path(param.save_dir_bef) / day / "raw_centroid" / METHOD / f"{source_path(day, sample_no).stem}.csv"
 
 
 def _provenance(day: str, sample_no: int, frame_count: int) -> dict:
@@ -99,7 +99,7 @@ def extract_or_load(day: str, sample_no: int, time_values: Sequence[float], forc
 
 def load(day: str, sample_no: int, time_values: Sequence[float]) -> pd.DataFrame:
     path = coordinate_path(day, sample_no)
-    frame = pd.read_csv(path)
+    frame = pd.read_csv(path, float_precision="round_trip")
     expected = _provenance(day, sample_no, len(time_values))
     with path.with_suffix(".json").open(encoding="utf-8") as stream:
         saved = json.load(stream)

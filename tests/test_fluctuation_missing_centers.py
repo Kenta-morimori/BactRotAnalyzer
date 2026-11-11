@@ -55,8 +55,8 @@ def test_sd_fft_keeps_missing_gap_and_empty_width(monkeypatch):
     frequencies, amplitudes = frequency_analysis.fft_sd_list(df, "sample", flag_std=True)
     assert len(frequencies[0][0]) == 3  # longest contiguous 8 points, not 16 joined points
     assert len(amplitudes[0][1]) == 0
-    assert make_graph._max_available_frequency(frequencies[0]) > 0
-    assert make_graph._max_available_frequency([[], []]) == 1.0
+    assert np.max(frequencies[0][0]) > 0
+    assert len(frequencies[0][1]) == 0
 
 
 def test_continuous_segment_does_not_join_regularly_spaced_missing_points():

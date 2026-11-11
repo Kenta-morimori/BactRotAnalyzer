@@ -102,12 +102,14 @@ def test_contour_mean_cache_is_rejected_and_reextracted_with_frame_identity(tmp_
         historical.setattr(raw_centroid, "METHOD", old_method)
         cached = raw_centroid.extract_or_load("day", 1, times)
         cached.loc[cached.detected, ["x_px", "x_um"]] = -99.0
-        cached.to_csv(raw_centroid.coordinate_path("day", 1), index=False)
+        historical_path = raw_centroid.coordinate_path("day", 1)
+        cached.to_csv(historical_path, index=False)
+        historical_bytes = historical_path.read_bytes()
         (tmp_path / "outputs" / "day" / "centroid_coordinate.csv").write_text("x_1,y_1\n")
         raw_centroid.save_standard_manifest("day", [times])
 
     assert not raw_centroid.standard_cache_matches("day", [times])
-    with pytest.raises(ValueError, match="Stale or malformed"):
+    with pytest.raises(FileNotFoundError):
         raw_centroid.load("day", 1, times)
 
     result = raw_centroid.extract_or_load("day", 1, times)
@@ -119,11 +121,13 @@ def test_contour_mean_cache_is_rejected_and_reextracted_with_frame_identity(tmp_
     assert result.source_frame_1based.tolist() == [1, 2, 3]
     assert result.time_sec.tolist() == times
     assert result.detected.tolist() == [True, False, True]
+    assert historical_path.read_bytes() == historical_bytes
     assert len(opened) == 2
     with raw_centroid.coordinate_path("day", 1).with_suffix(".json").open() as stream:
         assert json.load(stream)["method"] == raw_centroid.METHOD
 
     assert raw_centroid.extract_or_load("day", 1, times).equals(result)
+    assert historical_path.read_bytes() == historical_bytes
     assert len(opened) == 2
     raw_centroid.save_standard_manifest("day", [times])
     assert raw_centroid.standard_cache_matches("day", [times])

@@ -1,3 +1,5 @@
+> この文書は互換V2バックエンドの測定列を説明します。現在の既定手法と最終出力は [忌避応答解析の実行と出力](repellent-workflow.md)、判断理由は [ADR](../adr/README.md) を参照してください。ここでのV2内部符号はCW正ですが、最終集約出力はCCW正です。
+
 # 忌避応答の最終参照中心と停止角速度
 
 回転中のV2参照中心と、条件を満たす停止候補の補間中心を、最終参照中心として保存・表示する。
@@ -85,26 +87,9 @@ V2判定不能を一律に停止候補とは扱わない。
 
 ## 実行と保存先
 
-```bash
-python3 scripts/04_repellent_response_analysis.py --day repellent-response/23
-python3 scripts/04_repellent_response_analysis.py --day repellent-response/23 --all-frames
-python3 scripts/04_repellent_response_analysis.py --day repellent-response/23 --all-frames --output-suffix verification
-```
-
-保存先は `outputs/[suffix/]<day>/repellent_response/runs/<configured|all_frames>/<run_id>/`。
-実行IDは日本時間の日時と衝突防止ID。毎回新しいフォルダを作成し、冒頭にパスを表示する。
-従来の保存済み成果物を自動移動・削除・上書きしない。入力AVI/TIFF、共有の `raw_centroid` は実行出力先から分離する。
-既存の共有 `time_list.csv` は読み取り利用し、列内の欠測時刻を詰めない。
-入力やキャッシュがない場合の既存の生成経路は維持する。
-
-`run.json` は開始時 `running`、正常終了時 `success`、例外時 `failed`。
-失敗時も途中成果物とエラー種別を残し、出力コンテキストを解除する。
-解析モード・実行ID・使用原フレーム範囲は `run.json`、`analysis_method.json`、
-`rotation_center/settings.json` と図へ記載する。
-実行記録と設定JSONの `input_centroid_method` は入力生重心の抽出方式を記録する。
-ここでの抽出方式v2/v3と、回転中心のV2推定モデルは別の名称である。
-`00_time_list/analysis_frame_ranges.csv` は設定範囲と元時刻の対応。
-No.14の通常解析は原フレーム2049–16384で、全フレーム検証の結果と区別する。
+互換実行は `scripts/04_repellent_response_analysis.py --center-estimator v2` を明示する。バックエンドの診断・試料別の表は一時領域で計算し、採用された保存値をフェーズ別の集約出力へ移す。
+最終保存先は `outputs/[suffix/]<day>/repellent_response/`。実行ID・No別フォルダは最終出力に作らない。内部表の `noXX/` はバックエンドの一時的な契約であり、利用者向け出力構成ではない。
+正確なファイル一覧と実行手順は [現行の出力契約](repellent-workflow.md) を参照。
 
 ## 検証
 

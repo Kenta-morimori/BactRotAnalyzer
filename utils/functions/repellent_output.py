@@ -57,7 +57,7 @@ def set_ranges(day, ranges):
 
 
 @contextmanager
-def response_run(day, *, all_frames=False, output_suffix=None, options=None):
+def response_run(day, *, all_frames=False, output_suffix=None, options=None, root_override=None):
     base = Path(param.save_dir_bef)
     if output_suffix:
         suffix = Path(output_suffix)
@@ -66,7 +66,9 @@ def response_run(day, *, all_frames=False, output_suffix=None, options=None):
         base = base / suffix
     mode = "all_frames" if all_frames else "configured"
     run_id = datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y%m%dT%H%M%S%f_JST_") + uuid4().hex[:8]
-    root = base / day / "repellent_response" / "runs" / mode / run_id
+    root = (
+        Path(root_override) if root_override is not None else base / day / "repellent_response" / "runs" / mode / run_id
+    )
     root.mkdir(parents=True, exist_ok=False)
     value = ResponseOutput(day, root, mode, run_id, options=options or {})
     token = _active.set(value)
