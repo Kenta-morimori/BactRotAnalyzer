@@ -29,6 +29,7 @@ def main():
     parser.add_argument("--px2um", nargs=2, type=float, metavar=("X", "Y"))
     parser.add_argument("--samples", nargs="+", type=int)
     parser.add_argument("--confirm-order", action="store_true", help="Confirm the reviewed sample-number mapping")
+    parser.add_argument("--opencv", action="store_true", help="Use the older OpenCV setup instead of the HTML editor")
     parser.add_argument(
         "--brightness-root", type=Path, help="Override the recording's sibling brightness_data directory"
     )
@@ -54,7 +55,13 @@ def main():
     elif args.configure:
         if args.source or args.px2um:
             parser.error("--configure uses the source, day and calibration saved in settings")
-        settings = configure_settings(args.settings, numbers=args.samples, confirm_order=args.confirm_order)
+        if args.opencv or json.loads(args.settings.read_text())["source"] == "avi":
+            settings = configure_settings(args.settings, numbers=args.samples, confirm_order=args.confirm_order)
+        else:
+            from utils.functions.repellent_editor import serve_editor
+
+            serve_editor(args.settings, args.samples, args.confirm_order)
+            return
     else:
         if args.source or args.px2um or args.confirm_order:
             parser.error("--attach-brightness preserves the existing source, order and calibration")

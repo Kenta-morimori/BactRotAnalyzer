@@ -14,7 +14,7 @@ JSONの既定位置は`data/<day>/repellent_input.json`。
 ```bash
 python scripts/prepare_repellent_input.py --init --day repellent-response/20261027_23 --source tiff --px2um 0.2 0.2
 # 撮影順を確認してから --confirm-order を付ける
-python scripts/prepare_repellent_input.py --configure --confirm-order --day repellent-response/20261027_23
+python scripts/prepare_repellent_input.py --configure --day repellent-response/20261027_23
 python scripts/04_repellent_response_analysis.py --day repellent-response/20261027_23
 ```
 
@@ -68,13 +68,21 @@ python3 scripts/prepare_repellent_input.py --configure --confirm-order \
   --settings outputs/input_settings/20261027_23-tiff.json
 ```
 
-OpenCVのデスクトップウィンドウが必要。対象内をクリックし、閾値スライダーのマスクを確認してEnterで確定する。
-候補値2000は全撮影の採用値ではない。閾値は撮影ごとに固定する。
-続いて自動固定ROIをEnterで確認する。Rで矩形を修正、Escで中断する。
-元フレーム・時刻の記録境界後にも対象を明示的に指定する。ROIは記録全体で固定する。
-`--samples 1 3`で一部だけ設定でき、確認済みの各撮影設定を順に保存する。
-閾値・ROI・対象点は元TIFF画素座標でJSONに保存し、以後の再実行に使う。
-対象指定が不正・ROI外・前景でない場合は保存せず中断する。
+TIFFのconfigureはローカルHTML画面をブラウザーで開く。端末にもURLを表示する。
+No.を選び、全記録フレームのスライダーで原画像と10倍拡大後の二値マスクを同時に確認する。
+元フレーム・TIFF時刻・記録区間を表示し、時刻欠測やgapを詰めない。再指定が必要なフレームへは下の一覧から移動できる。
+
+1. 原画像内の対象をクリックする。閾値はスライダーまたは数値で調整する。2000は候補値であり採用済みとはしない。
+2. 「先頭区間から自動ROI」で既存と同じ冒頭区間の推定を使う。必要ならROIモードで原画像上をドラッグするか、元画素の矩形数値を修正する。
+3. 記録開始・gap後の対象点をそれぞれ指定し、全時間を確認する。ROI・閾値はその撮影全体で固定する。
+4. 撮影順と対象設定の確認欄にチェックし、「このNo.を保存」する。チェックなしでは下書き保存となり解析開始条件を満たさない。
+
+保存はNo.単位。他のサンプル、校正、解析範囲、背景設定を変更しない。`--samples 1 3`なら画面に表示するNo.を絞れる。
+一度保存した確認済み設定は再利用するため、毎回の設定操作は不要。対象・入力・ROI・閾値を見直すときは該当No.だけ再編集する。
+対象がROI外・前景でない、必要な再指定点がない、別操作でJSONが変更された場合は、確認済みとしての保存を拒否する。
+終了は端末でCtrl-C。HTMLは127.0.0.1だけで動作し、画像や設定を外部へ送信しない。
+プレビューはマスクと再指定点の確認であり、全時間の追跡・中心・角速度を計算した結果ではない。
+従来OpenCV画面が必要な場合は`--opencv`を追加する。AVI設定は従来の撮影順確認を使う。
 
 ```bash
 python3 scripts/04_repellent_response_analysis.py \

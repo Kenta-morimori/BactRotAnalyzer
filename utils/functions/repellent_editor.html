@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TIFFサンプル設定</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f5f7;color:#172533;font:15px system-ui,sans-serif}header{background:#18364a;color:white;padding:18px 24px}h1{font-size:22px;margin:0 0 6px}main{max-width:1200px;margin:auto;padding:20px;display:grid;grid-template-columns:260px 1fr;gap:20px}section,aside{background:white;border:1px solid #dce3e8;border-radius:10px;padding:18px}label{display:block;margin:10px 0}select,button,input{font:inherit}select{width:100%;padding:8px}button{padding:9px 12px;border:1px solid #acbdc8;border-radius:6px;background:#fff;cursor:pointer}button.primary{background:#17665f;color:white;border-color:#17665f}input[type=number]{width:80px;padding:5px}input[type=range]{width:100%}.images{display:flex;gap:16px;flex-wrap:wrap}.images>div{flex:1;min-width:240px}canvas{background:#111;width:100%;image-rendering:pixelated;touch-action:none;border:1px solid #b8c5ce}h2{font-size:17px}small,.hint{color:#586c7a}#message{white-space:pre-wrap;padding:12px;border-radius:6px;background:#edf4f4;margin-top:16px}#message.error{background:#ffe9e7;color:#982b24}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.row label{margin:5px 0}.row input[type=radio]{width:auto}#required button{padding:4px 8px;margin:3px}#required button.missing{border-color:#d58c41;background:#fff5e5}@media(max-width:760px){main{display:block}aside{margin-bottom:16px}}
+</style>
+<header><h1>TIFFサンプル設定</h1><div id="day"></div></header>
+<main><aside>
+<h2>1. サンプルを選ぶ</h2><select id="sample" aria-label="サンプル番号"></select>
+<p class="hint">保存済みのNo.は再設定不要です。変更したNo.だけ保存できます。</p>
+<label><input id="order" type="checkbox"> 一覧のNo.と撮影名の順序を確認した</label>
+<h2>2. 対象とROI</h2>
+<div class="row"><label><input name="mode" type="radio" value="seed" checked>対象点</label><label><input name="mode" type="radio" value="roi">ROIをドラッグ</label></div>
+<p class="hint">対象点は原画像の対象内部をクリック。固定ROIは全時間で共通です。</p>
+<button id="auto">先頭区間から自動ROI</button>
+<div class="row"><label>X <input id="rx" type="number" min="0"></label><label>Y <input id="ry" type="number" min="0"></label><label>幅 <input id="rw" type="number" min="1"></label><label>高さ <input id="rh" type="number" min="1"></label></div>
+<small>座標・幅・高さは元TIFF画素単位</small>
+<h2>3. 閾値</h2><input id="threshold" type="number" min="1" value="2000"><input id="thresholdSlider" aria-label="二値化閾値" type="range" min="1" max="65535" value="2000">
+<p class="hint">2000は候補値です。白い領域と対象の分離を確認してください。</p>
+<label><input id="confirmed" type="checkbox"> このNo.の対象点・閾値・ROIを確認した</label>
+<button class="primary" id="save">このNo.を保存</button><button id="reload">再読込</button>
+<div id="message" role="status">読み込み中</div>
+</aside><section>
+<h2>全時間を確認</h2><div class="row"><button id="previous">前のフレーム</button><button id="next">次のフレーム</button><span id="position"></span></div>
+<input id="frame" aria-label="全記録フレーム" type="range" min="0" max="0" value="0">
+<p id="clock"></p>
+<div class="images"><div><h2>原TIFF・対象点・固定ROI</h2><canvas id="original" width="64" height="64"></canvas></div><div><h2>10倍拡大後の二値マスク</h2><canvas id="mask" width="640" height="640"></canvas></div></div>
+<p id="reason" class="hint"></p>
+<h2>記録開始・ギャップ後の対象指定</h2><p class="hint">橙色は対象点が未指定です。クリックして該当フレームへ移動し、対象内部を指定してください。</p><div id="required"></div>
+<button id="removeSeed">表示中フレームの再指定点を削除</button>
+<p class="hint">スライダーは保存された全TIFFを元の順序で表示します。欠測時刻や記録ギャップは埋めません。マスクの確認画面であり、全時間の追跡・解析は別の解析コマンドで実行します。</p>
+</section></main>
+<script>
+const $=id=>document.getElementById(id);let doc,current,draft,view,dirty=false,timer,busy=false,pending=false,version=0;
+const token='EDITOR_TOKEN';
+function message(text,error=false){$('message').textContent=text;$('message').className=error?'error':''}
+async function api(path,body={}){const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-Editor-Token':token},body:JSON.stringify(body)});const data=await r.json();if(!r.ok)throw Error(data.error);return data}
+function fields(){draft.threshold=Number($('threshold').value);draft.roi=['rx','ry','rw','rh'].map(id=>Number($(id).value));return {sample_no:current.sample_no,index:Number($('frame').value),threshold:draft.threshold,roi:draft.roi,seeds:draft.seeds}}
+function roiFields(){['rx','ry','rw','rh'].forEach((id,i)=>$(id).value=draft.roi[i])}
+function changed(){dirty=true;message('未保存の変更があります');schedule()}
+function schedule(){clearTimeout(timer);timer=setTimeout(preview,120)}
+async function preview(){if(!current)return;if(busy){pending=true;return}busy=true;const generation=version;try{const payload=fields();const data=await api('/preview',payload);if(generation!==version)return;view=data;$('frame').max=data.count-1;$('position').textContent=`${data.index+1} / ${data.count} 枚・元フレーム ${data.source_frame}`;$('clock').textContent=`時刻: ${data.time_sec===null?'欠測':data.time_sec.toFixed(6)+' 秒'}　記録区間: ${data.segment}　${data.timestamp||'元時刻タグなし'}`;$('thresholdSlider').max=data.threshold_max;$('reason').textContent=data.reason;
+for(const [id,url] of [['original',data.image],['mask',data.mask]]){const im=new Image();im.onload=()=>{if(generation!==version||view!==data)return;const canvas=$(id);canvas.width=im.width;canvas.height=im.height;const ctx=canvas.getContext('2d');ctx.drawImage(im,0,0);if(id==='original'){ctx.lineWidth=.35;ctx.strokeStyle='#ffbd39';ctx.strokeRect(...draft.roi);const point=draft.seeds[String(data.source_frame)];if(point){ctx.strokeStyle='#ee4242';ctx.beginPath();ctx.moveTo(point[0]-2,point[1]);ctx.lineTo(point[0]+2,point[1]);ctx.moveTo(point[0],point[1]-2);ctx.lineTo(point[0],point[1]+2);ctx.stroke()}}};im.src=url}
+$('required').replaceChildren();data.required.forEach(frame=>{const button=document.createElement('button');button.textContent=`元 ${frame}${draft.seeds[String(frame)]?' ✓':''}`;button.className=draft.seeds[String(frame)]?'':'missing';button.onclick=async()=>{try{const located=await api('/locate',{sample_no:current.sample_no,source_frame:frame});$('frame').value=located.index;schedule()}catch(e){message(e.message,true)}};$('required').append(button)})
+}catch(e){message(e.message,true)}finally{busy=false;if(pending){pending=false;schedule()}}}
+async function load(number){const generation=++version;clearTimeout(timer);pending=false;['save','auto','frame','threshold','thresholdSlider','rx','ry','rw','rh'].forEach(id=>$(id).disabled=true);const loaded=await api('/settings');if(generation!==version)return;doc=loaded;$('day').textContent=doc.day;$('sample').replaceChildren();doc.samples.forEach(s=>{const option=document.createElement('option');option.value=s.sample_no;option.textContent=`No.${s.sample_no} ${s.target_confirmed?'保存済み':'未確認'} · ${s.input_id}`;$('sample').append(option)});current=doc.samples.find(s=>s.sample_no===Number(number))||doc.samples[0];$('sample').value=current.sample_no;draft=structuredClone(current);draft.seeds=draft.seeds||{};draft.threshold=draft.threshold||2000;view=null;$('frame').value=0;
+const data=await api('/preview',{sample_no:current.sample_no,index:0,threshold:draft.threshold,seeds:draft.seeds});if(generation!==version)return;draft.roi=draft.roi||[0,0,data.width,data.height];['save','auto','frame','threshold','thresholdSlider','rx','ry','rw','rh'].forEach(id=>$(id).disabled=false);roiFields();$('threshold').value=$('thresholdSlider').value=draft.threshold;$('confirmed').checked=current.target_confirmed;$('order').checked=doc.order_confirmed;dirty=false;message(current.target_confirmed?'保存済み設定を読み込みました':'未確認：対象点・閾値・ROIを指定してください');schedule()}
+$('sample').onchange=()=>{const next=$('sample').value;if(dirty&&!confirm('未保存の変更を破棄してサンプルを切り替えますか？')){$('sample').value=current.sample_no;return}load(next).catch(e=>message(e.message,true))};
+$('reload').onclick=()=>{if(!dirty||confirm('未保存の変更を破棄しますか？'))load(current.sample_no).catch(e=>message(e.message,true))};
+$('threshold').oninput=()=>{$('thresholdSlider').value=$('threshold').value;changed()};$('thresholdSlider').oninput=()=>{$('threshold').value=$('thresholdSlider').value;changed()};['rx','ry','rw','rh'].forEach(id=>$(id).onchange=changed);$('confirmed').onchange=()=>{dirty=true};$('order').onchange=()=>{dirty=true};$('frame').oninput=schedule;
+$('previous').onclick=()=>{$('frame').value=Math.max(0,Number($('frame').value)-1);schedule()};$('next').onclick=()=>{$('frame').value=Math.min(Number($('frame').max),Number($('frame').value)+1);schedule()};
+let start;function point(event){const box=$('original').getBoundingClientRect();return [Math.max(0,Math.min(view.width-1,Math.floor((event.clientX-box.left)/box.width*view.width))),Math.max(0,Math.min(view.height-1,Math.floor((event.clientY-box.top)/box.height*view.height)))]}
+$('original').onpointerdown=e=>{if(!view||view.index!==Number($('frame').value))return;start=point(e);$('original').setPointerCapture(e.pointerId)};
+$('original').onpointerup=e=>{if(!start||!view)return;const end=point(e);if(document.querySelector('input[name=mode]:checked').value==='seed'){draft.seeds[String(view.source_frame)]=end}else{draft.roi=[Math.min(start[0],end[0]),Math.min(start[1],end[1]),Math.abs(end[0]-start[0])+1,Math.abs(end[1]-start[1])+1];roiFields()}start=null;changed()};
+$('removeSeed').onclick=()=>{if(view){delete draft.seeds[String(view.source_frame)];changed()}};
+$('auto').onclick=async()=>{try{message('冒頭区間からROIを計算中…');const data=await api('/auto-roi',fields());draft.roi=data.roi;roiFields();changed()}catch(e){message(e.message,true)}};
+$('save').onclick=async()=>{try{const number=current.sample_no;message('対象点と記録境界を検査して保存中…');const confirmed=$('confirmed').checked;await api('/save',{...fields(),revision:doc.revision,confirmed,order_confirmed:$('order').checked});dirty=false;await load(number);message(confirmed?'このNo.を確認済みとして保存しました。次回の解析でも再利用します。':'下書きを保存しました。確認済みにチェックして保存すると解析に使用できます。')}catch(e){message(e.message,true)}};
+window.onbeforeunload=e=>{if(dirty){e.preventDefault();e.returnValue='未保存の変更があります'}};load().catch(e=>message(e.message,true));
+</script></html>
