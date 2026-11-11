@@ -163,6 +163,11 @@ def analyze_sample(
             center_before_review_model_switch=result["review_model_switch"],
         )
     )
+    frame["center_estimate_status"] = [row["status"] for row in result["records"]]
+    frame["center_estimate_reason"] = [row.get("reason") or "" for row in result["records"]]
+    frame["center_review_required"] = result["review_model_switch"]
+    frame["center_estimate_window_s"] = [row.get("selected_window_s", np.nan) for row in result["records"]]
+    frame["center_estimate_degree"] = [row.get("selected_center_degree", np.nan) for row in result["records"]]
     for column in ("missing_reason", "reason"):
         if column in raw:
             frame.loc[~valid, "centroid_missing_reason"] = (

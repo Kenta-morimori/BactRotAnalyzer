@@ -81,7 +81,7 @@ outputs/[suffix/]<day>/repellent_response/
 │   └── background_intensity.png
 ├── 00_all_rotational_analysis/
 │   ├── centroid_coordinate/  # 重心、欠測理由、XY・時系列図
-│   ├── center_coordinate/    # 中心、状態、支持点
+│   ├── center_coordinate/    # 中心、推定採否・理由、補完状態、支持点
 │   └── angular_velocity/     # 角速度表、全時間図（0線あり）
 ├── 02_pre_rise_fluctuation/fluctuation_analysis/
 │   ├── SD_time_series.csv

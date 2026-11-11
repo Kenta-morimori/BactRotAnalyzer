@@ -361,7 +361,7 @@ def export_results(
     )
     write(
         f"{ALL}/center_coordinate/center_status.csv",
-        table[KEYS + ["center_status"]],
+        table[KEYS + ["center_status"] + [c for c in table if c.startswith(("center_estimate_", "center_review_"))]],
         "direct/short/provisional/one-sided/unavailable",
     )
     support_cols = KEYS + [c for c in table if c.startswith("support_")]
