@@ -140,8 +140,6 @@ def fit_orbit(time, points, anchor_time, model=OrbitModel()):
 
 def orbit_prediction_residual(fit, time, points):
     """Held-out geometric/Sampson residual in the original coordinate units."""
-    if fit.get("geometric_refinement"):
-        return np.linalg.norm(points - fit["center"], axis=1) - fit["radius_at_anchor"]
     tau = (time - fit["anchor_time"]) / fit["time_scale"]
     powers = np.column_stack([tau**j for j in range(len(fit["radius_squared_coefficients"]))])
     c = powers[:, : len(fit["center_coefficients"])] @ fit["center_coefficients"] / fit["coordinate_scale"]
@@ -157,67 +155,37 @@ def orbit_prediction_residual(fit, time, points):
 
 def center_at(fit, time):
     """Evaluate the fitted center polynomial, also for held-out diagnostics."""
-    if fit.get("geometric_refinement"):
-        return fit["center"]
     tau = (time - fit["anchor_time"]) / fit["time_scale"]
     powers = np.array([tau**j for j in range(len(fit["center_coefficients"]))])
     return fit["origin"] + powers @ fit["center_coefficients"]
 
 
-def _reanchor_simple(fit, time):
+def reanchor_fit(fit, time):
     """Evaluate one fixed-support fit and its covariance at another source time."""
     if fit["status"] != "computed":
         return dict(fit)
     result = dict(fit, center=center_at(fit, time), prediction_time_sec=float(time))
-    if not fit.get("geometric_refinement"):
-        tau = (time - fit["anchor_time"]) / fit["time_scale"]
-        coeff = fit["center_coefficients"]
-        nuisance = fit["radius_squared_coefficients"]
-        p = np.array([tau**j for j in range(len(nuisance))])
-        c = p[: len(coeff)] @ coeff / fit["coordinate_scale"]
-        q = fit["quadratic"]
-        rsq = c @ q @ c + p @ nuisance
-        if rsq <= 0:
-            return dict(result, status="undefined", reason="nonpositive_anchor_radius", center=np.full(2, np.nan))
-        result["radius_at_anchor"] = float(fit["coordinate_scale"] * np.sqrt(rsq))
-        cov = fit["coefficient_covariance"]
-        shape_n = len(cov) - 2 * len(coeff) - len(nuisance)
-        jac = np.zeros((2, len(cov)))
-        inv_q = np.linalg.inv(q)
-        for j in range(len(coeff)):
-            jac[:, shape_n + 2 * j : shape_n + 2 * j + 2] = tau**j * inv_q
-        if shape_n:
-            jac[:, 0] = inv_q @ np.diag([1.0, -1.0]) @ c
-            jac[:, 1] = inv_q @ np.array([[0.0, 1.0], [1.0, 0.0]]) @ c
-        variance = fit["coordinate_scale"] ** 2 * jac @ cov @ jac.T
-        result["center_linearized_se"] = float(np.sqrt(max(0.0, np.trace(variance))))
-    if "_cv_fits" in fit:
-        result["center_cv_spread"] = (
-            float(max(np.linalg.norm(center_at(other, time) - result["center"]) for other in fit["_cv_fits"]))
-            if len(fit["_cv_fits"]) == fit.get("_cv_expected_folds", 4) and not fit.get("validation_failure")
-            else np.inf
-        )
-    return result
-
-
-def reanchor_fit(fit, time):
-    """Reuse identical support without holding/interpolating center positions."""
-    result = _reanchor_simple(fit, time)
-    if "_candidate_fits" in fit:
-        candidates = [_reanchor_simple(a, time) for a in fit["_candidate_fits"]]
-        result["candidate_models"] = [
-            dict(
-                model=a["selected_model"],
-                status=a["status"],
-                reason=a["reason"],
-                bic=a["bic"],
-                selection_score=a["selection_score"],
-                center=a["center"],
-                linearized_se=a.get("center_linearized_se"),
-                center_cv_spread=a.get("center_cv_spread"),
-            )
-            for a in candidates
-        ]
+    tau = (time - fit["anchor_time"]) / fit["time_scale"]
+    coeff = fit["center_coefficients"]
+    nuisance = fit["radius_squared_coefficients"]
+    p = np.array([tau**j for j in range(len(nuisance))])
+    c = p[: len(coeff)] @ coeff / fit["coordinate_scale"]
+    q = fit["quadratic"]
+    rsq = c @ q @ c + p @ nuisance
+    if rsq <= 0:
+        return dict(result, status="undefined", reason="nonpositive_anchor_radius", center=np.full(2, np.nan))
+    result["radius_at_anchor"] = float(fit["coordinate_scale"] * np.sqrt(rsq))
+    cov = fit["coefficient_covariance"]
+    shape_n = len(cov) - 2 * len(coeff) - len(nuisance)
+    jac = np.zeros((2, len(cov)))
+    inv_q = np.linalg.inv(q)
+    for j in range(len(coeff)):
+        jac[:, shape_n + 2 * j : shape_n + 2 * j + 2] = tau**j * inv_q
+    if shape_n:
+        jac[:, 0] = inv_q @ np.diag([1.0, -1.0]) @ c
+        jac[:, 1] = inv_q @ np.array([[0.0, 1.0], [1.0, 0.0]]) @ c
+    variance = fit["coordinate_scale"] ** 2 * jac @ cov @ jac.T
+    result["center_linearized_se"] = float(np.sqrt(max(0.0, np.trace(variance))))
     return result
 
 
