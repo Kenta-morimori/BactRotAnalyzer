@@ -56,7 +56,7 @@ def estimate_provisional_center(
     segment_ids,
     frame_period_s,
     timestamp_quantum_s=1e-6,
-    evaluation_step=20,
+    evaluation_step=None,
     chunk_size=256,
     progress=None,
     parameters=None,
@@ -72,6 +72,8 @@ def estimate_provisional_center(
         if unknown:
             raise ValueError(f"Unknown center parameters: {sorted(unknown)}")
         config.update(parameters)
+    if evaluation_step is None:
+        evaluation_step = config["default_evaluation_step_frames"]
     for key in ("anchor_step_frames", "default_evaluation_step_frames"):
         if type(config[key]) is not int or config[key] < 1:
             raise ValueError(f"positive integer {key} required")

@@ -116,3 +116,17 @@ def test_model_choice_review_keeps_numerical_evidence_but_blocks_interpolation(m
     assert r["review_model_switch"][4] and np.isfinite(r["conditional_center"][4]).all()
     assert np.isnan(r["completed_center"][4]).all()
     assert not r["interpolated"].any()
+
+
+def test_parameter_default_evaluation_step_is_used_unless_explicitly_overridden():
+    f, t, p, _ = data()
+    kwargs = dict(
+        valid=np.ones(len(t), bool),
+        segment_ids=np.zeros(len(t), int),
+        frame_period_s=0.005,
+        parameters={"default_evaluation_step_frames": 1},
+    )
+    dense = estimate_provisional_center(f, t, p, **kwargs)
+    assert dense["evaluated"].all() and dense["evaluation_step"] == 1
+    coarse = estimate_provisional_center(f, t, p, evaluation_step=20, **kwargs)
+    assert coarse["evaluated"].sum() < len(t) and coarse["evaluation_step"] == 20
