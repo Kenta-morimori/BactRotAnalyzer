@@ -59,7 +59,7 @@ def estimate_local_center(
     ids = observation_runs(frame, time, xy, max_gap_s=max_gap_s, valid=valid, segment_ids=segment_ids)
     assessed = np.full((n, 2), np.nan)
     computed = np.full((n, 2), np.nan)
-    records = [
+    records: list[dict[str, Any]] = [
         dict(
             source_row=i,
             status="undefined",
