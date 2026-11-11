@@ -195,3 +195,11 @@ python3 scripts/tiff_roi_centroid.py --input data/example/tiff_frames \
 結合・曖昧・ROI端は欠測として、分離後の再捕捉を試みます。記録ギャップ後は再指定します。
 重心CSVと重ね合わせ動画を実行別に保存します。通常回転解析への接続は含みません。
 [操作・設定・欠測規則・検証範囲](../docs/tiff-roi-centroid.md)を参照してください。
+
+### TIFF/AVIの入力設定と標準忌避応答解析への接続
+
+`prepare_repellent_input.py --init`でconfig任意のローカルJSONを作り、`--configure`で対象・閾値・固定ROIを確認します。
+`04_repellent_response_analysis.py --input-settings <JSON> --input-source tiff|avi`は、
+入力源別の校正・キャッシュを使って元画像から標準measurement manifestを生成し、中心以降を再計算します。
+背景解析はユーザーが行い、未提供の背景前後指標は未実行です。
+[対象2データのコマンド・設定・外部背景の契約](../docs/analysis/repellent-image-input.md)を参照してください。

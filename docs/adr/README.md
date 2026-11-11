@@ -8,5 +8,6 @@
 | [0001](0001-observation-identity.md) | 元観測の保持、平滑化なし、CCW正、重心キャッシュの分離 |
 | [0002](0002-local-conic-center-completion.md) | 局所楕円モデルによる中心推定と3点平均補完 |
 | [0003](0003-repellent-output-contract.md) | フェーズ別出力、背景前後解析、再計算と再描画の分離 |
+| [0004](0004-image-input-settings.md) | config任意のTIFF/AVI入力、対話設定、外部背景とキャッシュ分離 |
 
 各ADRには状態、背景、決定、代替、影響・限界、検証方法を記載する。後日の方針変更は新ADRで置き換え、既存の判断を黙って書き換えない。
