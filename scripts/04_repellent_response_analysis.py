@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Optional, cast
 
@@ -33,7 +34,7 @@ def resolve_center_options(center_estimator, stop_measurement_enabled):
     stop_measurement_enabled = (
         param.stop_measurement_enabled if stop_measurement_enabled is None else stop_measurement_enabled
     )
-    if center_estimator not in {"v2", "validated", "legacy"}:
+    if center_estimator not in {"local_conic", "v2", "validated", "legacy"}:
         raise ValueError(f"Unknown center estimator: {center_estimator}")
     return center_estimator, stop_measurement_enabled
 
@@ -532,6 +533,23 @@ def _main(
         )
         + "\n"
     )
+    from utils.functions.repellent_result_adapter import collect_results
+
+    return collect_results(
+        day,
+        range_rows,
+        raw_frames,
+        all_comp_time_list,
+        all_x_before_list,
+        all_y_before_list,
+        all_x_center_list,
+        all_y_center_list,
+        all_rot,
+        background_list,
+        rise_results,
+        center_estimator,
+        source_ids=[Path(path).stem for path in input_data.get_ordered_avi_paths(day)],
+    )
 
 
 def main(
@@ -546,8 +564,48 @@ def main(
     center_estimator: Optional[str] = None,
     all_frames: bool = False,
     stop_measurement_enabled: Optional[bool] = None,
+    results_bundle: Optional[str] = None,
+    measurement_input: Optional[str] = None,
 ):
+    from utils.functions.repellent_result_export import export_bundle, export_results
+
+    base = Path(param.save_dir_bef)
+    if output_suffix:
+        suffix = Path(output_suffix)
+        if suffix.is_absolute() or ".." in suffix.parts:
+            raise ValueError("output-suffix must be relative without parent traversal")
+        base = base / suffix
+    destination = base / day / "repellent_response"
+    if results_bundle is not None and measurement_input is not None:
+        raise ValueError("results-bundle and measurement-input are mutually exclusive")
+    if results_bundle is not None:
+        export_bundle(results_bundle, destination)
+        print(f"Response outputs: {destination.resolve()}", flush=True)
+        return
     estimator, stopped = resolve_center_options(center_estimator, stop_measurement_enabled)
+    if measurement_input is not None or estimator == "local_conic":
+        from utils.functions.repellent_workflow import (
+            recalculate_day,
+            recalculate_manifest,
+        )
+
+        if measurement_input is not None and (all_frames or center_estimator not in (None, "local_conic")):
+            raise ValueError(
+                "measurement-input defines source scope; do not mix centroid bundle, all-frames or another estimator"
+            )
+        if measurement_input is not None:
+            bundle, features = recalculate_manifest(measurement_input)
+        else:
+            bundle, features = recalculate_day(
+                day,
+                all_frames=all_frames,
+                baseline_ratio=baseline_ratio,
+                sigma_threshold=sigma_threshold,
+                min_consecutive=min_consecutive,
+            )
+        export_results(destination, fft_features=features, **bundle)
+        print(f"Response outputs: {destination.resolve()}", flush=True)
+        return
     options = dict(
         center_estimator=estimator,
         stop_measurement_enabled=bool(stopped and estimator == "v2"),
@@ -555,21 +613,38 @@ def main(
     )
     previous_mode = param.post_rise_center_mode
     try:
-        with response_run(day, all_frames=all_frames, output_suffix=output_suffix, options=options) as output:
-            print(f"Response outputs: {output.root.resolve()}", flush=True)
-            _main(
+        # Existing backends may create diagnostic/per-sample intermediates. Keep
+        # those temporary and publish only the approved phase-grouped layout.
+        destination.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="repellent_export_") as temporary:
+            with response_run(
                 day,
-                baseline_ratio,
-                sigma_threshold,
-                min_consecutive,
-                post_rise_center_mode,
-                stop_activity_ratio,
-                stop_min_duration_rotations,
-                output_suffix,
-                estimator,
-                all_frames,
-                stopped,
-            )
+                all_frames=all_frames,
+                output_suffix=output_suffix,
+                options=options,
+                root_override=Path(temporary) / "analysis",
+            ):
+                bundle = _main(
+                    day,
+                    baseline_ratio,
+                    sigma_threshold,
+                    min_consecutive,
+                    post_rise_center_mode,
+                    stop_activity_ratio,
+                    stop_min_duration_rotations,
+                    output_suffix,
+                    estimator,
+                    all_frames,
+                    stopped,
+                )
+            bundle["settings"] = {**options, **bundle["settings"], "all_frames": all_frames}
+            export_results(destination, **bundle)
+            print(f"Response outputs: {destination.resolve()}", flush=True)
+    except Exception as error:
+        (destination / "settings.json").write_text(
+            json.dumps(dict(options, status="failed", error_type=type(error).__name__)) + "\n"
+        )
+        raise
     finally:
         param.post_rise_center_mode = previous_mode
 
@@ -582,7 +657,7 @@ def build_parser():
     parser.add_argument("--sigma-threshold", type=float, default=3.0)
     parser.add_argument("--min-consecutive", type=int, default=3)
     parser.add_argument("--post-rise-center-mode", type=int, choices=[1, 2, 3], default=param.post_rise_center_mode)
-    parser.add_argument("--center-estimator", choices=["v2", "validated", "legacy"], default=None)
+    parser.add_argument("--center-estimator", choices=["local_conic", "v2", "validated", "legacy"], default=None)
     parser.add_argument(
         "--stop-measurement",
         action=argparse.BooleanOptionalAction,
@@ -595,6 +670,18 @@ def build_parser():
     parser.add_argument("--stop-activity-ratio", type=float, default=param.stop_activity_ratio)
     parser.add_argument("--stop-min-duration-rotations", type=float, default=param.stop_min_duration_rotations)
     parser.add_argument("--output-suffix", type=str, default=None)
+    parser.add_argument(
+        "--measurement-input",
+        type=str,
+        default=None,
+        help="Recalculate centers/angles/metrics from an explicit local source manifest",
+    )
+    parser.add_argument(
+        "--results-bundle",
+        type=str,
+        default=None,
+        help="Export existing source-aligned results without recomputing measurements",
+    )
 
     return parser
 
@@ -614,4 +701,6 @@ if __name__ == "__main__":
         center_estimator=args.center_estimator,
         all_frames=args.all_frames,
         stop_measurement_enabled=args.stop_measurement,
+        results_bundle=args.results_bundle,
+        measurement_input=args.measurement_input,
     )

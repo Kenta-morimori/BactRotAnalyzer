@@ -84,7 +84,7 @@ def test_switching_does_not_bridge_timestamp_gap():
     assert counts[0][0] == 0
 
 
-def test_default_entry_point_selects_v2():
+def test_default_entry_point_selects_local_conic_with_explicit_compatibility_backends():
     path = Path(__file__).parents[1] / "scripts/04_repellent_response_analysis.py"
     spec = importlib.util.spec_from_file_location("repellent_entry", path)
     assert spec is not None and spec.loader is not None
@@ -93,9 +93,9 @@ def test_default_entry_point_selects_v2():
     import inspect
 
     assert inspect.signature(entry.main).parameters["center_estimator"].default is None
-    assert param.center_estimator == "v2"
+    assert param.center_estimator == "local_conic"
     assert param.stop_measurement_enabled is True
-    assert entry.resolve_center_options(None, None) == ("v2", True)
+    assert entry.resolve_center_options(None, None) == ("local_conic", True)
     assert entry.resolve_center_options("validated", False) == ("validated", False)
     assert entry.resolve_center_options("legacy", True) == ("legacy", True)
 

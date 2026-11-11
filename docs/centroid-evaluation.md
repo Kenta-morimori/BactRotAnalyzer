@@ -232,7 +232,7 @@ python3 scripts/08_registered_centroid_review.py \
   --dataset data/repellent-response/<dataset> \
   --diagnostics outputs/centroid_evaluation/<stage-A-run> \
   --prior-review outputs/centroid_evaluation/<TIFF-review-run> \
-  --raw-centroids outputs/repellent-response/<dataset>/raw_centroid \
+  --raw-centroids outputs/repellent-response/<dataset>/raw_centroid/standard-largest-contour-area-centroid-threshold-120-v3 \
   --output outputs/centroid_evaluation/<new-registered-review-run>
 ```
 
