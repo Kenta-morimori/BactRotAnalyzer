@@ -129,6 +129,12 @@ def test_cache_reuse_setting_changes_input_changes_and_tampering_are_distinct(tm
     other_csv.write_text("corrupt")
     prepare(path)
     assert len(pd.read_csv(other_csv)) == 80
+    metadata = other_csv.with_suffix(".json")
+    altered = json.loads(metadata.read_text())
+    altered["method"] = "incorrect outer method label"
+    inputs._write(metadata, altered)
+    prepare(path)
+    assert json.loads(metadata.read_text())["method"] == inputs.TIFF_METHOD
     image = next((tmp_path / "data").rglob("*.tif"))
     with Image.open(image) as im:
         plane, tags = np.array(im), dict(im.tag_v2)

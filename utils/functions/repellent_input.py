@@ -318,11 +318,24 @@ def prepare_measurements(path, output_root, *, source, day, numbers=None, all_fr
         key = hashlib.sha256(json.dumps(provenance, sort_keys=True).encode()).hexdigest()
         cache = output_root / "raw_centroid" / method / key
         csv, metadata = cache.with_suffix(".csv"), cache.with_suffix(".json")
+        metadata_fields = dict(
+            sample_no=sample["sample_no"],
+            frame_count=len(_scope(pd.DataFrame(rows), sample, all_frames)),
+            method=method,
+            px2um_x=sample["px2um_x"],
+            px2um_y=sample["px2um_y"],
+            source_id=sample["input_id"],
+            provenance=provenance,
+        )
         reusable = False
         if not force and csv.is_file() and metadata.is_file():
             try:
                 saved = json.loads(metadata.read_text())
-                reusable = saved.get("provenance") == provenance and saved.get("csv_sha256") == _hash(csv)
+                reusable = (
+                    isinstance(saved, dict)
+                    and all(saved.get(name) == value for name, value in metadata_fields.items())
+                    and saved.get("csv_sha256") == _hash(csv)
+                )
             except (ValueError, OSError):
                 reusable = False
         if not reusable:
@@ -333,16 +346,7 @@ def prepare_measurements(path, output_root, *, source, day, numbers=None, all_fr
             temporary.replace(csv)
             _write(
                 metadata,
-                dict(
-                    sample_no=sample["sample_no"],
-                    frame_count=len(raw),
-                    method=method,
-                    px2um_x=sample["px2um_x"],
-                    px2um_y=sample["px2um_y"],
-                    source_id=sample["input_id"],
-                    provenance=provenance,
-                    csv_sha256=_hash(csv),
-                ),
+                dict(metadata_fields, csv_sha256=_hash(csv)),
             )
         raw = pd.read_csv(csv, float_precision="round_trip")
         entry = dict(
