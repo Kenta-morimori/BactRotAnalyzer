@@ -15,6 +15,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+
+      - name: Install review video encoder
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
       
       - name: Set PYTHONPATH
         run: echo "PYTHONPATH=${GITHUB_WORKSPACE}/scripts/functions" >> $GITHUB_ENV
