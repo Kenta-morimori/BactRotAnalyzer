@@ -30,6 +30,20 @@ def initial_threshold(sample):
     return TIFF_INITIAL_THRESHOLD if value is None else value
 
 
+def missing_tiff_setup(sample):
+    """Describe the same saved choices required before image extraction."""
+    return [
+        label
+        for missing, label in (
+            (sample.get("target_confirmed") is not True, "確認済みとして保存"),
+            (sample.get("threshold") is None, "閾値"),
+            (sample.get("roi") is None, "固定ROI"),
+            (not sample.get("seeds"), "対象点"),
+        )
+        if missing
+    ]
+
+
 def _hash(path):
     digest = hashlib.sha256()
     with Path(path).open("rb") as stream:
@@ -366,13 +380,12 @@ def prepare_measurements(
         raise ValueError("recording order has not been confirmed")
     samples = selected_samples(settings, numbers)
     for sample in samples:
-        if source == "tiff" and (
-            sample.get("target_confirmed") is not True
-            or sample.get("threshold") is None
-            or sample.get("roi") is None
-            or not sample.get("seeds")
-        ):
-            raise ValueError(f"No.{sample['sample_no']}: confirm target, threshold and fixed ROI first")
+        if source == "tiff" and missing_tiff_setup(sample):
+            raise ValueError(
+                f"No.{sample['sample_no']}: confirm target, threshold and fixed ROI first. "
+                f"不足: {'・'.join(missing_tiff_setup(sample))}。"
+                f"HTMLで対象指定・確認済み保存を行ってください。設定ファイル: {path}"
+            )
         if (
             not np.isfinite([sample["px2um_x"], sample["px2um_y"]]).all()
             or min(sample["px2um_x"], sample["px2um_y"]) <= 0

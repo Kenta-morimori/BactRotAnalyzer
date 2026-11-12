@@ -23,6 +23,7 @@ from utils.functions.repellent_input import (
     _resolve,
     _write,
     initial_threshold,
+    missing_tiff_setup,
     selected_samples,
 )
 from utils.functions.tiff_roi import (
@@ -57,6 +58,8 @@ class Editor:
             samples=selected_samples(settings, self.numbers),
             revision=_hash(self.path),
             defaults=dict(threshold=TIFF_INITIAL_THRESHOLD),
+            settings_path=str(self.path),
+            readiness=saved_readiness(settings),
         )
 
     def recording(self, number):
@@ -240,9 +243,12 @@ def editor_server(path, numbers=None, confirm_order=False):
                             self.reply(409, {"error": "設定画面は終了中です"})
                             return
                         closing.set()
-                        command = analysis_command(editor.settings()["day"])
+                        settings = editor.settings()
                         try:
-                            self.reply(200, dict(command=command))
+                            self.reply(
+                                200,
+                                dict(command=analysis_command(settings["day"]), **settings["readiness"]),
+                            )
                         finally:
                             threading.Thread(target=server.shutdown, daemon=True).start()
                     return
@@ -272,6 +278,39 @@ def analysis_command(day):
     return "python scripts/04_repellent_response_analysis.py --day " + shlex.quote(day)
 
 
+def saved_readiness(settings):
+    """Report persisted choices for all samples, including those hidden in the editor."""
+    missing = [
+        dict(sample_no=s["sample_no"], missing=missing_tiff_setup(s))
+        for s in selected_samples(settings)
+        if missing_tiff_setup(s)
+    ]
+    blocked = {s["sample_no"] for s in missing}
+    ready = [s["sample_no"] for s in settings["samples"] if s["sample_no"] not in blocked]
+    ordered = settings.get("order_confirmed") is True
+    command = analysis_command(settings["day"])
+    executable = None
+    if ordered and ready:
+        executable = command if not missing else command + " --input-samples " + " ".join(map(str, ready))
+    lines = ["保存済みの解析可能No.: " + (", ".join(map(str, ready)) if ordered and ready else "なし")]
+    if not ordered:
+        lines.append("不足: 撮影順の確認・保存")
+    lines.extend(f"No.{s['sample_no']} 不足: {'・'.join(s['missing'])}" for s in missing)
+    if executable:
+        lines.extend(["今すぐ解析できるコマンド:", executable])
+    else:
+        lines.append("対象指定・確認済み保存が完了するまで解析できません。終了操作は保存しません。")
+    if missing or not ordered:
+        lines.extend(["全サンプルを確認済み保存した後のコマンド（現在は全件実行不可）:", command])
+    return dict(
+        sample_count=len(settings["samples"]),
+        ready_samples=ready if ordered else [],
+        missing_samples=missing,
+        executable_command=executable,
+        summary="\n".join(lines),
+    )
+
+
 def serve_editor(path, numbers=None, confirm_order=False):
     server = editor_server(path, numbers, confirm_order)
     url = f"http://127.0.0.1:{server.server_port}/"
@@ -283,7 +322,4 @@ def serve_editor(path, numbers=None, confirm_order=False):
         pass
     finally:
         server.server_close()
-        print(
-            "設定画面を終了しました。確認済み設定で解析するコマンド:\n" + analysis_command(_load(path)["day"]),
-            flush=True,
-        )
+        print("設定画面を終了しました。\n" + saved_readiness(_load(path))["summary"], flush=True)

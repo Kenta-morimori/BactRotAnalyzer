@@ -90,6 +90,37 @@ def test_save_changes_only_selected_no_and_preserves_other_settings(tmp_path):
         editor.preview(dict(sample_no=9))
 
 
+def test_readiness_uses_persisted_settings_and_includes_hidden_unconfirmed_samples(tmp_path):
+    path, settings = settings_file(tmp_path)
+    other = copy.deepcopy(settings["samples"][0])
+    other.update(sample_no=9, input_id="second-target", target_confirmed=False, seeds={})
+    settings["samples"].append(other)
+    _write(path, settings)
+    before = path.read_bytes()
+    status = Editor(path, numbers=[7]).settings()
+    assert status["settings_path"] == str(path.resolve())
+    ready = status["readiness"]
+    assert ready["ready_samples"] == [7]
+    assert ready["executable_command"].endswith("--input-samples 7")
+    assert ready["missing_samples"] == [dict(sample_no=9, missing=["確認済みとして保存", "対象点"])]
+    assert "現在は全件実行不可" in ready["summary"]
+    assert path.read_bytes() == before
+    settings["order_confirmed"] = False
+    _write(path, settings)
+    status = Editor(path, confirm_order=True).settings()
+    assert status["order_confirmed"]  # The checkbox hint is not a persisted confirmation.
+    assert status["readiness"]["ready_samples"] == []
+    assert status["readiness"]["executable_command"] is None
+    assert "撮影順の確認・保存" in status["readiness"]["summary"]
+    settings["order_confirmed"] = True
+    other.update(target_confirmed=True, seeds=settings["samples"][0]["seeds"])
+    _write(path, settings)
+    status = Editor(path).settings()["readiness"]
+    assert status["executable_command"] == "python scripts/04_repellent_response_analysis.py --day day"
+    assert status["missing_samples"] == []
+    assert status["sample_count"] == 2
+
+
 def test_invalid_or_stale_save_does_not_replace_settings(tmp_path):
     path, settings = settings_file(tmp_path, gap=True)
     editor = Editor(path)
@@ -134,6 +165,10 @@ def test_draft_save_does_not_confirm_and_auto_roi_reuses_existing_inference(tmp_
         )
     )
     assert json.loads(path.read_text())["samples"][0]["target_confirmed"] is False
+    status = editor.settings()["readiness"]
+    assert status["ready_samples"] == [] and status["executable_command"] is None
+    assert status["missing_samples"] == [dict(sample_no=7, missing=["確認済みとして保存", "対象点"])]
+    assert "終了操作は保存しません" in status["summary"]
 
 
 def test_http_requires_local_token_and_serves_full_record_preview(tmp_path):
@@ -187,10 +222,14 @@ def test_configure_opens_html_for_only_requested_samples(tmp_path, monkeypatch):
     assert opened == [(path, [7], False)]
 
 
-def test_exit_returns_to_caller_closes_port_and_preserves_json(tmp_path, monkeypatch, capsys):
+@pytest.mark.parametrize("confirmed", [True, False])
+def test_exit_returns_to_caller_closes_port_and_preserves_json(tmp_path, monkeypatch, capsys, confirmed):
     from utils.functions import repellent_editor
 
-    path, _ = settings_file(tmp_path)
+    path, settings = settings_file(tmp_path)
+    if not confirmed:
+        settings["samples"][0].update(target_confirmed=False, seeds={})
+        _write(path, settings)
     before = path.read_bytes()
     opened = threading.Event()
     addresses = []
@@ -216,6 +255,11 @@ def test_exit_returns_to_caller_closes_port_and_preserves_json(tmp_path, monkeyp
     ) as response:
         result = json.load(response)
     assert result["command"] == "python scripts/04_repellent_response_analysis.py --day day"
+    if confirmed:
+        assert result["ready_samples"] == [7] and result["missing_samples"] == []
+    else:
+        assert result["ready_samples"] == [] and result["executable_command"] is None
+        assert "No.7 不足: 確認済みとして保存・対象点" in result["summary"]
     thread.join(5)
     assert not thread.is_alive() and path.read_bytes() == before
     port = int(base.rsplit(":", 1)[1])
