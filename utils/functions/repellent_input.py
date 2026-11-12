@@ -18,6 +18,7 @@ from utils.functions import tiff_roi_io as io
 from utils.functions.get_centroid_coordinate import contours
 from utils.functions.repellent_workflow import acquisition_policy
 from utils.functions.tiff_roi import ROI, Tracker, nominal_max_dt
+from utils.run_inputs import approved_image_numbers
 
 TIFF_METHOD = "tiff-seeded-fixed-roi-area-centroid-v1"
 AVI_METHOD = "avi-largest-contour-area-centroid-threshold-120-v3"
@@ -42,6 +43,17 @@ def missing_tiff_setup(sample):
         )
         if missing
     ]
+
+
+def invalidate_review(settings, sample):
+    """Legacy editing cannot silently retain approval of an older movie."""
+    review = settings.get("review")
+    if review is not None:
+        sample["target_confirmed"] = False
+        review["accepted_samples"] = [n for n in review["accepted_samples"] if n != sample["sample_no"]]
+        review["held_samples"] = [
+            s["sample_no"] for s in settings["samples"] if s["sample_no"] not in review["accepted_samples"]
+        ]
 
 
 def _hash(path):
@@ -228,6 +240,7 @@ def configure_settings(path, *, numbers=None, confirm_order=False):
         sample.update(
             threshold=threshold, roi=[roi.x, roi.y, roi.width, roi.height], seeds=seeds, target_confirmed=True
         )
+        invalidate_review(settings, sample)
         _write(path, settings)
     _write(path, settings)
     return settings
@@ -247,8 +260,8 @@ def _scope(raw, sample, all_frames):
     return raw[raw.source_frame_1based.between(*bounds)].copy()
 
 
-def _extract(sample, rows, source, settings_path):
-    records = []
+def _observations(sample, rows, source, settings_path):
+    """Yield each measurement together with the exact image and tracking result."""
     capture = None
     selection = None
     if source == "tiff":
@@ -266,8 +279,9 @@ def _extract(sample, rows, source, settings_path):
                 seed = sample["seeds"].get(str(row["source_frame_1based"]))
                 if seed is not None:
                     selection = row["source_frame_1based"]
+                plane = io.load_image(row["path"])
                 result = tracker.step(
-                    io.load_image(row["path"]),
+                    plane,
                     row["source_frame_1based"],
                     stamp,
                     row["segment_id"],
@@ -285,7 +299,7 @@ def _extract(sample, rows, source, settings_path):
                 if not detected:
                     x = y = np.nan
                 reason, reacquired = ("" if detected else "missing_centroid_or_time"), False
-            records.append(
+            yield (
                 dict(
                     source_frame_1based=row["source_frame_1based"],
                     time_sec=row["time_sec"],
@@ -301,14 +315,19 @@ def _extract(sample, rows, source, settings_path):
                     target_id=f"{sample['input_id']}@selection-{selection}" if source == "tiff" else sample["input_id"],
                     source_input=row["path"],
                     avi_frame_1based=index + 1 if source == "avi" else None,
-                )
+                ),
+                plane if source == "tiff" else None,
+                result if source == "tiff" else None,
             )
         if capture is not None and capture.read()[0]:
             raise ValueError("AVI/TIFF observation counts differ; original mapping cannot be assumed")
     finally:
         if capture is not None:
             capture.release()
-    return pd.DataFrame(records)
+
+
+def _extract(sample, rows, source, settings_path):
+    return pd.DataFrame(record for record, _, _ in _observations(sample, rows, source, settings_path))
 
 
 def _background_series(background, path, rows, sample, raw, all_frames):
@@ -378,7 +397,7 @@ def prepare_measurements(
     settings = _load(path, source, day)
     if settings.get("order_confirmed") is not True:
         raise ValueError("recording order has not been confirmed")
-    samples = selected_samples(settings, numbers)
+    samples = selected_samples(settings, approved_image_numbers(settings, numbers))
     for sample in samples:
         if source == "tiff" and missing_tiff_setup(sample):
             raise ValueError(
@@ -415,6 +434,20 @@ def prepare_measurements(
             paths.append(_resolve(path, sample["avi"]))
         hashes = {str(p): _hash(p) for p in paths}
         input_hashes.update(hashes)
+        reviewed = None
+        review_path = None
+        if settings.get("review") is not None:
+            from utils.functions.repellent_review import verify_artifact
+
+            if not sample.get("review_artifact"):
+                raise ValueError("承認した確認動画がありません。HTMLで再生成・承認してください")
+            review_path = _resolve(path, sample["review_artifact"])
+            reviewed = verify_artifact(review_path, sample, verify_images=False, settings_path=path)
+            if not reviewed["eligible"] or reviewed["input_hashes"] != hashes:
+                raise ValueError("元TIFFが確認動画から変わりました。再生成・承認してください")
+            input_hashes[str(review_path)] = _hash(review_path)
+            for name, digest in reviewed["artifact_hashes"].items():
+                input_hashes[str(review_path.parent / name)] = digest
         provenance = dict(
             source=source,
             method=method,
@@ -451,7 +484,12 @@ def prepare_measurements(
             except (ValueError, OSError):
                 reusable = False
         if not reusable:
-            raw = _scope(_extract(sample, rows, source, path), sample, all_frames).reset_index(drop=True)
+            extracted = (
+                pd.read_csv(review_path.parent / "centroids.csv", float_precision="round_trip")
+                if reviewed is not None and review_path is not None and not force
+                else _extract(sample, rows, source, path)
+            )
+            raw = _scope(extracted, sample, all_frames).reset_index(drop=True)
             cache.parent.mkdir(parents=True, exist_ok=True)
             temporary = csv.with_suffix(".csv.tmp")
             raw.to_csv(temporary, index=False, float_format="%.17g")
@@ -467,9 +505,13 @@ def prepare_measurements(
             metadata=str(metadata),
             acquisition_tiff=rows[0]["path"],
             identity=(
-                "user selected observed target within continuous runs; unverified physical identity"
-                if source == "tiff"
-                else "AVI ordinal matched to TIFF suffix order by recording name and count; unverified target identity"
+                "batch reviewed central/manual target within independent continuous runs; unverified physical identity"
+                if reviewed is not None
+                else (
+                    "user selected observed target within continuous runs; unverified physical identity"
+                    if source == "tiff"
+                    else "AVI ordinal matched to TIFF suffix order by recording name and count; unverified target identity"
+                )
             ),
         )
         background = sample.get("background")

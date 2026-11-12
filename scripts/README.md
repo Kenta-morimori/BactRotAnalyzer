@@ -208,7 +208,7 @@ python3 scripts/tiff_roi_centroid.py --input data/example/tiff_frames \
 
 ### TIFF/AVIの入力設定と標準忌避応答解析への接続
 
-`prepare_repellent_input.py --init`でconfig任意のローカルJSONを作り、`--configure`で対象・閾値・固定ROIを確認します。
+`prepare_repellent_input.py --init`でconfig任意のローカルJSONを作り、`--configure`のHTMLで中央対象・固定ROIの候補と横並び動画を一括生成し、必要な撮影だけ修正してまとめて承認します。確認動画はローカルへ保存され、承認したNo.をday指定だけで解析できます。
 `04_repellent_response_analysis.py --input-settings <JSON> --input-source tiff|avi`は、
 入力源別の校正・キャッシュを使って元画像から標準measurement manifestを生成し、中心以降を再計算します。
 ユーザー作成の`brightness_data/<撮影名>.csv`を登録し、従来の自動処理で上昇点を検出します。背景未提供・未検出の前後指標は未実行です。

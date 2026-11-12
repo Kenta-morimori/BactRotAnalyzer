@@ -9,7 +9,7 @@ import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import numpy as np
 from PIL import Image
@@ -23,9 +23,11 @@ from utils.functions.repellent_input import (
     _resolve,
     _write,
     initial_threshold,
+    invalidate_review,
     missing_tiff_setup,
     selected_samples,
 )
+from utils.functions.repellent_review import ReviewManager
 from utils.functions.tiff_roi import (
     ROI,
     Tracker,
@@ -42,24 +44,28 @@ def _png(array):
 
 
 class Editor:
-    def __init__(self, path, numbers=None, confirm_order=False):
+    def __init__(self, path, numbers=None, confirm_order=False, review_root=None, record_runs=False):
         self.path = Path(path).resolve()
         self.numbers = numbers
         self.rows = {}
         self.lock = threading.RLock()
         self.confirm_order = confirm_order
+        self.review = ReviewManager(self.path, numbers, root=review_root, record_runs=record_runs)
 
     def settings(self):
         settings = _load(self.path)
+        review_state = self.review.status()
         return dict(
             day=settings["day"],
             source=settings["source"],
             order_confirmed=settings["order_confirmed"] or self.confirm_order,
             samples=selected_samples(settings, self.numbers),
+            all_sample_numbers=[s["sample_no"] for s in settings["samples"]],
             revision=_hash(self.path),
             defaults=dict(threshold=TIFF_INITIAL_THRESHOLD),
             settings_path=str(self.path),
-            readiness=saved_readiness(settings),
+            readiness=saved_readiness(settings, review_state),
+            review=review_state,
         )
 
     def recording(self, number):
@@ -124,11 +130,15 @@ class Editor:
         )
 
     def auto_roi(self, request):
-        sample, rows, _ = self.recording(request["sample_no"])
+        sample, rows, required = self.recording(request["sample_no"])
+        if not required:
+            raise ValueError("有効な開始時刻がありません")
+        start = next(i for i, row in enumerate(rows) if row["source_frame_1based"] == required[0])
+        rows = rows[start : start + 200]
         seeds = request.get("seeds", sample.get("seeds", {}))
         seed = seeds.get(str(rows[0]["source_frame_1based"]))
         if seed is None:
-            raise ValueError("先頭フレームで対象点を指定してください")
+            raise ValueError(f"元フレーム{required[0]}で対象点を指定してください")
         roi, diagnostics = infer_roi(
             [images.load_image(r["path"]) for r in rows[:200]],
             rows[:200],
@@ -178,6 +188,7 @@ class Editor:
         if confirmed and not order:
             raise ValueError("撮影順を確認してください")
         sample.update(threshold=threshold, roi=request["roi"], seeds=seeds, target_confirmed=confirmed)
+        invalidate_review(settings, sample)
         settings["order_confirmed"] = order
         if request["revision"] != _hash(self.path):
             raise ValueError("保存直前に設定が変更されました。再読込してください")
@@ -185,8 +196,8 @@ class Editor:
         return self.settings()
 
 
-def editor_server(path, numbers=None, confirm_order=False):
-    editor = Editor(path, numbers, confirm_order)
+def editor_server(path, numbers=None, confirm_order=False, review_root=None, record_runs=False):
+    editor = Editor(path, numbers, confirm_order, review_root, record_runs)
     if editor.settings()["source"] != "tiff":
         raise ValueError("HTML対象設定はTIFF入力用です")
     token = secrets.token_urlsafe(32)
@@ -217,11 +228,67 @@ def editor_server(path, numbers=None, confirm_order=False):
             if not self.allowed():
                 self.reply(403, {"error": "local host required"})
                 return
-            if self.path != "/":
+            parsed = urlparse(self.path)
+            if parsed.path == "/review/media":
+                query = parse_qs(parsed.query)
+                if query.get("token") != [token]:
+                    self.reply(403, {"error": "local editor token required"})
+                    return
+                try:
+                    artifact = editor.review.artifact(int(query["sample_no"][0]))
+                    self.media(artifact.parent / "review.mp4")
+                except (ValueError, KeyError, OSError) as error:
+                    self.reply(400, {"error": str(error)})
+                return
+            if parsed.path != "/":
                 self.reply(404, {"error": "not found"})
                 return
             page = Path(__file__).with_name("repellent_editor.html").read_text()
             self.reply(200, page.replace("EDITOR_TOKEN", token), "text/html")
+
+        def media(self, path):
+            size = path.stat().st_size
+            start, end = 0, size - 1
+            requested = self.headers.get("Range")
+            if requested:
+                try:
+                    unit, bounds = requested.split("=", 1)
+                    left, right = bounds.split("-", 1)
+                    if unit != "bytes" or "," in bounds:
+                        raise ValueError()
+                    start, end = (
+                        (int(left), min(int(right), size - 1) if right else size - 1)
+                        if left
+                        else (max(0, size - int(right)), size - 1)
+                    )
+                    if not 0 <= start <= end < size:
+                        raise ValueError()
+                except ValueError:
+                    self.send_response(416)
+                    self.send_header("Content-Range", f"bytes */{size}")
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
+            self.send_response(206 if requested else 200)
+            self.send_header("Content-Type", "video/mp4")
+            self.send_header("Accept-Ranges", "bytes")
+            self.send_header("Content-Length", str(end - start + 1))
+            self.send_header("Cache-Control", "no-store")
+            if requested:
+                self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+            self.end_headers()
+            try:
+                with path.open("rb") as stream:
+                    stream.seek(start)
+                    remaining = end - start + 1
+                    while remaining:
+                        block = stream.read(min(256 * 1024, remaining))
+                        if not block:
+                            break
+                        self.wfile.write(block)
+                        remaining -= len(block)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
 
         def do_POST(self):
             origin = self.headers.get("Origin")
@@ -243,6 +310,7 @@ def editor_server(path, numbers=None, confirm_order=False):
                             self.reply(409, {"error": "設定画面は終了中です"})
                             return
                         closing.set()
+                        editor.review.cancel.set()
                         settings = editor.settings()
                         try:
                             self.reply(
@@ -258,6 +326,14 @@ def editor_server(path, numbers=None, confirm_order=False):
                     "/auto-roi": lambda: editor.auto_roi(request),
                     "/save": lambda: editor.save(request),
                     "/locate": lambda: editor.locate(request),
+                    "/review/status": editor.review.status,
+                    "/review/start": lambda: editor.review.start(request.get("samples"), request.get("overrides")),
+                    "/review/details": lambda: editor.review.details(request["sample_no"]),
+                    "/review/cancel": editor.review.interrupt,
+                    "/review/approve": lambda: editor.review.approve(
+                        request["samples"], request["revision"], request.get("order_confirmed") is True
+                    )
+                    and editor.settings(),
                 }
                 action = actions.get(urlparse(self.path).path)
                 if action is None:
@@ -271,6 +347,7 @@ def editor_server(path, numbers=None, confirm_order=False):
                 self.reply(400, {"error": str(error)})
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    setattr(server, "review", editor.review)
     return server
 
 
@@ -278,21 +355,37 @@ def analysis_command(day):
     return "python scripts/04_repellent_response_analysis.py --day " + shlex.quote(day)
 
 
-def saved_readiness(settings):
+def saved_readiness(settings, review_state=None):
     """Report persisted choices for all samples, including those hidden in the editor."""
-    missing = [
-        dict(sample_no=s["sample_no"], missing=missing_tiff_setup(s))
-        for s in selected_samples(settings)
-        if missing_tiff_setup(s)
-    ]
+    batch = settings.get("review")
+    missing = []
+    for sample in selected_samples(settings):
+        reasons = missing_tiff_setup(sample)
+        if batch is not None and sample["sample_no"] not in batch["accepted_samples"]:
+            reasons = ["一括承認対象外（保留）"] + reasons
+        if reasons:
+            missing.append(dict(sample_no=sample["sample_no"], missing=reasons))
     blocked = {s["sample_no"] for s in missing}
     ready = [s["sample_no"] for s in settings["samples"] if s["sample_no"] not in blocked]
     ordered = settings.get("order_confirmed") is True
     command = analysis_command(settings["day"])
     executable = None
     if ordered and ready:
-        executable = command if not missing else command + " --input-samples " + " ".join(map(str, ready))
+        executable = (
+            command if batch is not None or not missing else command + " --input-samples " + " ".join(map(str, ready))
+        )
     lines = ["保存済みの解析可能No.: " + (", ".join(map(str, ready)) if ordered and ready else "なし")]
+    pending = [
+        s["sample_no"]
+        for s in settings["samples"]
+        if s["sample_no"] in ready
+        and (review_state or {}).get("entries", {}).get(str(s["sample_no"]), {}).get("artifact")
+        and s.get("review_artifact") != review_state["entries"][str(s["sample_no"])]["artifact"]
+    ]
+    if pending:
+        lines.append(
+            "未承認の新しい候補No.: " + ", ".join(map(str, pending)) + "。下のコマンドは前回承認済みの条件を使います。"
+        )
     if not ordered:
         lines.append("不足: 撮影順の確認・保存")
     lines.extend(f"No.{s['sample_no']} 不足: {'・'.join(s['missing'])}" for s in missing)
@@ -300,7 +393,7 @@ def saved_readiness(settings):
         lines.extend(["今すぐ解析できるコマンド:", executable])
     else:
         lines.append("対象指定・確認済み保存が完了するまで解析できません。終了操作は保存しません。")
-    if missing or not ordered:
+    if batch is None and (missing or not ordered):
         lines.extend(["全サンプルを確認済み保存した後のコマンド（現在は全件実行不可）:", command])
     return dict(
         sample_count=len(settings["samples"]),
@@ -308,18 +401,25 @@ def saved_readiness(settings):
         missing_samples=missing,
         executable_command=executable,
         summary="\n".join(lines),
+        pending_review_samples=pending,
     )
 
 
 def serve_editor(path, numbers=None, confirm_order=False):
-    server = editor_server(path, numbers, confirm_order)
+    server = editor_server(path, numbers, confirm_order, None, True)
     url = f"http://127.0.0.1:{server.server_port}/"
-    print(f"サンプル設定画面: {url}\n保存はNo.単位です。終了は画面の終了ボタン（Ctrl-Cも可）。", flush=True)
+    print(
+        f"サンプル設定画面: {url}\n自動設定・動画確認後、まとめて承認して保存します。終了は画面の終了ボタン（Ctrl-Cも可）。",
+        flush=True,
+    )
     try:
         webbrowser.open(url)
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        if hasattr(server, "review"):
+            server.review.close()
         server.server_close()
-        print("設定画面を終了しました。\n" + saved_readiness(_load(path))["summary"], flush=True)
+        state = server.review.status() if hasattr(server, "review") else None
+        print("設定画面を終了しました。\n" + saved_readiness(_load(path), state)["summary"], flush=True)

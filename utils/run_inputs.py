@@ -67,6 +67,26 @@ def manifest_inputs(path, kind):
         raise ValueError(f"Unsupported input descriptor: {kind}")
 
 
+def approved_image_numbers(document, numbers=None):
+    """A persisted batch approval owns the default analysis scope, never the editor scope."""
+    review = document.get("review")
+    if review is None:
+        return numbers
+    accepted = review.get("accepted_samples")
+    ids = [s["sample_no"] for s in document["samples"]]
+    if (
+        not isinstance(accepted, list)
+        or not accepted
+        or any(type(n) is not int for n in accepted)
+        or len(set(accepted)) != len(accepted)
+        or not set(accepted) <= set(ids)
+    ):
+        raise ValueError("invalid or empty batch approval; review and approve the preprocessing first")
+    if numbers is not None and (not numbers or not set(numbers) <= set(accepted)):
+        raise ValueError("未承認・保留のNo.が含まれます。HTMLで再生成・承認してください")
+    return accepted if numbers is None else numbers
+
+
 def repellent_inputs(args):
     settings_path = getattr(args, "input_settings", None)
     selected_source = getattr(args, "input_source", None)
@@ -76,7 +96,7 @@ def repellent_inputs(args):
         path = Path(settings_path).resolve()
         yield path
         document = json.loads(path.read_text(encoding="utf-8"))
-        numbers = getattr(args, "input_samples", None)
+        numbers = approved_image_numbers(document, getattr(args, "input_samples", None))
         for sample in document["samples"]:
             if numbers is not None and sample["sample_no"] not in numbers:
                 continue
@@ -85,6 +105,12 @@ def repellent_inputs(args):
                 yield path.parent / sample["avi"]
             if sample.get("background") is not None:
                 yield path.parent / sample["background"]["csv"]
+            if sample.get("review_artifact"):
+                artifact = (path.parent / sample["review_artifact"]).resolve()
+                yield artifact
+                saved = json.loads(artifact.read_text())
+                for name in saved.get("artifact_hashes", {}):
+                    yield artifact.parent / name
         suffix = getattr(args, "output_suffix", None)
         if suffix is None:
             suffix = f"reanalysis_{selected_source}"

@@ -437,3 +437,85 @@ def test_settings_cli_creates_default_json_without_overwriting_prior_choices(cli
     assert document["samples"][0]["target_confirmed"] is False
     repeated = run_cli(cli_repository, "scripts/prepare_repellent_input.py", *arguments)
     assert repeated.returncode != 0 and path.read_bytes() == saved
+
+
+def test_batch_review_cli_approves_subset_then_day_only_analysis_keeps_original_number(cli_repository):
+    import copy
+    import re
+    import time
+    from urllib.request import Request, urlopen
+
+    import pandas as pd
+
+    from tests.test_repellent_image_input import settings_file
+
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("ffmpeg unavailable")
+    draft, settings = settings_file(cli_repository, frames=24)
+    settings["samples"][0].update(threshold=None, roi=None, seeds={}, target_confirmed=False)
+    held = copy.deepcopy(settings["samples"][0])
+    held.update(sample_no=9, input_id="not-visible", threshold=20000)
+    settings["samples"].append(held)
+    path = cli_repository / "data/day/repellent_input.json"
+    path.write_text(json.dumps(settings))
+    draft.unlink()
+    code = (
+        "import runpy,sys,webbrowser;webbrowser.open=lambda _:None;"
+        "sys.argv=['scripts/prepare_repellent_input.py','--day','day','--configure'];"
+        "runpy.run_path(sys.argv[0],run_name='__main__')"
+    )
+    process = subprocess.Popen(
+        [sys.executable, "-u", "-c", code],
+        cwd=cli_repository,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert process.stdout is not None
+        line = process.stdout.readline()
+        matched = re.search(r"http://127.0.0.1:\d+", line)
+        assert matched is not None, line
+        base = matched.group(0)
+        with urlopen(base, timeout=5) as response:
+            token = re.search(r"const token='([^']+)'", response.read().decode()).group(1)
+
+        def post(route, body):
+            with urlopen(
+                Request(base + route, data=json.dumps(body).encode(), headers={"X-Editor-Token": token}), timeout=20
+            ) as response:
+                return json.load(response)
+
+        initial = post("/settings", {})
+        before = path.read_bytes()
+        post("/review/start", {})
+        for _ in range(400):
+            status = post("/review/status", {})
+            if status["status"] not in {"running", "queued", "finalizing"}:
+                break
+            time.sleep(0.05)
+        assert status["status"] == "complete", status
+        assert path.read_bytes() == before
+        assert status["entries"]["7"]["eligible"] and not status["entries"]["9"]["eligible"]
+        post("/review/approve", dict(samples=[7], revision=initial["revision"]))
+        post("/exit", {})
+        stdout, stderr = process.communicate(timeout=20)
+        assert process.returncode == 0, stdout + stderr
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.communicate()
+    result = run_cli(cli_repository, "scripts/04_repellent_response_analysis.py", "--day", "day")
+    assert result.returncode == 0, result.stderr
+    output = cli_repository / "outputs/reanalysis_tiff/day/repellent_response"
+    table = pd.read_csv(output / "00_all_rotational_analysis/centroid_coordinate/centroid_time_series.csv")
+    assert table.sample_no.unique().tolist() == [7] and len(table) == 24
+    saved = json.loads(path.read_text())
+    assert saved["review"]["held_samples"] == [9]
+    movie = Path(saved["samples"][0]["review_artifact"]).parent / "review.mp4"
+    assert movie.is_file()
+    records = [json.loads(p.read_text()) for p in (cli_repository / "outputs/_runs").glob("*/*/manifest.json")]
+    assert len(records) == 2 and all(r["status"] == "complete" for r in records)
+    assert any(r["parameters"].get("operation") == "central-target-fixed-roi-batch-review-v1" for r in records)
+    inventory = {f["path"] for r in records for f in r["inputs"]["files"]}
+    assert str(movie) in inventory

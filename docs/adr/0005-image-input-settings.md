@@ -1,6 +1,6 @@
 # ADR 0005: TIFF/AVIの明示入力設定と標準解析への接続
 
-- 状態: 採用（背景分担は[ADR 0006](0006-provided-brightness-rise.md)、パス・入力源の必須指定は[ADR 0007](0007-default-image-settings.md)で置換）
+- 状態: 採用（背景分担は[ADR 0006](0006-provided-brightness-rise.md)、パス・入力源の必須指定は[ADR 0007](0007-default-image-settings.md)で置換、手動対象指定の必須条件は[ADR 0008](0008-batch-tiff-review.md)で置換）
 
 ## 背景
 
