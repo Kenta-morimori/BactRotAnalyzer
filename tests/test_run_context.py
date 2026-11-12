@@ -478,7 +478,9 @@ def test_batch_review_cli_approves_subset_then_day_only_analysis_keeps_original_
         assert matched is not None, line
         base = matched.group(0)
         with urlopen(base, timeout=5) as response:
-            token = re.search(r"const token='([^']+)'", response.read().decode()).group(1)
+            matched = re.search(r"const token='([^']+)'", response.read().decode())
+            assert matched is not None
+            token = matched.group(1)
 
         def post(route, body):
             with urlopen(

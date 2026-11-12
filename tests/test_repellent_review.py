@@ -89,9 +89,10 @@ def test_full_field_binary_context_is_visible_outside_the_fixed_roi():
     image = np.zeros((64, 64), np.uint16)
     cv2.circle(image, (32, 32), 3, 10000, -1)
     cv2.circle(image, (8, 8), 3, 10000, -1)
-    sample = dict(input_id="synthetic", roi=[20, 20, 24, 24], threshold=2000, seeds={"1": [32, 32]})
+    bounds = [20, 20, 24, 24]
+    sample = dict(input_id="synthetic", roi=bounds, threshold=2000, seeds={"1": [32, 32]})
     row = dict(source_frame_1based=1, time_sec=0.0, segment_id=0)
-    found = review.Tracker(review.ROI(*sample["roi"]), 2000).step(image, 1, 0.0, seed=[32, 32])
+    found = review.Tracker(review.ROI(*bounds), 2000).step(image, 1, 0.0, seed=[32, 32])
     canvas = review.movie_frame(image, row, found, sample, [0, 10000], [])
     np.testing.assert_array_equal(canvas[100 + 8 * 10, 640 + 8 * 10], [255, 255, 255])
     assert found.point is not None
@@ -334,7 +335,9 @@ def test_http_batch_approval_and_video_range_are_local_and_persistent(tmp_path, 
     base = f"http://127.0.0.1:{server.server_port}"
     try:
         page = urlopen(base).read().decode()
-        token = re.search(r"const token='([^']+)'", page).group(1)
+        matched = re.search(r"const token='([^']+)'", page)
+        assert matched is not None
+        token = matched.group(1)
 
         def post(route, body):
             with urlopen(
