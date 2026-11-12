@@ -6,7 +6,7 @@ import shutil
 import tempfile
 import threading
 from datetime import datetime
-from typing import Dict, List, Literal, Optional, Sequence, Tuple, TypedDict
+from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple, TypedDict
 
 import cv2
 import numpy as np
@@ -254,6 +254,41 @@ def _align_interval_times_and_av(time_arr: Sequence[float], av_arr: Sequence[flo
 
 
 def detect_rise_index(
+    values,
+    baseline_ratio=0.5,
+    sigma_threshold=3.0,
+    min_consecutive=3,
+    *,
+    times=None,
+    source_frames=None,
+    segment_ids=None,
+    max_dt=None,
+    method="sustained",
+    rise_settings=None,
+):
+    """Keep the numeric result keys; sustained detection requires original time.
+
+    The first three parameters describe only the legacy detector. Explicit
+    sustained settings use seconds and are saved separately in the diagnostics.
+    """
+    if method == "legacy":
+        result = _detect_rise_index_legacy(values, baseline_ratio, sigma_threshold, min_consecutive)
+        return result
+    if method != "sustained":
+        raise ValueError("rise method must be sustained or legacy")
+    from utils.functions.background_rise import RiseSettings, detect_sustained_rise
+
+    settings = RiseSettings(**(rise_settings or {}))
+    if times is None:
+        result = detect_sustained_rise(values, np.full(len(values), np.nan), settings=settings)
+        result["reason"] = "original_timestamps_required"
+        return result
+    return detect_sustained_rise(
+        values, times, source_frames=source_frames, segment_ids=segment_ids, max_dt=max_dt, settings=settings
+    )
+
+
+def _detect_rise_index_legacy(
     values: Sequence[float],
     baseline_ratio: float = 0.5,
     sigma_threshold: float = 3.0,
@@ -404,14 +439,23 @@ def detect_rise_points(
     baseline_ratio: float = 0.5,
     sigma_threshold: float = 3.0,
     min_consecutive: int = 3,
-) -> List[Dict[str, float]]:
-    results: List[Dict[str, float]] = []
+    *,
+    time_list=None,
+    source_frame_list=None,
+    method="sustained",
+    rise_settings=None,
+):
+    results = []
     for i, values in enumerate(background_list):
         result = detect_rise_index(
             values=values,
             baseline_ratio=baseline_ratio,
             sigma_threshold=sigma_threshold,
             min_consecutive=min_consecutive,
+            times=None if time_list is None else time_list[i],
+            source_frames=None if source_frame_list is None else source_frame_list[i],
+            method=method,
+            rise_settings=rise_settings,
         )
         result["sample_no"] = float(i + 1)
         result["num_frames"] = float(len(values))
@@ -1454,7 +1498,7 @@ def run_pre_rise_fluctuation(
 
 def add_rise_time_to_results(
     day: str,
-    results: List[Dict[str, float]],
+    results: List[Dict[str, Any]],
     time_list: Sequence[Sequence[float]],
 ) -> None:
     flag_use_manual_rise_time = param.get_flag_use_manual_rise_time(day, default_flag=False)
@@ -1477,6 +1521,11 @@ def add_rise_time_to_results(
                 continue
             manual_rise_time = float(manual_rise_time)
             manual_override_list[i] = True
+            if "method" in result:
+                result["automatic_detection"] = dict(result)
+                result.update(method="manual_time_config", status="provided", reason="manual_time_config")
+                result["rise_time_sec"] = None
+                result["rise_source_frame"] = None
 
             if i >= len(time_list):
                 result["rise_index"] = np.nan

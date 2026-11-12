@@ -2,7 +2,7 @@
 
 [入力契約のADR](../adr/0005-image-input-settings.md)、[Mean CSVと上昇点検出のADR](../adr/0006-provided-brightness-rise.md)、[標準解析・出力](repellent-workflow.md)を参照する。
 config.iniは任意。設定JSONの草案作成、対象設定、解析実行の順に進める。
-ユーザーが作成した背景Mean CSVを読み、従来の自動処理で上昇点を検出する。背景の画像抽出・補正は追加しない。
+ユーザーが作成した背景Mean CSVを読み、[持続上昇検出](background-rise.md)で上昇点を検出する。背景の画像抽出・補正は追加しない。
 解析CLIには[コミット済みのclean Git状態と実行履歴](../development-environment.md)の契約を適用する。
 設定エディタの`--init`と`--configure`は解析結果を作らない。設定JSONはGit管理外へ保存する。
 
@@ -107,7 +107,7 @@ HTMLは閾値が未設定の場合だけ2000を提示し、読込時に初期候
 
 一方、保存重心を固定した中心手法比較の再現には、[measurement manifestによる再計算](repellent-workflow.md#同じ入力から再計算する)を使う。
 元フレーム・時刻・校正・重心の定義・背景・元フレームでの上昇境界を同じ入力から復元し、別suffixへ出力する。
-この再現では保存境界を使い、今回の新しいTIFF入力ではMean CSVから従来の自動上昇検出を使う。
+この再現では保存境界を使い、今回の新しいTIFF入力ではMean CSVから持続上昇検出を使う。
 画像から新たに抽出した面積重心へ差し替えると、保存済み輪郭平均重心を使った報告書の再現にはならない。
 実測のmanifest・設定・照合結果はローカルに保持する。
 
@@ -126,7 +126,7 @@ python3 scripts/04_repellent_response_analysis.py \
 `23`のNo.14はconfig由来の2049–16384を継承する。元の手動上昇40秒は背景解析側の参考設定として元configに保持するが、新入口へ自動適用しない。
 背景を未提供なら全時間の重心・中心・角速度までを計算し、前後解析は未実行とする。
 Mean CSVを登録した撮影では自動検出した境界を使い、上昇前の揺らぎ・FFT、後の切替診断を実行する。
-`--baseline-ratio`、`--sigma-threshold`、`--min-consecutive`はこの入口でも従来と同じ検出器へ渡す。
+既定の持続検出と診断、明示的な旧方式、画像承認の互換移行は[背景上昇の手順](background-rise.md)を参照する。
 
 既定出力先は`outputs/reanalysis_tiff/<day>/repellent_response/`。
 `--output-suffix <name>`で保存先を明示できる。既存の`outputs/<day>/`やAVIの結果を上書きしない。

@@ -25,7 +25,7 @@ from utils.run_inputs import (
 )
 
 
-def recording(tmp_path, *, frames=80, gap=False):
+def recording(tmp_path, *, frames=80, gap=False, frame_period=0.005, missing_time=True):
     root = tmp_path / "data/day/tiff_data/recording"
     root.mkdir(parents=True)
     first = datetime(2026, 1, 1)
@@ -35,12 +35,12 @@ def recording(tmp_path, *, frames=80, gap=False):
         angle = 2 * np.pi * 12 * index / 200
         if index != 25:
             cv2.circle(plane, (32 + round(5 * np.cos(angle)), 32 - round(5 * np.sin(angle))), 3, 10000, -1)
-        stamp = (first + timedelta(seconds=frame / 200)).strftime("%m/%d/%Y %H:%M:%S.%f")
-        if index == 30:
+        stamp = (first + timedelta(seconds=frame * frame_period)).strftime("%m/%d/%Y %H:%M:%S.%f")
+        if missing_time and index == 30:
             stamp = "unavailable"
         Image.fromarray(plane).save(
             root / f"recording_{frame:05}.tif",
-            tiffinfo={306: stamp, 40092: "a\tb\tINTERNAL FRAME INTERVAL\t0.005".encode("utf-16le")},
+            tiffinfo={306: stamp, 40092: f"a\tb\tINTERNAL FRAME INTERVAL\t{frame_period}".encode("utf-16le")},
         )
     return root
 
@@ -366,7 +366,9 @@ def test_mean_csv_maps_saved_tiff_order_and_real_clocks_before_existing_detectio
     csv = mean_csv(tmp_path)
     initial_manifest = prepare(path)
     initial_csv = json.loads(initial_manifest.read_text())["samples"][0]["centroids"]
-    inputs.attach_brightness_settings(path)
+    attached = inputs.attach_brightness_settings(path)
+    attached["samples"][0]["background"]["rise_method"] = "legacy"
+    inputs._write(path, attached)
     options = dict(baseline_ratio=0.4, sigma_threshold=2.5, min_consecutive=4)
     with monkeypatch.context() as scope:
         scope.setattr(inputs, "_extract", lambda *args: pytest.fail("brightness must reuse centroid measurements"))
@@ -379,7 +381,7 @@ def test_mean_csv_maps_saved_tiff_order_and_real_clocks_before_existing_detectio
     assert bg.loc[bg.source_frame_1based.eq(31), "time_sec"].isna().all()
     assert bg.time_sec.iloc[-1] == pytest.approx(69 / 200)  # never use the CSV's inch axis
     result = detect_rise_index(
-        bg.background_intensity.to_numpy(), baseline_ratio=0.4, sigma_threshold=2.5, min_consecutive=4
+        bg.background_intensity.to_numpy(), baseline_ratio=0.4, sigma_threshold=2.5, min_consecutive=4, method="legacy"
     )
     expected_frame = int(bg.source_frame_1based.iloc[int(result["rise_index"])])
     assert entry["rise_source_frame"] == expected_frame
@@ -432,3 +434,48 @@ def test_mean_csv_missing_boundary_timestamp_is_not_fabricated(tmp_path, monkeyp
     document = json.loads(prepare(path).read_text())
     assert document["samples"][0]["rise_source_frame"] is None
     assert document["image_input"]["rise_results"]["7"]["status"] == "invalid_boundary_observation"
+
+
+def test_sustained_default_detection_exports_reason_settings_and_original_boundary(tmp_path, monkeypatch):
+    from utils.functions.background_rise import RiseSettings
+    from utils.functions.repellent_result_export import export_results
+
+    path, _ = settings_file(tmp_path, frames=100, frame_period=0.5, missing_time=False)
+    y = 100 + np.random.default_rng(42079).normal(0, 0.25, 100) + 20 * (np.arange(100) >= 50)
+    mean_csv(tmp_path, count=100, values=y)
+    inputs.attach_brightness_settings(path)
+    initial = prepare(path)
+    initial_entry = json.loads(initial.read_text())["samples"][0]
+    monkeypatch.setattr(inputs, "_extract", lambda *a: pytest.fail("background must reuse image measurements"))
+    document = json.loads(prepare(path).read_text())
+    entry = document["samples"][0]
+    rise = document["image_input"]["rise_results"]["7"]
+    assert rise["detector_method"] == "robust-piecewise-sustained-v1" and rise["status"] == "detected"
+    assert rise["parameters"]["persistence_sec"] == RiseSettings().persistence_sec
+    assert abs(rise["rise_time_sec"] - 25) <= 0.5 and rise["rise_source_frame"] == 51
+    assert entry["centroids"] == initial_entry["centroids"]
+    assert set(rise["code_sha256"]) == {"repellent_input.py", "repellent_response.py", "background_rise.py"}
+    bundle, features = recalculate_manifest(initial)
+    assert bundle["settings"]["rise_source_frames"] == {"7": 51}
+    output = tmp_path / "results"
+    export_results(output, fft_features=features, **bundle)
+    summary = pd.read_csv(output / "01_brightness_change/rise_summary.csv")
+    assert summary.rise_reason.iloc[0] == "sustained_rise"
+    assert summary.rise_candidate_count.iloc[0] == 1
+    assert summary.rise_time_sec.iloc[0] == 25
+    # Manual selection still wins, even with malformed unused auto settings.
+    settings = json.loads(path.read_text())
+    settings["samples"][0]["background"].update(rise_source_frame=45, rise_parameters={"persistence_sec": -1})
+    inputs._write(path, settings)
+    manual = json.loads(prepare(path).read_text())["image_input"]["rise_results"]["7"]
+    assert manual["status"] == "provided" and manual["rise_source_frame"] == 45
+
+
+def test_default_short_recording_has_reason_and_no_zero_boundary(tmp_path):
+    path, _ = settings_file(tmp_path)
+    mean_csv(tmp_path)
+    inputs.attach_brightness_settings(path)
+    document = json.loads(prepare(path).read_text())
+    rise = document["image_input"]["rise_results"]["7"]
+    assert rise["status"] == "not_detected" and rise["rise_source_frame"] is None
+    assert rise["rise_time_sec"] is None and "insufficient_continuous" in rise["reason"]

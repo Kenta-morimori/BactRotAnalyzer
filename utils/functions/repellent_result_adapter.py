@@ -109,6 +109,7 @@ def collect_results(
         series_role=f"existing_{estimator}_primary",
         physical_reversal_assessment="not_assessed",
         rise_source_frames=cut,
+        rise_results=rises,
         source_frame_ranges=ranges,
         measurement_processing="existing backend unchanged; export performs no smoothing or fitting",
     )

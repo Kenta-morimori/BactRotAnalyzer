@@ -193,7 +193,7 @@ def test_main_publishes_fixed_phase_layout_and_discards_intermediates(tmp_path, 
 
     stages = []
 
-    def computed(*args):
+    def computed(*args, **kwargs):
         stage = current().root
         stages.append(stage)
         (stage / "unwanted_debug.txt").write_text("intermediate")

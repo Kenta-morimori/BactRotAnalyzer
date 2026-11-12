@@ -390,6 +390,8 @@ def test_image_input_cli_logs_original_tiffs_and_exports_grouped_measurements(
         "--day",
         "day",
         *selection,
+        "--rise-method",
+        "legacy",
         "--baseline-ratio",
         "0.4",
         "--sigma-threshold",

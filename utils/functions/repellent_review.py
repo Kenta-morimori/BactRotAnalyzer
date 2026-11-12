@@ -6,7 +6,6 @@ import json
 import threading
 import uuid
 from datetime import datetime
-from importlib.metadata import version
 from pathlib import Path
 from typing import Any, Optional
 
@@ -52,15 +51,9 @@ def conditions(sample):
 
 
 def implementation():
-    folder = Path(__file__).parent
-    return dict(
-        method=METHOD,
-        code={
-            name: _hash(folder / name)
-            for name in ("repellent_review.py", "repellent_input.py", "tiff_roi.py", "tiff_roi_io.py")
-        },
-        runtime={name: version(name) for name in ("numpy", "opencv-python", "pandas", "Pillow", "tifffile")},
-    )
+    from utils.functions.repellent_identity import review_implementation
+
+    return review_implementation()
 
 
 def required_starts(rows):
@@ -199,7 +192,9 @@ def verify_artifact(path, sample=None, *, verify_images=True, settings_path=None
     """Fail closed if a reviewed condition, source, implementation or artifact changed."""
     path = Path(path).resolve()
     saved = json.loads(path.read_text())
-    if saved.get("status") != "complete" or saved.get("implementation") != implementation():
+    from utils.functions.repellent_identity import compatible_review
+
+    if saved.get("status") != "complete" or not compatible_review(saved.get("implementation"), implementation()):
         raise ValueError("確認結果が未完了または実装が変わりました。再生成してください")
     if sample is not None and conditions(sample) != saved["conditions"]:
         raise ValueError("対象・閾値・ROIなどが確認動画から変わりました。再生成・承認してください")

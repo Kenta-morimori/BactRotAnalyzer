@@ -53,6 +53,8 @@ def _main(
     center_estimator: Optional[str] = None,
     all_frames: bool = False,
     stop_measurement_enabled: Optional[bool] = None,
+    rise_method: str = "sustained",
+    rise_settings: Optional[dict] = None,
 ):
     center_estimator, stop_measurement_enabled = resolve_center_options(center_estimator, stop_measurement_enabled)
     param.post_rise_center_mode = post_rise_center_mode
@@ -93,6 +95,16 @@ def _main(
         baseline_ratio=baseline_ratio,
         sigma_threshold=sigma_threshold,
         min_consecutive=min_consecutive,
+        time_list=time_list,
+        source_frame_list=[
+            np.arange(
+                int(cast(Any, row["source_start_frame_1based"])),
+                int(cast(Any, row["source_start_frame_1based"])) + len(clock),
+            )
+            for row, clock in zip(range_rows, time_list)
+        ],
+        method=rise_method,
+        rise_settings=rise_settings,
     )
     repellent_response.add_rise_time_to_results(day, rise_results, time_list)
     rise_indices = [result["rise_index"] for result in rise_results]
@@ -572,6 +584,8 @@ def main(
     input_source: Optional[str] = None,
     input_samples: Optional[list[int]] = None,
     force_extract: bool = False,
+    rise_method: Optional[str] = None,
+    rise_settings: Optional[dict] = None,
 ):
     from utils.functions.repellent_result_export import export_bundle, export_results
 
@@ -603,7 +617,11 @@ def main(
                 all_frames=all_frames,
                 force=force_extract,
                 rise_detection=dict(
-                    baseline_ratio=baseline_ratio, sigma_threshold=sigma_threshold, min_consecutive=min_consecutive
+                    baseline_ratio=baseline_ratio,
+                    sigma_threshold=sigma_threshold,
+                    min_consecutive=min_consecutive,
+                    **({"method": rise_method} if rise_method is not None else {}),
+                    **({"rise_settings": rise_settings} if rise_settings is not None else {}),
                 ),
             )
         )
@@ -636,6 +654,8 @@ def main(
                 baseline_ratio=baseline_ratio,
                 sigma_threshold=sigma_threshold,
                 min_consecutive=min_consecutive,
+                rise_method=rise_method or "sustained",
+                rise_settings=rise_settings,
             )
         for source in bundle["settings"].get("input_hashes", {}):
             if Path(source).resolve().is_relative_to(destination.resolve()):
@@ -647,6 +667,8 @@ def main(
         center_estimator=estimator,
         stop_measurement_enabled=bool(stopped and estimator == "v2"),
         input_centroid_method=raw_centroid.METHOD,
+        rise_method=rise_method or "sustained",
+        rise_settings=rise_settings,
     )
     previous_mode = param.post_rise_center_mode
     try:
@@ -673,6 +695,8 @@ def main(
                     estimator,
                     all_frames,
                     stopped,
+                    rise_method=rise_method or "sustained",
+                    rise_settings=rise_settings,
                 )
             bundle["settings"] = {**options, **bundle["settings"], "all_frames": all_frames}
             export_results(destination, **bundle)
@@ -693,6 +717,12 @@ def build_parser():
     parser.add_argument("--baseline-ratio", type=float, default=0.5)
     parser.add_argument("--sigma-threshold", type=float, default=3.0)
     parser.add_argument("--min-consecutive", type=int, default=3)
+    parser.add_argument(
+        "--rise-method",
+        choices=["sustained", "legacy"],
+        default=None,
+        help="Background detector (JSON choice takes precedence when omitted; default: sustained)",
+    )
     parser.add_argument("--post-rise-center-mode", type=int, choices=[1, 2, 3], default=param.post_rise_center_mode)
     parser.add_argument("--center-estimator", choices=["local_conic", "v2", "validated", "legacy"], default=None)
     parser.add_argument(
@@ -749,4 +779,5 @@ if __name__ == "__main__":
             input_source=args.input_source,
             input_samples=args.input_samples,
             force_extract=args.force_extract,
+            rise_method=args.rise_method,
         )
