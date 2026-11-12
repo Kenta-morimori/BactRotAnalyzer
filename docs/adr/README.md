@@ -12,7 +12,7 @@
 | [0005](0005-image-input-settings.md) | config任意のTIFF/AVI入力、対話設定、外部背景とキャッシュ分離 |
 | [0006](0006-provided-brightness-rise.md) | ユーザー作成Mean CSV、TIFF元観測との対応、従来の背景上昇点検出 |
 | [0007](0007-default-image-settings.md) | データセット単位の既定JSON、保存入力源と省略時の互換性 |
-
 | [0008](0008-batch-tiff-review.md) | 中央対象の自動候補、保存動画での一括承認と明示的な解析対象 |
+| [0009](0009-sustained-background-rise.md) | 実時刻による頑健な持続上昇検出と画像承認・測定の互換移行 |
 
 各ADRには状態、背景、決定、代替、影響・限界、検証方法を記載する。後日の方針変更は新ADRで置き換え、既存の判断を黙って書き換えない。

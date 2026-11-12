@@ -74,7 +74,7 @@ def analyze_sample(
     rise_source_frame=None,
     identity,
     parameters=None,
-    completion_points=None
+    completion_points=None,
 ):
     """Fit every reporting anchor using all original observations in its window."""
     f = raw.source_frame_1based.to_numpy()
@@ -433,7 +433,7 @@ def recalculate_manifest(path):
             background=background,
             rise_source_frame=cut,
             identity=sample["identity"],
-            **policy
+            **policy,
         )
         observations.append(frame)
         supports.append(support)
@@ -487,7 +487,16 @@ def workflow_settings(rises, methods):
     )
 
 
-def recalculate_day(day, *, all_frames=False, baseline_ratio=0.5, sigma_threshold=3.0, min_consecutive=3):
+def recalculate_day(
+    day,
+    *,
+    all_frames=False,
+    baseline_ratio=0.5,
+    sigma_threshold=3.0,
+    min_consecutive=3,
+    rise_method="sustained",
+    rise_settings=None,
+):
     """Normal execution from source AVIs/TIFF clocks and configured background boundaries."""
     from utils.functions import raw_centroid, repellent_response
 
@@ -506,6 +515,18 @@ def recalculate_day(day, *, all_frames=False, baseline_ratio=0.5, sigma_threshol
         baseline_ratio=baseline_ratio,
         sigma_threshold=sigma_threshold,
         min_consecutive=min_consecutive,
+        time_list=clocks,
+        source_frame_list=[
+            r.source_frame_1based.to_numpy()[
+                int(cast(Any, ranges[i]["source_start_frame_1based"]))
+                - 1 : int(cast(Any, ranges[i]["source_start_frame_1based"]))
+                - 1
+                + len(clocks[i])
+            ]
+            for i, r in enumerate(raw_frames)
+        ],
+        method=rise_method,
+        rise_settings=rise_settings,
     )
     repellent_response.add_rise_time_to_results(day, rises, clocks)
     names = repellent_response.get_tiff_sample_names(day)
@@ -519,6 +540,9 @@ def recalculate_day(day, *, all_frames=False, baseline_ratio=0.5, sigma_threshol
         policy = acquisition_policy(tiffs[0])
         index = rises[i].get("rise_index", np.nan)
         cut = first + int(index) if np.isfinite(index) else None
+        rises[i]["rise_source_frame"] = cut
+        if cut is not None and int(index) < len(clock):
+            rises[i]["rise_time_sec"] = float(clock[int(index)])
         if cut is not None:
             cuts[str(i + 1)] = cut
         frame, support, method = analyze_sample(
@@ -529,7 +553,7 @@ def recalculate_day(day, *, all_frames=False, baseline_ratio=0.5, sigma_threshol
             background=backgrounds[i],
             rise_source_frame=cut,
             identity="source track assumed within continuous observed runs; not independently verified",
-            **policy
+            **policy,
         )
         frames.append(frame)
         supports.append(support)
@@ -540,7 +564,11 @@ def recalculate_day(day, *, all_frames=False, baseline_ratio=0.5, sigma_threshol
     settings.update(
         source_frame_ranges=ranges,
         rise_detection=dict(
-            baseline_ratio=baseline_ratio, sigma_threshold=sigma_threshold, min_consecutive=min_consecutive
+            method=rise_method,
+            baseline_ratio=baseline_ratio,
+            sigma_threshold=sigma_threshold,
+            min_consecutive=min_consecutive,
+            rise_settings=rise_settings,
         ),
         rise_results=rises,
     )

@@ -363,19 +363,39 @@ def _background_rise(background, bg, options):
 
     manual = background.get("rise_source_frame")
     mode = "manual" if manual is not None else background.get("rise_detection", "none")
-    summary = dict(method=mode, status="not_requested", rise_source_frame=None)
+    summary = dict(method=mode, status="not_requested", rise_source_frame=None, rise_time_sec=None)
     if mode == "auto":
-        result = detect_rise_index(bg.background_intensity.to_numpy(float), **options)
+        from utils.functions.background_rise import json_diagnostics
+
+        effective = dict(options)
+        method = effective.pop("method", background.get("rise_method", "sustained"))
+        settings = effective.pop("rise_settings", background.get("rise_parameters"))
+        result = detect_rise_index(
+            bg.background_intensity.to_numpy(float),
+            times=bg.time_sec.to_numpy(float),
+            source_frames=bg.source_frame_1based.to_numpy(),
+            method=method,
+            rise_settings=settings,
+            **effective,
+        )
         summary.update(
-            status="not_detected",
-            parameters=options,
-            diagnostics={name: float(value) if np.isfinite(value) else None for name, value in result.items()},
+            status=result.get("status", "not_detected") if not np.isfinite(result["rise_index"]) else "not_detected",
+            detector_method=result.get("method", "legacy"),
+            reason=result.get("reason", "legacy_no_rise"),
+            parameters=result.get("parameters", effective),
+            diagnostics=json_diagnostics(result),
+            code_sha256={
+                name: _hash(Path(__file__).with_name(name))
+                for name in ("repellent_input.py", "repellent_response.py", "background_rise.py")
+            },
         )
         index = result["rise_index"]
         if np.isfinite(index):
             row = bg.iloc[int(index)]
             if np.isfinite(row.time_sec) and np.isfinite(row.background_intensity):
                 summary.update(status="detected", rise_source_frame=int(row.source_frame_1based))
+                summary["rise_time_sec"] = float(row.time_sec)
+                summary["reason"] = result.get("reason", "legacy_detected")
             else:
                 summary["status"] = "invalid_boundary_observation"
     elif mode == "manual":
@@ -383,7 +403,12 @@ def _background_rise(background, bg, options):
             raise ValueError("manual rise must identify an existing original frame within the analysis range")
         if not np.isfinite(bg.loc[bg.source_frame_1based.eq(manual), "time_sec"].iloc[0]):
             raise ValueError("manual rise frame requires an available original timestamp")
-        summary.update(status="provided", rise_source_frame=manual)
+        summary.update(
+            status="provided",
+            rise_source_frame=manual,
+            rise_time_sec=float(bg.loc[bg.source_frame_1based.eq(manual), "time_sec"].iloc[0]),
+            reason="manual_source_frame",
+        )
     elif mode != "none":
         raise ValueError("rise_detection must be auto or none; manual rise_source_frame overrides it")
     return summary
@@ -394,6 +419,8 @@ def prepare_measurements(
 ):
     """Generate canonical measurements and a manifest, without touching legacy caches."""
     path, output_root = Path(path).resolve(), Path(output_root).resolve()
+    from utils.functions.repellent_identity import measurement_cache, measurement_code
+
     settings = _load(path, source, day)
     if settings.get("order_confirmed") is not True:
         raise ValueError("recording order has not been confirmed")
@@ -418,7 +445,7 @@ def prepare_measurements(
         Path(io.__file__).with_name("centroid_diagnostics.py"),
         Path(io.__file__).with_name("get_centroid_coordinate.py"),
     ]
-    code = {p.name: _hash(p) for p in code_paths}
+    code = measurement_code(code_paths)
     input_hashes = {str(path): _hash(path)}
     entries = []
     rise_results = {}
@@ -454,15 +481,13 @@ def prepare_measurements(
             sample={name: value for name, value in sample.items() if name != "background"},
             input_hashes=hashes,
             code_sha256=code,
+            code_identity="image-scope-ast-v1",
             all_frames=all_frames,
             acquisition_policy=policy,
             runtime_versions={
                 name: version(name) for name in ("opencv-python", "numpy", "pandas", "Pillow", "tifffile")
             },
         )
-        key = hashlib.sha256(json.dumps(provenance, sort_keys=True).encode()).hexdigest()
-        cache = output_root / "raw_centroid" / method / key
-        csv, metadata = cache.with_suffix(".csv"), cache.with_suffix(".json")
         metadata_fields = dict(
             sample_no=sample["sample_no"],
             frame_count=len(_scope(pd.DataFrame(rows), sample, all_frames)),
@@ -472,6 +497,10 @@ def prepare_measurements(
             source_id=sample["input_id"],
             provenance=provenance,
         )
+        cache, provenance = measurement_cache(output_root, method, provenance, metadata_fields, force=force)
+        metadata_fields["provenance"] = provenance
+        key = cache.name
+        csv, metadata = cache.with_suffix(".csv"), cache.with_suffix(".json")
         reusable = False
         if not force and csv.is_file() and metadata.is_file():
             try:

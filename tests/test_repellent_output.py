@@ -65,7 +65,7 @@ def test_entry_failure_restores_configuration_and_records_resolved_options(tmp_p
     monkeypatch.setattr(param, "save_dir_bef", str(tmp_path))
     original = param.post_rise_center_mode
 
-    def fail(*args):
+    def fail(*args, **kwargs):
         param.post_rise_center_mode = 99
         raise ValueError("synthetic failure")
 

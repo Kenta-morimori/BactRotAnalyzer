@@ -421,8 +421,16 @@ def export_results(
             )
         )
         detection = settings.get("image_input", {}).get("rise_results", {}).get(str(no))
+        if detection is None:
+            detection = next((row for row in settings.get("rise_results", []) if row.get("sample_no") == no), None)
         if detection is not None:
-            rises[-1].update(rise_detection_method=detection["method"], rise_detection_status=detection["status"])
+            rises[-1].update(
+                rise_detection_method=detection.get("method", "legacy"),
+                rise_detection_status=detection.get("status", "detected" if cut is not None else "not_detected"),
+                rise_detector=detection.get("detector_method", detection.get("method", "legacy")),
+                rise_reason=detection.get("reason"),
+                rise_candidate_count=len(detection.get("diagnostics", detection).get("candidates", [])),
+            )
     write("00_time_list/analysis_frame_ranges.csv", pd.DataFrame(ranges), "source-frame phase boundaries")
     write("01_brightness_change/rise_summary.csv", pd.DataFrame(rises), "provided rise boundary; no redetection")
     if "background_intensity" in table:
