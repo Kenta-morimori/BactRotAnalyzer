@@ -14,5 +14,6 @@
 | [0011](0011-poster-fixed-band-ratio.md) | ポスター解析の共通周波数帯による強度比と候補細胞比較 |
 | [0012](0012-poster-band-components-and-steady-simulation.md) | Low・Low−Highの追加と非周期角速度の合成条件 |
 | [0013](0013-poster-angle-noise-controls.md) | 合成対照を長軸角の直接生成に統一し、座標・周回角を除く |
+| [0014](0014-poster-temperature-orbit.md) | SJW46温度条件の周回角・中心・揺らぎと温度別比較 |
 
 各ADRには状態、背景、決定、代替、影響・限界、検証方法を記載する。後日の方針変更は新ADRで置き換え、既存の判断を黙って書き換えない。
