@@ -59,6 +59,20 @@ def test_amplitude_fit_minimizes_log_residuals_of_log_band_medians():
     assert np.dot(x - np.mean(x), residual) == pytest.approx(0, abs=1e-14)
 
 
+def test_fit_sensitivity_keeps_requested_exponent_and_uses_more_nonempty_bands():
+    frequency = np.arange(1, 501, dtype=float) * 0.2
+    observed = amplitude_envelope(frequency, 0.75, exponent=1.4, offset_hz=0.2)
+    fixed = [fit_amplitude(frequency, observed, max_bins=count, fixed_exponent=1.0) for count in (9, 18, 36)]
+    free = [fit_amplitude(frequency, observed, max_bins=count) for count in (9, 18, 36)]
+    assert [fit.bin_count for fit in fixed] == sorted(fit.bin_count for fit in fixed)
+    assert len({fit.bin_count for fit in fixed}) == 3
+    assert all(fit.exponent == 1.0 for fit in fixed)
+    assert all(fit.exponent == pytest.approx(1.4, abs=0.02) for fit in free)
+    assert all(fit.log_bin_rmse < fixed[index].log_bin_rmse for index, fit in enumerate(free))
+    with pytest.raises(ValueError, match="fixed exponent"):
+        fit_amplitude(frequency, observed, fixed_exponent=-1)
+
+
 @pytest.mark.parametrize("sample_count,rate_hz", [(1100, 200), (1375, 250)])
 def test_random_phase_inverse_fft_reproduces_saved_amplitude_even_and_odd(sample_count, rate_hz):
     offset_hz = rate_hz / sample_count
@@ -123,6 +137,12 @@ def test_six_case_output_uses_saved_0_5s_fft_and_18_panels(tmp_path, monkeypatch
     fit_bins = pd.read_csv(output / "tables/case_0_fit_bins.csv")
     assert len(fit_bins) == index.loc[0, "bin_count"]
     assert fit_bins.fft_point_count.sum() == index.loc[0, "point_count"]
+    sensitivity_input = script["load_case"](tmp_path, cases[0])
+    script["draw_fit_sensitivity"](sensitivity_input, output / "fit_sensitivity_case_0_0.5s.png")
+    assert (output / "fit_sensitivity_case_0_0.5s.png").is_file()
+    assert len(captured[-1].axes) == 6
+    assert all(axis.get_yscale() == "log" for axis in captured[-1].axes)
+    assert all(len(axis.collections[0].get_offsets()) > 0 for axis in captured[-1].axes)
     assert np.isfinite(index.scale).all()
     assert index.exponent.gt(0).all()
     assert np.allclose(index.offset_hz, 100 / index.sample_count)

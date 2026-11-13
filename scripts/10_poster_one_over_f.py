@@ -187,6 +187,71 @@ def draw_comparison(cases: list[dict], target: Path) -> None:
     plt.close(fig)
 
 
+def draw_fit_sensitivity(item: dict, target: Path, band_counts: tuple[int, ...] = (9, 18, 36)) -> None:
+    """Compare fixed and fitted exponents without changing the primary analysis."""
+    fig, axes = plt.subplots(2, len(band_counts), figsize=(19, 10), sharex=True, sharey=True, constrained_layout=True)
+    positive = np.isfinite(item["amplitude"]) & (item["amplitude"] > 0)
+    frequency = item["frequency_hz"]
+    amplitude = item["amplitude"]
+    for row, fixed_exponent in enumerate((1.0, None)):
+        for column, requested_bands in enumerate(band_counts):
+            ax = axes[row, column]
+            fit = fit_amplitude(frequency, amplitude, max_bins=requested_bands, fixed_exponent=fixed_exponent)
+            bin_frequency, bin_amplitude, bin_point_count = log_frequency_bins(
+                frequency, amplitude, max_bins=requested_bands
+            )
+            fitted_amplitude = amplitude_envelope(frequency, fit.scale, exponent=fit.exponent, offset_hz=fit.offset_hz)
+            ax.plot(
+                frequency[positive],
+                amplitude[positive],
+                color="steelblue",
+                linewidth=0.65,
+                alpha=0.55,
+                label="FFT amplitude",
+            )
+            ax.plot(frequency, fitted_amplitude, color="crimson", linewidth=1.8, label="Fitted envelope")
+            ax.scatter(
+                bin_frequency,
+                bin_amplitude,
+                color="gold",
+                edgecolor="black",
+                linewidth=0.4,
+                s=40,
+                zorder=3,
+                label="Band medians used for fit",
+            )
+            ax.set(
+                title=f"{requested_bands} log bands ({fit.bin_count} nonempty)",
+                xlim=(0, item["rate_hz"] / 2),
+                xlabel="Frequency (Hz)",
+            )
+            ax.set_yscale("log")
+            ax.text(
+                0.97,
+                0.95,
+                f"α = {fit.exponent:.2f}\nA = {fit.scale:.3g}\nlog RMSE = {fit.log_bin_rmse:.2f}\n"
+                f"FFT points = {sum(bin_point_count)}",
+                transform=ax.transAxes,
+                ha="right",
+                va="top",
+                fontsize=11,
+                bbox={"facecolor": "white", "alpha": 0.85, "edgecolor": "none"},
+            )
+            ax.tick_params(labelsize=11)
+            ax.grid(alpha=0.2)
+            if column == 0:
+                ax.set_ylabel(("Fixed α = 1" if row == 0 else "Fitted α") + "\nFFT amplitude (log)", fontsize=12)
+    axes[0, 0].legend(fontsize=10, loc="lower left")
+    fig.suptitle(
+        f"{item['case'].label}: 0.5 s SD/Mean FFT amplitude fit sensitivity\n"
+        "Same FFT in every panel; Δf fixed at first positive FFT frequency; equal weight per nonempty log band",
+        fontsize=15,
+    )
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(target, dpi=180)
+    plt.close(fig)
+
+
 def generate(source_root: Path, output_root: Path, phase_seed: int, cases: tuple[CaseSpec, ...] = CASES) -> None:
     loaded = []
     for index, case in enumerate(cases):
@@ -269,7 +334,7 @@ def generate(source_root: Path, output_root: Path, phase_seed: int, cases: tuple
         "where delta_f is the first positive FFT frequency. Nine equal log-frequency bands summarize the "
         "positive amplitudes below Nyquist by their medians; log-amplitude residuals of those medians "
         "determine A and alpha. The raw spectrum and fit are displayed on a log-amplitude axis. "
-        "This fitted colored-noise spectrum is not a claim of 1/f power spectral density. "
+        "This figure describes the FFT amplitude of the fluctuation metric; no noise color is assigned. "
         "Row 3 is a new zero-mean real-valued series in z-score units from independent uniform random phases. "
         "DC and the final positive FFT bin are zero; the time length equals the original FFT segment, not the full 6 s. "
         "Seeds and fit diagnostics are in index.csv. Measured results must remain local.\n",
@@ -282,11 +347,19 @@ if __name__ == "__main__":
     parser.add_argument("--source-root", default=str(ROOT / "outputs" / "poster_fluctuation"))
     parser.add_argument("--output-root")
     parser.add_argument("--phase-seed", type=int, default=84)
+    parser.add_argument("--fit-sensitivity-case", choices=[case.key for case in CASES])
     args = parser.parse_args()
     source_root = Path(args.source_root).resolve()
     output_root = Path(args.output_root).resolve() if args.output_root else source_root / "2_simulation" / "one_over_f"
-    with analysis_run(parameters=vars(args), inputs=input_paths(source_root), outputs=[output_root]) as run_root:
-        generate(source_root, output_root, args.phase_seed)
+    selected = next((case for case in CASES if case.key == args.fit_sensitivity_case), None)
+    inputs = input_paths(source_root, (selected,)) if selected else input_paths(source_root)
+    with analysis_run(parameters=vars(args), inputs=inputs, outputs=[output_root]) as run_root:
+        if selected:
+            draw_fit_sensitivity(
+                load_case(source_root, selected), output_root / f"fit_sensitivity_{selected.key}_0.5s.png"
+            )
+        else:
+            generate(source_root, output_root, args.phase_seed)
     archive = output_root / "_run_records" / run_root.parent.name / run_root.name
     archive.mkdir(parents=True, exist_ok=False)
     shutil.copy2(run_root / "manifest.json", archive / "manifest.json")

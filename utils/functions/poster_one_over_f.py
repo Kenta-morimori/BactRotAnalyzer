@@ -67,8 +67,14 @@ def log_frequency_bins(
     return np.asarray(centers), np.asarray(medians), np.asarray(counts)
 
 
-def fit_amplitude(frequency_hz: np.ndarray, amplitude: np.ndarray) -> AmplitudeFit:
-    """Fit scale and slope in log amplitude to nine log-band median amplitudes."""
+def fit_amplitude(
+    frequency_hz: np.ndarray,
+    amplitude: np.ndarray,
+    *,
+    max_bins: int = MAX_FIT_BINS,
+    fixed_exponent: float | None = None,
+) -> AmplitudeFit:
+    """Fit a log-band median envelope, optionally holding the exponent fixed."""
     frequency_hz = np.asarray(frequency_hz, dtype=float)
     amplitude = np.asarray(amplitude, dtype=float)
     if frequency_hz.shape != amplitude.shape:
@@ -80,11 +86,16 @@ def fit_amplitude(frequency_hz: np.ndarray, amplitude: np.ndarray) -> AmplitudeF
     valid = np.isfinite(frequency_hz) & np.isfinite(amplitude) & (frequency_hz > 0) & (amplitude > 0)
     frequency_hz = frequency_hz[valid]
     amplitude = amplitude[valid]
-    bin_frequency, bin_amplitude, _ = log_frequency_bins(frequency_hz, amplitude)
+    bin_frequency, bin_amplitude, _ = log_frequency_bins(frequency_hz, amplitude, max_bins=max_bins)
     x = np.log((bin_frequency + offset_hz) / REFERENCE_HZ)
     y = np.log(bin_amplitude)
-    slope = float(np.dot(x - np.mean(x), y - np.mean(y)) / np.dot(x - np.mean(x), x - np.mean(x)))
-    exponent = max(0.0, -slope)
+    if fixed_exponent is None:
+        slope = float(np.dot(x - np.mean(x), y - np.mean(y)) / np.dot(x - np.mean(x), x - np.mean(x)))
+        exponent = max(0.0, -slope)
+    else:
+        if not np.isfinite(fixed_exponent) or fixed_exponent < 0:
+            raise ValueError("The fixed exponent must be finite and nonnegative")
+        exponent = float(fixed_exponent)
     scale = float(np.exp(np.mean(y + exponent * x)))
     predicted_bins = amplitude_envelope(bin_frequency, scale, exponent=exponent, offset_hz=offset_hz)
     log_residual = y - np.log(predicted_bins)
