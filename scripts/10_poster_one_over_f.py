@@ -1,4 +1,4 @@
-"""Local six-case 1/f FFT-amplitude fits and random-phase inverse FFT figures."""
+"""Local six-case FFT-amplitude envelope fits and random-phase inverse FFT figures."""
 
 import argparse
 import json
@@ -21,6 +21,7 @@ from utils.functions.frequency_analysis import fft  # noqa: E402
 from utils.functions.poster_one_over_f import (  # noqa: E402
     amplitude_envelope,
     fit_amplitude,
+    log_frequency_bins,
     random_phase_inverse_fft,
 )
 from utils.run_context import analysis_run  # noqa: E402
@@ -149,7 +150,15 @@ def draw_comparison(cases: list[dict], target: Path) -> None:
             item["fitted_amplitude"],
             color="red",
             linewidth=1.5,
-            label="Fit: A / (f + 1 Hz)",
+            label="Fit: A[(f + Δf)/1 Hz]^(-α)",
+        )
+        second.scatter(
+            item["fit_bin_frequency_hz"],
+            item["fit_bin_amplitude"],
+            s=24,
+            color="darkorange",
+            zorder=3,
+            label="Log-band medians used for fit",
         )
         second.set(xlabel="Frequency (Hz)", ylabel="FFT amplitude (log)", xlim=(0, item["rate_hz"] / 2))
         second.set_yscale("log")
@@ -157,7 +166,8 @@ def draw_comparison(cases: list[dict], target: Path) -> None:
         second.text(
             0.98,
             0.05,
-            f"linear-amplitude LS\nA = {item['fit'].scale:.3g}, R² = {item['fit'].r_squared_amplitude:.2f}",
+            f"A = {item['fit'].scale:.3g}, α = {item['fit'].exponent:.2f}\n"
+            f"Δf = {item['fit'].offset_hz:.3g} Hz, log R² = {item['fit'].log_bin_r_squared:.2f}",
             transform=second.transAxes,
             ha="right",
             fontsize=10,
@@ -182,9 +192,10 @@ def generate(source_root: Path, output_root: Path, phase_seed: int, cases: tuple
     for index, case in enumerate(cases):
         item = load_case(source_root, case)
         fit = fit_amplitude(item["frequency_hz"], item["amplitude"])
+        bin_frequency, bin_amplitude, bin_count = log_frequency_bins(item["frequency_hz"], item["amplitude"])
         seed = phase_seed + index
         frequency, target_amplitude, phase, surrogate = random_phase_inverse_fft(
-            item["sample_count"], 1 / item["rate_hz"], fit.scale, seed
+            item["sample_count"], 1 / item["rate_hz"], fit.scale, fit.exponent, fit.offset_hz, seed
         )
         if not np.allclose(frequency, item["frequency_hz"], rtol=1e-8, atol=1e-10):
             raise ValueError(f"{case.key}: inverse FFT frequency grid differs from the source FFT")
@@ -194,7 +205,12 @@ def generate(source_root: Path, output_root: Path, phase_seed: int, cases: tuple
         item.update(
             fit=fit,
             phase_seed=seed,
-            fitted_amplitude=amplitude_envelope(item["frequency_hz"], fit.scale),
+            fitted_amplitude=amplitude_envelope(
+                item["frequency_hz"], fit.scale, exponent=fit.exponent, offset_hz=fit.offset_hz
+            ),
+            fit_bin_frequency_hz=bin_frequency,
+            fit_bin_amplitude=bin_amplitude,
+            fit_bin_count=bin_count,
             phase_rad=phase,
             surrogate=surrogate,
         )
@@ -212,6 +228,19 @@ def generate(source_root: Path, output_root: Path, phase_seed: int, cases: tuple
                 "inverse_fft_phase_rad": item["phase_rad"],
             }
         ).to_csv(tables / f"{case.key}_fit.csv", index=False)
+        pd.DataFrame(
+            {
+                "frequency_hz": item["fit_bin_frequency_hz"],
+                "median_fft_amplitude": item["fit_bin_amplitude"],
+                "fft_point_count": item["fit_bin_count"],
+                "fitted_fft_amplitude": amplitude_envelope(
+                    item["fit_bin_frequency_hz"],
+                    item["fit"].scale,
+                    exponent=item["fit"].exponent,
+                    offset_hz=item["fit"].offset_hz,
+                ),
+            }
+        ).to_csv(tables / f"{case.key}_fit_bins.csv", index=False)
         pd.DataFrame({"time_sec": item["segment_time_sec"], "inverse_fft_z_units": item["surrogate"]}).to_csv(
             tables / f"{case.key}_inverse_fft.csv", index=False
         )
@@ -227,6 +256,7 @@ def generate(source_root: Path, output_root: Path, phase_seed: int, cases: tuple
                 "phase_seed": item["phase_seed"],
                 **asdict(item["fit"]),
                 "fit_file": f"tables/{case.key}_fit.csv",
+                "fit_bins_file": f"tables/{case.key}_fit_bins.csv",
                 "inverse_fft_file": f"tables/{case.key}_inverse_fft.csv",
             }
         )
@@ -235,8 +265,11 @@ def generate(source_root: Path, output_root: Path, phase_seed: int, cases: tuple
     (output_root / "README.txt").write_text(
         "Private local comparison for four measured cells and two synthetic angle controls. "
         "Row 1 is the raw 0.5 s Gaussian-window SD/Mean on original observation times. "
-        "Row 2 fits the z-scored SD/Mean FFT amplitude with A/(f+1 Hz) by unweighted linear-amplitude least squares "
-        "over all positive bins below Nyquist. This 1/f amplitude is not 1/f power spectral density. "
+        "Row 2 fits the z-scored SD/Mean FFT amplitude with A*((f+delta_f)/1 Hz)^(-alpha), "
+        "where delta_f is the first positive FFT frequency. Nine equal log-frequency bands summarize the "
+        "positive amplitudes below Nyquist by their medians; log-amplitude residuals of those medians "
+        "determine A and alpha. The raw spectrum and fit are displayed on a log-amplitude axis. "
+        "This fitted colored-noise spectrum is not a claim of 1/f power spectral density. "
         "Row 3 is a new zero-mean real-valued series in z-score units from independent uniform random phases. "
         "DC and the final positive FFT bin are zero; the time length equals the original FFT segment, not the full 6 s. "
         "Seeds and fit diagnostics are in index.csv. Measured results must remain local.\n",

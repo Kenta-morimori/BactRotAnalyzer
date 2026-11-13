@@ -1,4 +1,4 @@
-"""Synthetic checks for the poster 1/f-amplitude fit and inverse FFT."""
+"""Synthetic checks for the poster spectrum-envelope fit and inverse FFT."""
 
 import json
 import runpy
@@ -13,6 +13,7 @@ from utils.functions.poster_fluctuation import synthetic_long_axis
 from utils.functions.poster_one_over_f import (
     amplitude_envelope,
     fit_amplitude,
+    log_frequency_bins,
     random_phase_inverse_fft,
 )
 
@@ -24,40 +25,52 @@ def script_functions():
 
 
 def test_amplitude_fit_recovers_known_scale_and_rejects_unusable_spectrum():
-    frequency = np.array([0.2, 0.5, 1.0, 5.0, 50.0])
-    amplitude = amplitude_envelope(frequency, 0.75)
+    frequency = 0.2 * 2 ** np.arange(9)
+    amplitude = amplitude_envelope(frequency, 0.75, exponent=1.3, offset_hz=0.2)
     fit = fit_amplitude(frequency, amplitude)
     assert fit.scale == pytest.approx(0.75)
-    assert fit.offset_hz == 1.0
-    assert fit.point_count == 5
+    assert fit.exponent == pytest.approx(1.3)
+    assert fit.offset_hz == pytest.approx(0.2)
+    assert fit.point_count == 9
+    assert fit.bin_count == 9
     assert fit.rmse_amplitude == pytest.approx(0, abs=1e-14)
     assert fit.r_squared_amplitude == pytest.approx(1)
+    assert fit.log_bin_rmse == pytest.approx(0, abs=1e-14)
+    with_zero_first_amplitude = amplitude.copy()
+    with_zero_first_amplitude[0] = 0
+    assert fit_amplitude(frequency, with_zero_first_amplitude).offset_hz == pytest.approx(0.2)
     with pytest.raises(ValueError, match="At least three"):
         fit_amplitude(frequency[:2], amplitude[:2])
 
 
-def test_amplitude_fit_minimizes_residuals_on_original_linear_spectrum():
-    frequency = np.array([0.2, 0.5, 1.0, 5.0, 50.0])
-    observed = amplitude_envelope(frequency, 0.75) + np.array([0.2, -0.05, 0.03, 0.01, -0.002])
+def test_amplitude_fit_minimizes_log_residuals_of_log_band_medians():
+    frequency = 0.2 * 2 ** np.arange(9)
+    observed = amplitude_envelope(frequency, 0.75, exponent=1.3, offset_hz=0.2) * np.exp(
+        np.array([0.2, -0.05, 0.03, 0.01, -0.002, 0.08, -0.04, 0.12, -0.1])
+    )
     fit = fit_amplitude(frequency, observed)
-    basis = amplitude_envelope(frequency, 1.0)
-    residual = observed - amplitude_envelope(frequency, fit.scale)
-    assert np.dot(basis, residual) == pytest.approx(0, abs=1e-14)
-    assert np.sum(residual**2) < np.sum((observed - amplitude_envelope(frequency, fit.scale + 0.05)) ** 2)
-    assert np.sum(residual**2) < np.sum((observed - amplitude_envelope(frequency, fit.scale - 0.05)) ** 2)
+    binned_frequency, binned_amplitude, counts = log_frequency_bins(frequency, observed)
+    x = np.log(binned_frequency + fit.offset_hz)
+    residual = np.log(binned_amplitude) - np.log(
+        amplitude_envelope(binned_frequency, fit.scale, exponent=fit.exponent, offset_hz=fit.offset_hz)
+    )
+    assert np.all(counts == 1)
+    assert np.mean(residual) == pytest.approx(0, abs=1e-14)
+    assert np.dot(x - np.mean(x), residual) == pytest.approx(0, abs=1e-14)
 
 
 @pytest.mark.parametrize("sample_count,rate_hz", [(1100, 200), (1375, 250)])
 def test_random_phase_inverse_fft_reproduces_saved_amplitude_even_and_odd(sample_count, rate_hz):
-    frequency, target, phase, signal = random_phase_inverse_fft(sample_count, 1 / rate_hz, 0.6, 84)
+    offset_hz = rate_hz / sample_count
+    frequency, target, phase, signal = random_phase_inverse_fft(sample_count, 1 / rate_hz, 0.6, 1.3, offset_hz, 84)
     frequency_again, target_again, phase_again, signal_again = random_phase_inverse_fft(
-        sample_count, 1 / rate_hz, 0.6, 84
+        sample_count, 1 / rate_hz, 0.6, 1.3, offset_hz, 84
     )
     assert np.array_equal(signal, signal_again)
     assert np.array_equal(phase, phase_again)
     assert np.array_equal(frequency, frequency_again)
     assert np.array_equal(target, target_again)
-    assert not np.array_equal(signal, random_phase_inverse_fft(sample_count, 1 / rate_hz, 0.6, 85)[-1])
+    assert not np.array_equal(signal, random_phase_inverse_fft(sample_count, 1 / rate_hz, 0.6, 1.3, offset_hz, 85)[-1])
     actual_frequency, actual_amplitude = fft(signal, 1 / rate_hz)
     assert np.allclose(actual_frequency, frequency)
     assert np.allclose(actual_amplitude, target, rtol=1e-12, atol=1e-12)
@@ -100,14 +113,20 @@ def test_six_case_output_uses_saved_0_5s_fft_and_18_panels(tmp_path, monkeypatch
     assert all(captured[0].axes[6 + column].get_yscale() == "log" for column in range(6))
     plotted_fit = captured[0].axes[6].lines[1].get_ydata()
     saved_fit = pd.read_csv(output / "tables/case_0_fit.csv")["fitted_fft_amplitude"].to_numpy()
-    assert np.allclose(plotted_fit, saved_fit, rtol=1e-14, atol=0)
+    assert np.allclose(plotted_fit, saved_fit, rtol=1e-12, atol=1e-15)
     index = pd.read_csv(output / "index.csv")
     assert len(index) == 6
     assert index.phase_seed.tolist() == list(range(84, 90))
     assert all((output / path).is_file() for path in index.fit_file)
+    assert all((output / path).is_file() for path in index.fit_bins_file)
     assert all((output / path).is_file() for path in index.inverse_fft_file)
+    fit_bins = pd.read_csv(output / "tables/case_0_fit_bins.csv")
+    assert len(fit_bins) == index.loc[0, "bin_count"]
+    assert fit_bins.fft_point_count.sum() == index.loc[0, "point_count"]
     assert np.isfinite(index.scale).all()
-    assert index.offset_hz.eq(1.0).all()
+    assert index.exponent.gt(0).all()
+    assert np.allclose(index.offset_hz, 100 / index.sample_count)
+    assert index.bin_count.eq(9).all()
     saved = pd.read_csv(folder / "case_0_long_axis_fft.csv")
     saved.loc[saved.window_s == 0.5, "amplitude"] *= 1.1
     saved.to_csv(folder / "case_0_long_axis_fft.csv", index=False)
