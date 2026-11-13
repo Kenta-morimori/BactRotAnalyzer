@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from utils.functions.frequency_analysis import CONTINUITY_GAP_FACTOR  # noqa: E402
 from utils.functions.poster_fluctuation import WINDOWS_S  # noqa: E402
 from utils.functions.poster_temperature import (  # noqa: E402
     analyze_cell,
@@ -48,9 +49,27 @@ def _style(axes) -> None:
                 label.set_fontsize(11)
 
 
+def _with_gap_breaks(time: np.ndarray, values: np.ndarray, *, wrap: bool = False) -> tuple[np.ndarray, np.ndarray]:
+    """Insert plot-only breaks while retaining every source observation."""
+    dt = np.diff(time)
+    positive = dt[np.isfinite(dt) & (dt > 0)]
+    nominal_dt = float(np.median(positive)) if len(positive) else np.nan
+    breaks = (
+        np.flatnonzero(~np.isfinite(dt) | (dt <= 0) | (dt > CONTINUITY_GAP_FACTOR * nominal_dt)) + 1
+        if np.isfinite(nominal_dt)
+        else np.array([], dtype=int)
+    )
+    if wrap:
+        jumps = (
+            np.flatnonzero(np.isfinite(values[1:]) & np.isfinite(values[:-1]) & (np.abs(np.diff(values)) > np.pi)) + 1
+        )
+        breaks = np.union1d(breaks, jumps)
+    return np.insert(time, breaks, np.nan), np.insert(values, breaks, np.nan)
+
+
 def _wrapped_plot(ax, time: np.ndarray, angle: np.ndarray) -> None:
-    jumps = np.flatnonzero(np.isfinite(angle[1:]) & np.isfinite(angle[:-1]) & (np.abs(np.diff(angle)) > np.pi)) + 1
-    ax.plot(np.insert(time, jumps, np.nan), np.insert(angle, jumps, np.nan), lw=0.8)
+    plot_time, plot_angle = _with_gap_breaks(time, angle, wrap=True)
+    ax.plot(plot_time, plot_angle, lw=0.8)
     ax.set_ylim(-np.pi, np.pi)
     ax.set_yticks([-np.pi, -np.pi / 2, 0, np.pi / 2, np.pi], ["−π", "−π/2", "0", "π/2", "π"])
 
@@ -70,18 +89,23 @@ def cell_figure(
         (axes[0, 0], "x", "x (µm)"),
         (axes[0, 1], "y", "y (µm; image down)"),
     ):
-        ax.plot(t, frame[f"centroid_{suffix}_um"], lw=0.8, label="Centroid")
-        ax.plot(t, frame[f"center_{suffix}_um"], lw=1.0, label="Rotation center")
+        tx, centroid = _with_gap_breaks(t, frame[f"centroid_{suffix}_um"].to_numpy(float))
+        _, center = _with_gap_breaks(t, frame[f"center_{suffix}_um"].to_numpy(float))
+        ax.plot(tx, centroid, lw=0.8, label="Centroid")
+        ax.plot(tx, center, lw=1.0, label="Rotation center")
         ax.set(xlabel="Time (s)", ylabel=ylabel, title=f"Centroid and center: {suffix}(t)")
         ax.legend()
-    axes[0, 2].plot(frame["centroid_x_um"], frame["centroid_y_um"], lw=0.7, label="Centroid")
+    _, xy_x = _with_gap_breaks(t, frame["centroid_x_um"].to_numpy(float))
+    _, xy_y = _with_gap_breaks(t, frame["centroid_y_um"].to_numpy(float))
+    axes[0, 2].plot(xy_x, xy_y, lw=0.7, label="Centroid")
     axes[0, 2].scatter(frame["center_x_um"], frame["center_y_um"], s=6, alpha=0.3, label="Center")
     axes[0, 2].set(xlabel="x (µm)", ylabel="y (µm; image down)", title="Centroid trajectory and center")
     axes[0, 2].set_aspect("equal", adjustable="box")
     axes[0, 2].invert_yaxis()
     axes[0, 2].legend()
 
-    axes[1, 0].plot(t, frame["radius_um"], lw=0.7)
+    radius_t, radius = _with_gap_breaks(t, frame["radius_um"].to_numpy(float))
+    axes[1, 0].plot(radius_t, radius, lw=0.7)
     axes[1, 0].set(xlabel="Time (s)", ylabel="Radius (µm)", title="Center–centroid distance")
     _wrapped_plot(axes[1, 1], t, frame["orbit_angle_rad"].to_numpy(float))
     axes[1, 1].set(xlabel="Time (s)", ylabel="Angle (rad; CCW +)", title="Orbit angle [−π, π)")

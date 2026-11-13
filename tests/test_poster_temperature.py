@@ -83,6 +83,10 @@ def test_cell_and_comparison_plots_accept_synthetic_data(tmp_path):
         str(Path(__file__).resolve().parents[1] / "scripts/10_poster_temperature_control.py"),
         run_name="temperature_test",
     )
+    plot_t, plot_y = script["_with_gap_breaks"](np.array([0, 0.005, 0.01, 0.1, 0.105]), np.arange(5, dtype=float))
+    assert len(plot_t) == 6
+    assert np.isnan(plot_t[3]) and np.isnan(plot_y[3])
+    assert plot_y[4] == 3
     time = np.arange(6 * 200) / 200
     angle = 2 * np.pi * 7 * time + 0.003 * np.sin(2 * np.pi * 3 * time)
     frame, spectra, ratios, _ = analyze_cell(cell_coordinates(_source(time, np.cos(angle), -np.sin(angle)), 1))
