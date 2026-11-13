@@ -72,7 +72,7 @@ def test_fixed_band_ratio_uses_mean_amplitudes_and_excludes_band_edges():
             "amplitude": [100, 2, 4, 900, 800, 1, 3, 1000, 2, 0, 0],
         }
     )
-    ratio = band_amplitude_ratios(spectrum)
+    ratio = band_amplitude_ratios(spectrum, windows=(0.1, 0.2))
     assert ratio.loc[0, "low_bin_count"] == 2
     assert ratio.loc[0, "high_bin_count"] == 2
     assert ratio.loc[0, "low_mean_amplitude"] == 3
@@ -89,10 +89,19 @@ def test_fixed_band_ratio_assigns_nominal_fft_boundaries_consistently():
             "amplitude": [2, 100, 4, 100],
         }
     )
-    ratio = band_amplitude_ratios(spectrum).iloc[0]
+    ratio = band_amplitude_ratios(spectrum, windows=(1.0,)).iloc[0]
     assert ratio.low_bin_count == 1
     assert ratio.high_bin_count == 1
     assert ratio.low_to_high_amplitude_ratio == 0.5
+
+
+def test_fixed_band_ratio_preserves_windows_when_fft_has_no_valid_segment():
+    empty = pd.DataFrame(columns=["window_s", "frequency_hz", "amplitude"])
+    ratios = band_amplitude_ratios(empty, windows=(0.1, 0.2))
+    assert ratios.window_s.tolist() == [0.1, 0.2]
+    assert ratios.low_bin_count.tolist() == [0, 0]
+    assert ratios.high_bin_count.tolist() == [0, 0]
+    assert ratios.low_to_high_amplitude_ratio.isna().all()
 
 
 def test_random_only_control_has_no_injected_periodic_component():

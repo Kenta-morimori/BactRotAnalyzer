@@ -42,7 +42,7 @@ class SeriesResult:
     metadata: list[dict]
 
 
-def band_amplitude_ratios(spectra: pd.DataFrame) -> pd.DataFrame:
+def band_amplitude_ratios(spectra: pd.DataFrame, windows: tuple[float, ...] = WINDOWS_S) -> pd.DataFrame:
     """Mean FFT amplitude in fixed low/high bands for each SD/Mean window.
 
     Both bands exclude their upper bound. FFT frequencies are rounded only for
@@ -51,7 +51,8 @@ def band_amplitude_ratios(spectra: pd.DataFrame) -> pd.DataFrame:
     with no usable FFT bins, or a zero high-band mean, has an unavailable ratio.
     """
     rows = []
-    for width, group in spectra.groupby("window_s", sort=True):
+    for width in windows:
+        group = spectra[spectra["window_s"] == width]
         freq = group["frequency_hz"].to_numpy(float)
         band_freq = np.round(freq, decimals=9)
         amp = group["amplitude"].to_numpy(float)
