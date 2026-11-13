@@ -7,11 +7,13 @@
 ```bash
 python scripts/10_poster_one_over_f.py \
   --source-root outputs/poster_fluctuation \
-  --output-root outputs/poster_fluctuation/3_one_over_f
+  --output-root outputs/poster_fluctuation/2_simulation/one_over_f
 ```
 
 入力は `20230607 No.06/08`、`20231005 No.01`、`20231107 No.06`、および200 fps・seed 81の `constant_angle_step_plus_noise` と `random_angle_noise` である。20231005 No.01の停止は既存FFTと同じ区間に含める。各ケースの0.5秒Gaussian窓の生SD/Mean、標準化SD/MeanのFFT振幅、逆FFT系列を1列に配置する。時系列の有効部分は元解析の最長連続区間を使い、フレーム対応・時刻間隔・保存済みFFTとの一致を検証する。
 
 正の周波数ビンすべてを、線形のFFT振幅で `A/(f+1 Hz)` に切片なしの最小二乗で当てはめる。`1 Hz` は固定オフセットで、推定するのは `A` だけである。逆FFTでは各ビンに独立な一様乱数位相を付け、既定seed 84から列ごとに1ずつ加える。生成系列は平均0で、元の約5.5秒のFFT区間と同じ長さ・時刻に置く。これは**FFT振幅の1/f形**であり、通常の「電力が1/f」のピンクノイズとは異なる。位相乱数化で元の停止時刻や山谷は再現されない。
 
-`outputs/poster_fluctuation/3_one_over_f/` に `six_case_one_over_f_0.5s.png`、各ケースの周波数・実測/フィット振幅・位相の `tables/*_fit.csv`、逆FFT時系列の `tables/*_inverse_fft.csv`、係数・RMSE・R²・seed・元フレーム範囲の `index.csv`、`README.txt`、`_run_records/` を保存する。R²の低いケースは1/f形の当てはまりが弱いことを示す。図と逆FFT系列だけで振動の有意性は判定しない。
+FFTパネルは縦軸のみ対数表示とし、フィットは元の線形振幅で行う。凡例と各列のA・R²で推定値を確認する。線形振幅の最小二乗は大きな低周波点に影響され、高周波側で赤線と観測値が離れる場合がある。その乖離を表示だけで補正せず、モデルの限界として読む。
+
+`outputs/poster_fluctuation/2_simulation/one_over_f/` に `six_case_one_over_f_0.5s.png`、各ケースの周波数・実測/フィット振幅・位相の `tables/*_fit.csv`、逆FFT時系列の `tables/*_inverse_fft.csv`、係数・RMSE・R²・seed・元フレーム範囲の `index.csv`、`README.txt`、`_run_records/` を保存する。R²の低いケースは1/f形の当てはまりが弱いことを示す。図と逆FFT系列だけで振動の有意性は判定しない。

@@ -36,6 +36,17 @@ def test_amplitude_fit_recovers_known_scale_and_rejects_unusable_spectrum():
         fit_amplitude(frequency[:2], amplitude[:2])
 
 
+def test_amplitude_fit_minimizes_residuals_on_original_linear_spectrum():
+    frequency = np.array([0.2, 0.5, 1.0, 5.0, 50.0])
+    observed = amplitude_envelope(frequency, 0.75) + np.array([0.2, -0.05, 0.03, 0.01, -0.002])
+    fit = fit_amplitude(frequency, observed)
+    basis = amplitude_envelope(frequency, 1.0)
+    residual = observed - amplitude_envelope(frequency, fit.scale)
+    assert np.dot(basis, residual) == pytest.approx(0, abs=1e-14)
+    assert np.sum(residual**2) < np.sum((observed - amplitude_envelope(frequency, fit.scale + 0.05)) ** 2)
+    assert np.sum(residual**2) < np.sum((observed - amplitude_envelope(frequency, fit.scale - 0.05)) ** 2)
+
+
 @pytest.mark.parametrize("sample_count,rate_hz", [(1100, 200), (1375, 250)])
 def test_random_phase_inverse_fft_reproduces_saved_amplitude_even_and_odd(sample_count, rate_hz):
     frequency, target, phase, signal = random_phase_inverse_fft(sample_count, 1 / rate_hz, 0.6, 84)
@@ -87,6 +98,9 @@ def test_six_case_output_uses_saved_0_5s_fft_and_18_panels(tmp_path, monkeypatch
     assert (output / "six_case_one_over_f_0.5s.png").is_file()
     assert len(captured) == 1 and len(captured[0].axes) == 18
     assert all(captured[0].axes[6 + column].get_yscale() == "log" for column in range(6))
+    plotted_fit = captured[0].axes[6].lines[1].get_ydata()
+    saved_fit = pd.read_csv(output / "tables/case_0_fit.csv")["fitted_fft_amplitude"].to_numpy()
+    assert np.allclose(plotted_fit, saved_fit, rtol=1e-14, atol=0)
     index = pd.read_csv(output / "index.csv")
     assert len(index) == 6
     assert index.phase_seed.tolist() == list(range(84, 90))

@@ -144,11 +144,24 @@ def draw_comparison(cases: list[dict], target: Path) -> None:
         first.set(title=item["case"].label, xlabel="Time (s)", ylabel="SD / Mean")
         positive = np.isfinite(item["amplitude"]) & (item["amplitude"] > 0)
         second.plot(item["frequency_hz"][positive], item["amplitude"][positive], linewidth=0.8, label="0.5 s FFT")
-        second.plot(item["frequency_hz"], item["fitted_amplitude"], color="red", linewidth=1.5, label="A / (f + 1 Hz)")
+        second.plot(
+            item["frequency_hz"],
+            item["fitted_amplitude"],
+            color="red",
+            linewidth=1.5,
+            label="Fit: A / (f + 1 Hz)",
+        )
         second.set(xlabel="Frequency (Hz)", ylabel="FFT amplitude (log)", xlim=(0, item["rate_hz"] / 2))
         second.set_yscale("log")
         second.legend(fontsize=9)
-        second.text(0.98, 0.05, f"A = {item['fit'].scale:.3g}", transform=second.transAxes, ha="right", fontsize=10)
+        second.text(
+            0.98,
+            0.05,
+            f"linear-amplitude LS\nA = {item['fit'].scale:.3g}, R² = {item['fit'].r_squared_amplitude:.2f}",
+            transform=second.transAxes,
+            ha="right",
+            fontsize=10,
+        )
         third.plot(item["segment_time_sec"], item["surrogate"], linewidth=0.8)
         third.axhline(0, color="gray", linewidth=0.5)
         third.set(xlabel="Time (s)", ylabel="Inverse FFT (z units)")
@@ -238,7 +251,7 @@ if __name__ == "__main__":
     parser.add_argument("--phase-seed", type=int, default=84)
     args = parser.parse_args()
     source_root = Path(args.source_root).resolve()
-    output_root = Path(args.output_root).resolve() if args.output_root else source_root / "3_one_over_f"
+    output_root = Path(args.output_root).resolve() if args.output_root else source_root / "2_simulation" / "one_over_f"
     with analysis_run(parameters=vars(args), inputs=input_paths(source_root), outputs=[output_root]) as run_root:
         generate(source_root, output_root, args.phase_seed)
     archive = output_root / "_run_records" / run_root.parent.name / run_root.name
