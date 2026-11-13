@@ -5,6 +5,7 @@ import numpy as np
 from utils.functions.poster_fluctuation import (
     analyze,
     axis_angular_velocity,
+    duplicate_source_map,
     major_axis_deg,
     orbit_angular_velocity,
     synthetic_trajectory,
@@ -61,3 +62,14 @@ def test_major_axis_mapping_from_opencv_ellipse():
     assert major_axis_deg(((0, 0), (30, 120), 90)) == 0
     assert major_axis_deg(((0, 0), (120, 30), 45)) == 45
     assert np.isnan(major_axis_deg(None))
+
+
+def test_duplicate_source_map_marks_byte_identical_cells(tmp_path):
+    a = tmp_path / "a.avi"
+    b = tmp_path / "b.avi"
+    c = tmp_path / "c.avi"
+    a.write_bytes(b"synthetic source A")
+    b.write_bytes(b"synthetic source B")
+    c.write_bytes(b"synthetic source A")
+    result = duplicate_source_map({"day1": [a, b], "day2": [c]})
+    assert result == {("day1", 1): None, ("day1", 2): None, ("day2", 1): "day1/No.01"}

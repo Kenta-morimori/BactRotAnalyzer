@@ -23,6 +23,7 @@ from utils.functions.poster_fluctuation import (  # noqa: E402
     WINDOWS_S,
     analyze,
     axis_angular_velocity,
+    duplicate_source_map,
     major_axis_deg,
     orbit_angular_velocity,
     synthetic_trajectory,
@@ -207,27 +208,29 @@ def save_case(source: pd.DataFrame, folder: Path, title: str, metadata: dict) ->
     }
 
 
-def condition_summary(folder: Path, day: str) -> None:
+def condition_summary(folder: Path, day: str, sample_numbers: list[int]) -> None:
     """Put all cells on matching axes for local screening."""
-    cells = sorted(folder.glob("No.*"))
+    cells = [folder / f"No.{number:02d}" for number in sample_numbers]
     if not cells:
         return
     loaded = []
     for cell in cells:
         frame = pd.read_csv(cell / "time_series.csv")
         spectrum = pd.read_csv(cell / "long_axis_fft.csv")
-        part = spectrum[spectrum.window_s == 0.2]
-        loaded.append((cell, frame, part))
-    all_z = np.concatenate([frame["long_axis_sd_per_mean_0.2s_z"].to_numpy(float) for _, frame, _ in loaded])
-    all_amp = np.concatenate([part.amplitude.to_numpy(float) for _, _, part in loaded])
+        part = spectrum[(spectrum.window_s == 0.2) & (spectrum.frequency_hz <= 20)]
+        with (cell / "metadata.json").open(encoding="utf-8") as stream:
+            metadata = json.load(stream)
+        loaded.append((cell, frame, part, metadata.get("duplicate_of")))
+    all_z = np.concatenate([frame["long_axis_sd_per_mean_0.2s_z"].to_numpy(float) for _, frame, _, _ in loaded])
+    all_amp = np.concatenate([part.amplitude.to_numpy(float) for _, _, part, _ in loaded])
     z_limit = max(3.0, float(np.nanmax(np.abs(all_z))) * 1.05) if np.isfinite(all_z).any() else 3.0
     amp_limit = max(0.1, float(np.nanmax(all_amp)) * 1.05) if np.isfinite(all_amp).any() else 0.1
     fig, axes = plt.subplots(len(cells), 2, figsize=(14, 2.2 * len(cells)), squeeze=False, constrained_layout=True)
-    for row, (cell, frame, part) in enumerate(loaded):
+    for row, (cell, frame, part, duplicate_of) in enumerate(loaded):
         axes[row, 0].plot(frame.time_sec, frame["long_axis_sd_per_mean_0.2s_z"], linewidth=0.7)
         axes[row, 0].set_xlim(0, 6)
         axes[row, 0].set_ylim(-z_limit, z_limit)
-        axes[row, 0].set_ylabel(cell.name)
+        axes[row, 0].set_ylabel(cell.name + (f" [duplicate of {duplicate_of}]" if duplicate_of else ""))
         axes[row, 1].plot(part.frequency_hz, part.amplitude, linewidth=0.7)
         axes[row, 1].set_xlim(0, 20)
         axes[row, 1].set_ylim(0, amp_limit)
@@ -243,8 +246,26 @@ def condition_summary(folder: Path, day: str) -> None:
 def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, destination: Path) -> None:
     rows = []
     if args.mode in ("all", "measured"):
+        duplicates = duplicate_source_map(files_by_day)
+        included_by_day: dict[str, list[int]] = {day: [] for day in args.days}
         for day in args.days:
             for sample_no, avi in enumerate(files_by_day[day], 1):
+                duplicate_of = duplicates[(day, sample_no)]
+                if duplicate_of:
+                    rows.append(
+                        {
+                            "kind": "measured",
+                            "condition": DATASETS[day],
+                            "day": day,
+                            "sample_no": sample_no,
+                            "avi_filename": avi.name,
+                            "duplicate_of": duplicate_of,
+                            "analysis_status": "excluded_duplicate",
+                        }
+                    )
+                    print(f"Excluding duplicate {day} No.{sample_no:02d} ({duplicate_of})", flush=True)
+                    continue
+                included_by_day[day].append(sample_no)
                 print(f"Analyzing {day} No.{sample_no:02d}", flush=True)
                 source = read_avi(avi, settings_by_day[day])
                 rows.append(
@@ -258,13 +279,15 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
                             "day": day,
                             "sample_no": sample_no,
                             "avi_filename": avi.name,
+                            "duplicate_of": None,
+                            "analysis_status": "analyzed",
                             "rate_hz": settings_by_day[day]["rate_hz"],
                             "duration_s": settings_by_day[day]["duration_s"],
                         },
                     )
                 )
         for day in args.days:
-            condition_summary(destination / "measured" / day, day)
+            condition_summary(destination / "measured" / day, day, included_by_day[day])
     if args.mode in ("all", "synthetic"):
         for rate in args.synthetic_rates:
             for model in ("periodic_plus_noise", "random_only"):
@@ -314,11 +337,67 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
                         },
                     )
                 )
+        null_rows = []
+        for rate in args.synthetic_rates:
+            for seed in range(args.seed, args.seed + args.null_replicates):
+                null_source = synthetic_trajectory("random_only", rate, args.synthetic_duration, seed, base_hz=0.0)
+                null_time = null_source.time_sec.to_numpy(float)
+                null_axis = (-np.rad2deg(null_source.true_angle_rad.to_numpy(float))) % 180.0
+                _, null_omega = axis_angular_velocity(null_time, null_axis)
+                null_result = analyze(null_time, null_omega, windows=(0.2,))
+                spectrum = null_result.spectra
+                low = spectrum[spectrum.frequency_hz <= 20]
+                amplitudes = low.amplitude.to_numpy(float)
+                median_amp = float(np.median(amplitudes)) if len(amplitudes) else np.nan
+                null_rows.append(
+                    {
+                        "rate_hz": rate,
+                        "seed": seed,
+                        "peak_frequency_hz": null_result.metadata[0]["peak_frequency_hz"],
+                        "peak_amplitude": float(np.max(amplitudes)) if len(amplitudes) else np.nan,
+                        "peak_to_median_0_20hz": (
+                            float(np.max(amplitudes) / median_amp)
+                            if np.isfinite(median_amp) and median_amp > 0
+                            else np.nan
+                        ),
+                    }
+                )
+        null_folder = destination / "synthetic"
+        null_folder.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(null_rows).to_csv(null_folder / "random_only_ensemble.csv", index=False)
+        fig, axes = plt.subplots(1, 2, figsize=(12, 4), constrained_layout=True)
+        for rate, group in pd.DataFrame(null_rows).groupby("rate_hz"):
+            axes[0].hist(group.peak_frequency_hz, bins=20, alpha=0.5, label=f"{rate:g} Hz")
+            axes[1].hist(group.peak_to_median_0_20hz, bins=20, alpha=0.5, label=f"{rate:g} Hz")
+        axes[0].set(xlabel="Peak frequency (Hz)", ylabel="Count", title="Random-only: strongest apparent FFT peak")
+        axes[1].set(xlabel="Peak / median amplitude, 0-20 Hz", ylabel="Count", title="Random-only peak contrast")
+        for ax in axes:
+            ax.legend()
+            ax.grid(alpha=0.2)
+        fig.savefig(null_folder / "random_only_ensemble.png", dpi=150)
+        plt.close(fig)
     destination.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame(rows).to_csv(destination / "index.csv", index=False)
+    index_name = "index.csv" if args.mode == "all" else f"{args.mode}_index.csv"
+    pd.DataFrame(rows).to_csv(destination / index_name, index=False)
+    measured_rows = [r for r in rows if r["kind"] == "measured"]
+    if measured_rows:
+        selection = pd.DataFrame(
+            [
+                {
+                    "day": r["day"],
+                    "sample_no": r["sample_no"],
+                    "condition": r["condition"],
+                    "status": "exclude_duplicate" if r["duplicate_of"] else "needs_visual_review",
+                    "reason": f"byte-identical to {r['duplicate_of']}" if r["duplicate_of"] else "",
+                    "reviewer_note": "",
+                }
+                for r in measured_rows
+            ]
+        )
+        selection.to_csv(destination / "selection_template.csv", index=False)
     with (destination / "README.txt").open("w", encoding="utf-8") as stream:
         stream.write(
-            "Private local poster analysis. Each cell/model folder contains overview.png, time_series.csv, long_axis_fft.csv, orbit_fft.csv, and metadata.json. index.csv is a screening inventory, not an adoption decision. Long-axis angle is unoriented (180-degree symmetry). All derived measured plots and time series stay local.\n"
+            "Private local poster analysis. Each cell/model folder contains overview.png, time_series.csv, long_axis_fft.csv, orbit_fft.csv, and metadata.json. index.csv is the combined screening inventory for --mode all; mode-specific runs use measured_index.csv or synthetic_index.csv. selection_template.csv marks byte-identical inputs and leaves unique cells for visual review. Long-axis angle is unoriented (180-degree symmetry). All derived measured plots and time series stay local.\n"
         )
 
 
@@ -331,7 +410,10 @@ if __name__ == "__main__":
     parser.add_argument("--synthetic-rates", nargs="+", type=float, default=[200.0, 250.0])
     parser.add_argument("--synthetic-duration", type=float, default=6.0)
     parser.add_argument("--seed", type=int, default=81)
+    parser.add_argument("--null-replicates", type=int, default=40)
     args = parser.parse_args()
+    if args.null_replicates < 1:
+        parser.error("--null-replicates must be positive")
     data_root = Path(args.data_root).resolve()
     output_root = Path(args.output_root).resolve()
     files_by_day, settings_by_day = {}, {}

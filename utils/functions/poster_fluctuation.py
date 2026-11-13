@@ -1,6 +1,8 @@
 """Frame-preserving poster fluctuation measurements and synthetic controls."""
 
+import hashlib
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -17,6 +19,18 @@ from utils.functions.frequency_analysis import (
 )
 
 WINDOWS_S = (0.1, 0.2, 0.5, 1.0, 1.5, 2.0)
+
+
+def duplicate_source_map(files_by_day: dict[str, list[Path]]) -> dict[tuple[str, int], str | None]:
+    """Mark byte-identical AVIs as one source across all supplied conditions."""
+    seen: dict[str, str] = {}
+    result: dict[tuple[str, int], str | None] = {}
+    for day, files in files_by_day.items():
+        for sample_no, path in enumerate(files, 1):
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            result[(day, sample_no)] = seen.get(digest)
+            seen.setdefault(digest, f"{day}/No.{sample_no:02d}")
+    return result
 
 
 @dataclass
