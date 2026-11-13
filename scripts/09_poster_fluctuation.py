@@ -4,6 +4,7 @@ import argparse
 import configparser
 import json
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -422,5 +423,10 @@ if __name__ == "__main__":
         for day in args.days:
             files_by_day[day], settings_by_day[day] = dataset_files(data_root, day)
             inputs.extend([data_root / day / "config.ini", *files_by_day[day]])
-    with analysis_run(parameters=vars(args), inputs=inputs, outputs=[output_root]):
+    with analysis_run(parameters=vars(args), inputs=inputs, outputs=[output_root]) as run_root:
         main(args, files_by_day, settings_by_day, output_root)
+    # Keep a private copy beside custom output roots when the source worktree is archived.
+    archive = output_root / "_run_records" / run_root.parent.name / run_root.name
+    archive.mkdir(parents=True, exist_ok=False)
+    shutil.copy2(run_root / "manifest.json", archive / "manifest.json")
+    shutil.copy2(run_root / "run.log", archive / "run.log")

@@ -8,7 +8,7 @@
 python scripts/09_poster_fluctuation.py --output-root outputs/poster_fluctuation
 ```
 
-`--mode synthetic` で合成対照のみ、`--mode measured` で実測のみを実行する。`--days` で日付を選択できる。合成対照は `--seed`、`--synthetic-rates`、`--synthetic-duration`、`--null-replicates` を指定できる。乱数のみの対照は既定で連続40 seed × 200/250 Hzの見かけのピーク分布も保存する。解析CLIは `analysis_run` によるclean Gitゲートと非公開の実行履歴を使う。
+`--mode synthetic` で合成対照のみ、`--mode measured` で実測のみを実行する。`--days` で日付を選択できる。合成対照は `--seed`、`--synthetic-rates`、`--synthetic-duration`、`--null-replicates` を指定できる。乱数のみの対照は既定で連続40 seed × 200/250 Hzの見かけのピーク分布も保存する。解析CLIは `analysis_run` によるclean Gitゲートと非公開の実行履歴を使う。完了した実行履歴は専用出力の `_run_records/` にもコピーする。
 
 `outputs/poster_fluctuation/` の `measured/<day>/No.XX/` に各細胞の `overview.png`、`time_series.csv`、長軸と周回角のFFT、測定区間・欠測数・設定の `metadata.json` を保存する。`synthetic/<model>_<rate>hz_seed<seed>/` は同じ構成に真の角速度と真の座標を加える。`measured/<day>/condition_summary.png` は10細胞の0.2秒窓z-scoreとFFTを同じ縦軸・0–20 Hz横軸で並べる。`index.csv` は `--mode all` の品質一覧で、個別実行では `measured_index.csv` / `synthetic_index.csv` に分ける。`selection_template.csv` は完全一致する重複AVIを示し、異なる動画の採否は目視確認待ちとする。手動で記入する場合は `selection.csv` にコピーして保持する。
 
