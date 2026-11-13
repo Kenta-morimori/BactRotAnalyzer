@@ -192,3 +192,7 @@ python3 scripts/04_repellent_response_analysis.py --day repellent-response/20260
 切り出し位置を画像から推定・検証して、旧AVIと10倍拡大後の二値化を同座標で比較します。
 実験結果は `outputs/centroid_evaluation/` に実行ごとに保存します。通常解析への採用候補はなく、既存解析・キャッシュは保持します。
 [評価条件・実行手順・採用判断](../docs/centroid-evaluation.md)を参照してください。
+
+### ポスター用の回転揺らぎ解析
+
+3条件の菌体長軸角、比較用の重心周回角、合成ノイズ対照は [`docs/analysis/poster-fluctuation.md`](../docs/analysis/poster-fluctuation.md) の手順を参照する。生成物はGit管理外の `outputs/poster_fluctuation/` に置く。
