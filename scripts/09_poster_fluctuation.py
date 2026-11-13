@@ -151,7 +151,7 @@ def figure(frame: pd.DataFrame, spectra: dict[str, pd.DataFrame], title: str, ta
     axes[1, 0].set_aspect("equal", adjustable="box")
     axes[1, 0].invert_yaxis()
     axes[1, 1].plot(t, frame["long_axis_unwrapped_rad"], linewidth=0.7)
-    axes[1, 1].set(xlabel="Time (s)", ylabel="Angle (rad, CCW +)", title="Cell long-axis angle (unwrapped)")
+    axes[1, 1].set(xlabel="Time (s)", ylabel="Relative angle (rad, CCW +)", title="Cell long-axis angle (unwrapped)")
     if "true_angular_velocity_rad_s" in frame:
         axes[2, 0].plot(
             t, frame["true_angular_velocity_rad_s"], color="black", linewidth=0.7, alpha=0.6, label="generated truth"
