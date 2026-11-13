@@ -96,6 +96,7 @@ def analyze_frame(source: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, pd.Data
     frame = source.copy()
     frame["long_axis_unwrapped_rad"] = long_angle
     frame["long_axis_omega_rad_s"] = long_omega
+    frame["long_axis_abs_omega_rad_s"] = np.abs(long_omega)
     frame["orbit_angle_rad"] = orbit_angle
     frame["orbit_omega_rad_s"] = orbit_omega
     for column in long_result.frame.columns:
@@ -156,22 +157,25 @@ def figure(frame: pd.DataFrame, spectra: dict[str, pd.DataFrame], title: str, ta
         axes[2, 0].plot(
             t, frame["true_angular_velocity_rad_s"], color="black", linewidth=0.7, alpha=0.6, label="generated truth"
         )
-    axes[2, 0].plot(t, frame["long_axis_omega_rad_s"], linewidth=0.7, label="long axis")
-    axes[2, 0].set(xlabel="Time (s)", ylabel="Angular velocity (rad/s, CCW +)", title="Long-axis angular velocity")
-    if "true_angular_velocity_rad_s" in frame:
-        axes[2, 0].legend(fontsize=8)
+    axes[2, 0].plot(t, frame["long_axis_omega_rad_s"], linewidth=0.7, label="long axis (signed, CCW +)")
+    axes[2, 0].plot(t, frame["long_axis_abs_omega_rad_s"], linewidth=0.7, label="long axis |angular velocity|")
+    axes[2, 0].set(xlabel="Time (s)", ylabel="Angular velocity (rad/s)", title="Long-axis angular velocity")
+    axes[2, 0].legend(fontsize=8)
     for width in WINDOWS_S:
         label = f"{width:g} s"
         prefix = f"long_axis_sd_per_mean_{width:g}s"
         axes[2, 1].plot(t, frame[prefix], linewidth=0.8, label=label)
         axes[3, 0].plot(t, frame[f"{prefix}_z"], linewidth=0.8, label=label)
         spectrum = spectra["long_axis"]
-        part = spectrum[spectrum.window_s == width]
+        part = spectrum[(spectrum.window_s == width) & np.isfinite(spectrum.amplitude) & (spectrum.amplitude > 0)]
         axes[3, 1].plot(part.frequency_hz, part.amplitude, linewidth=0.8, label=label)
     axes[2, 1].set(xlabel="Time (s)", ylabel="SD / Mean", title="Gaussian-window SD / Mean: all widths")
     axes[3, 0].set(xlabel="Time (s)", ylabel="z-score", title="Standardized SD / Mean: FFT input")
-    axes[3, 1].set(xlabel="Frequency (Hz)", ylabel="FFT amplitude", title="FFT for each standardized window series")
+    axes[3, 1].set(
+        xlabel="Frequency (Hz)", ylabel="FFT amplitude (log scale)", title="FFT for each standardized window series"
+    )
     axes[3, 1].set_xlim(0, 20)
+    axes[3, 1].set_yscale("log")
     for ax in (axes[2, 1], axes[3, 0], axes[3, 1]):
         ax.legend(fontsize=8, ncol=2)
     for ax in axes.flat:
@@ -242,25 +246,25 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
                     continue
                 print(f"Analyzing {day} No.{sample_no:02d}", flush=True)
                 source = read_avi(avi, settings_by_day[day])
-                rows.append(
-                    save_case(
-                        source,
-                        destination,
-                        f"{day}_No.{sample_no:02d}",
-                        f"{DATASETS[day]} | {day} | cell {sample_no:02d}",
-                        {
-                            "kind": "measured",
-                            "condition": DATASETS[day],
-                            "day": day,
-                            "sample_no": sample_no,
-                            "avi_filename": avi.name,
-                            "duplicate_of": None,
-                            "analysis_status": "analyzed",
-                            "rate_hz": settings_by_day[day]["rate_hz"],
-                            "duration_s": settings_by_day[day]["duration_s"],
-                        },
-                    )
+                row = save_case(
+                    source,
+                    destination / "1_rotational_measurements" / day,
+                    f"No.{sample_no:02d}",
+                    f"{DATASETS[day]} | {day} | cell {sample_no:02d}",
+                    {
+                        "kind": "measured",
+                        "condition": DATASETS[day],
+                        "day": day,
+                        "sample_no": sample_no,
+                        "avi_filename": avi.name,
+                        "duplicate_of": None,
+                        "analysis_status": "analyzed",
+                        "rate_hz": settings_by_day[day]["rate_hz"],
+                        "duration_s": settings_by_day[day]["duration_s"],
+                    },
                 )
+                row["plot_file"] = f"{day}/{row['plot_file']}"
+                rows.append(row)
     if args.mode in ("all", "synthetic"):
         for rate in args.synthetic_rates:
             for model in ("periodic_plus_noise", "random_only"):
@@ -293,7 +297,7 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
                 rows.append(
                     save_case(
                         source,
-                        destination,
+                        destination / "2_simulation",
                         f"simulation_{name}",
                         name,
                         {
@@ -336,8 +340,9 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
                         ),
                     }
                 )
-        destination.mkdir(parents=True, exist_ok=True)
-        tables = destination / "tables"
+        simulation_dir = destination / "2_simulation"
+        simulation_dir.mkdir(parents=True, exist_ok=True)
+        tables = simulation_dir / "tables"
         tables.mkdir(parents=True, exist_ok=True)
         pd.DataFrame(null_rows).to_csv(tables / "simulation_random_only_ensemble.csv", index=False)
         fig, axes = plt.subplots(1, 2, figsize=(12, 4), constrained_layout=True)
@@ -349,12 +354,19 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
         for ax in axes:
             ax.legend()
             ax.grid(alpha=0.2)
-        fig.savefig(destination / "simulation_random_only_ensemble.png", dpi=150)
+        fig.savefig(simulation_dir / "simulation_random_only_ensemble.png", dpi=150)
         plt.close(fig)
     destination.mkdir(parents=True, exist_ok=True)
-    index_name = "index.csv" if args.mode == "all" else f"{args.mode}_index.csv"
-    pd.DataFrame(rows).to_csv(destination / index_name, index=False)
     measured_rows = [r for r in rows if r["kind"] == "measured"]
+    synthetic_rows = [r for r in rows if r["kind"] == "synthetic"]
+    if args.mode in ("all", "measured"):
+        measured_dir = destination / "1_rotational_measurements"
+        measured_dir.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(measured_rows).to_csv(measured_dir / "index.csv", index=False)
+    if args.mode in ("all", "synthetic"):
+        simulation_dir = destination / "2_simulation"
+        simulation_dir.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(synthetic_rows).to_csv(simulation_dir / "index.csv", index=False)
     if measured_rows:
         selection = pd.DataFrame(
             [
@@ -369,10 +381,10 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
                 for r in measured_rows
             ]
         )
-        selection.to_csv(destination / "selection_template.csv", index=False)
+        selection.to_csv(measured_dir / "selection_template.csv", index=False)
     with (destination / "README.txt").open("w", encoding="utf-8") as stream:
         stream.write(
-            "Private local poster analysis. One flat PNG per measured cell (<day>_No.XX.png) or synthetic case (simulation_*.png). Each PNG contains t-x, t-y, x-y, long-axis angle/velocity, all six SD/Mean windows, standardized inputs and their FFTs. Numeric series, spectra and metadata are in tables/ with matching stems. index.csv is the combined inventory; selection_template.csv marks excluded duplicate AVIs. Long-axis angle has 180-degree ambiguity. Derived measured plots and series stay local.\n"
+            "Private local poster analysis. Measured plots are 1_rotational_measurements/<day>/No.XX.png; simulations are in 2_simulation/. Each PNG contains t-x, t-y, x-y, long-axis angle, signed and absolute angular velocity, all six SD/Mean windows, standardized inputs and their FFTs. FFT amplitude uses a logarithmic plot axis; numeric spectra are unchanged. Each case's numeric series, spectra and metadata are in its sibling tables/. Each category has index.csv; 1_rotational_measurements/selection_template.csv marks excluded duplicate AVIs. Long-axis angle has 180-degree ambiguity. Derived measured plots and series stay local.\n"
         )
 
 

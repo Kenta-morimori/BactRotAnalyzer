@@ -1,6 +1,7 @@
 """Synthetic contracts for the poster measurement path."""
 
 import runpy
+from argparse import Namespace
 from pathlib import Path
 
 import numpy as np
@@ -88,17 +89,78 @@ def test_long_axis_angle_plot_breaks_at_timestamp_gap():
     assert np.isfinite(omega[5])
 
 
-def test_one_flat_poster_png_contains_all_window_series(tmp_path):
+def test_one_poster_png_contains_absolute_velocity_and_log_fft(tmp_path, monkeypatch):
     script = runpy.run_path(
         str(Path(__file__).resolve().parents[1] / "scripts/09_poster_fluctuation.py"), run_name="poster_test"
     )
     source = synthetic_trajectory("periodic_plus_noise", 200, 6, 81)
     source["long_axis_deg"] = (-np.rad2deg(source["true_angle_rad"])) % 180.0
     source["axis_ratio"] = np.nan
+    captured = []
+    original_savefig = script["plt"].Figure.savefig
+
+    def capture(figure, *args, **kwargs):
+        captured.append(figure)
+        return original_savefig(figure, *args, **kwargs)
+
+    monkeypatch.setattr(script["plt"].Figure, "savefig", capture)
     script["save_case"](source, tmp_path, "synthetic_No.01", "synthetic test", {"kind": "synthetic"})
     assert [path.name for path in tmp_path.glob("*.png")] == ["synthetic_No.01.png"]
     assert (tmp_path / "tables/synthetic_No.01_long_axis_fft.csv").is_file()
     saved = script["pd"].read_csv(tmp_path / "tables/synthetic_No.01_time_series.csv")
+    assert np.allclose(saved["long_axis_abs_omega_rad_s"], np.abs(saved["long_axis_omega_rad_s"]), equal_nan=True)
+    assert captured[0].axes[6].get_yscale() == "linear"
+    assert captured[0].axes[7].get_yscale() == "log"
+    assert len(captured[0].axes[4].lines) == 3  # generated truth, signed estimate, absolute estimate
     for width in (0.1, 0.2, 0.5, 1.0, 1.5, 2.0):
         assert f"long_axis_sd_per_mean_{width:g}s" in saved
         assert f"long_axis_sd_per_mean_{width:g}s_z" in saved
+
+
+def test_main_routes_measured_plot_to_day_and_preserves_manual_selection(tmp_path, monkeypatch):
+    script = runpy.run_path(
+        str(Path(__file__).resolve().parents[1] / "scripts/09_poster_fluctuation.py"), run_name="poster_test"
+    )
+    measured = tmp_path / "1_rotational_measurements"
+    measured.mkdir()
+    (measured / "selection.csv").write_text("manual decision\n", encoding="utf-8")
+    source = synthetic_trajectory("periodic_plus_noise", 200, 6, 81)
+    source["long_axis_deg"] = (-np.rad2deg(source["true_angle_rad"])) % 180.0
+    source["axis_ratio"] = np.nan
+    script["main"].__globals__["read_avi"] = lambda _path, _settings: source
+    script["main"].__globals__["duplicate_source_map"] = lambda _files: {("20230607", 1): None}
+    script["main"](
+        Namespace(mode="measured", days=["20230607"]),
+        {"20230607": [tmp_path / "No.01.avi"]},
+        {"20230607": {"rate_hz": 200, "duration_s": 6}},
+        tmp_path,
+    )
+    assert (measured / "20230607/No.01.png").is_file()
+    assert (measured / "20230607/tables/No.01_time_series.csv").is_file()
+    assert (measured / "selection.csv").read_text(encoding="utf-8") == "manual decision\n"
+    index = script["pd"].read_csv(measured / "index.csv")
+    assert index.loc[0, "plot_file"] == "20230607/No.01.png"
+    assert not (tmp_path / "index.csv").exists()
+
+
+def test_main_routes_synthetic_plots_and_index(tmp_path):
+    script = runpy.run_path(
+        str(Path(__file__).resolve().parents[1] / "scripts/09_poster_fluctuation.py"), run_name="poster_test"
+    )
+    script["main"](
+        Namespace(mode="synthetic", synthetic_rates=[200], synthetic_duration=3, seed=81, null_replicates=1),
+        {},
+        {},
+        tmp_path,
+    )
+    simulation = tmp_path / "2_simulation"
+    assert (simulation / "simulation_periodic_plus_noise_200hz_seed81.png").is_file()
+    assert (simulation / "simulation_random_only_200hz_seed81.png").is_file()
+    assert (simulation / "simulation_random_only_ensemble.png").is_file()
+    assert (simulation / "tables/simulation_random_only_ensemble.csv").is_file()
+    index = script["pd"].read_csv(simulation / "index.csv")
+    assert set(index.plot_file) == {
+        "simulation_periodic_plus_noise_200hz_seed81.png",
+        "simulation_random_only_200hz_seed81.png",
+    }
+    assert not (tmp_path / "1_rotational_measurements").exists()
