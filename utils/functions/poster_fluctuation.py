@@ -72,6 +72,7 @@ def band_amplitude_ratios(spectra: pd.DataFrame, windows: tuple[float, ...] = WI
                 "high_bin_count": len(high),
                 "low_mean_amplitude": low_mean,
                 "high_mean_amplitude": high_mean,
+                "low_minus_high_amplitude": low_mean - high_mean,
                 "low_to_high_amplitude_ratio": (
                     low_mean / high_mean if np.isfinite(high_mean) and high_mean > 0 else np.nan
                 ),
@@ -253,24 +254,19 @@ def synthetic_trajectory(
     rate_hz: float,
     duration_s: float,
     seed: int,
-    base_hz: float = 8.0,
-    modulation_hz: float = 2.0,
-    modulation_rad_s: float = 8.0,
+    base_hz: float | None = None,
     noise_rad_s: float = 3.0,
     radius_um: float = 0.5,
     coordinate_noise_sd_um: float = 0.01,
 ) -> pd.DataFrame:
     """Known angular velocity -> integrated angle -> image-space orbit."""
-    if model not in ("periodic_plus_noise", "random_only"):
+    if model not in ("steady_rotation_plus_noise", "random_only"):
         raise ValueError(model)
+    if base_hz is None:
+        base_hz = 8.0 if model == "steady_rotation_plus_noise" else 0.0
     time = np.arange(int(rate_hz * duration_s), dtype=float) / rate_hz
     rng = np.random.default_rng(seed)
-    periodic = (
-        modulation_rad_s * np.sin(2 * np.pi * modulation_hz * time)
-        if model == "periodic_plus_noise"
-        else np.zeros_like(time)
-    )
-    omega_true = 2 * np.pi * base_hz + periodic + rng.normal(0, noise_rad_s, len(time))
+    omega_true = 2 * np.pi * base_hz + rng.normal(0, noise_rad_s, len(time))
     theta = np.r_[0.0, np.cumsum(omega_true[1:] / rate_hz)]
     # Image y down; positive CCW rotates toward decreasing image y.
     true_x = radius_um * np.cos(theta)

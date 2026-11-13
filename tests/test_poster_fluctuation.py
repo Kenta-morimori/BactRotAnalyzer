@@ -32,7 +32,7 @@ def test_long_axis_angular_velocity_recovers_after_missing_frame_without_crossin
 
 
 def test_long_axis_and_orbit_sign_on_known_ccw_motion():
-    frame = synthetic_trajectory("periodic_plus_noise", 200, 6, 81, noise_rad_s=0, coordinate_noise_sd_um=0)
+    frame = synthetic_trajectory("steady_rotation_plus_noise", 200, 6, 81, noise_rad_s=0, coordinate_noise_sd_um=0)
     time = frame.time_sec.to_numpy(float)
     axis = (-np.rad2deg(frame.true_angle_rad.to_numpy(float))) % 180
     _, omega_axis = axis_angular_velocity(time, axis)
@@ -77,6 +77,7 @@ def test_fixed_band_ratio_uses_mean_amplitudes_and_excludes_band_edges():
     assert ratio.loc[0, "high_bin_count"] == 2
     assert ratio.loc[0, "low_mean_amplitude"] == 3
     assert ratio.loc[0, "high_mean_amplitude"] == 2
+    assert ratio.loc[0, "low_minus_high_amplitude"] == 1
     assert ratio.loc[0, "low_to_high_amplitude_ratio"] == 1.5
     assert np.isnan(ratio.loc[1, "low_to_high_amplitude_ratio"])
 
@@ -105,11 +106,24 @@ def test_fixed_band_ratio_preserves_windows_when_fft_has_no_valid_segment():
 
 
 def test_random_only_control_has_no_injected_periodic_component():
-    frame = synthetic_trajectory("random_only", 200, 6, 81, base_hz=0)
+    frame = synthetic_trajectory("random_only", 200, 6, 81)
     assert len(frame) == 1200
     assert frame.true_angular_velocity_rad_s.std() > 0
     assert abs(frame.true_angular_velocity_rad_s.mean()) < 0.5
     assert np.isfinite(frame[["x_um", "y_um"]]).all().all()
+
+
+def test_steady_rotation_has_no_periodic_velocity_modulation_and_flat_window_scale():
+    for rate in (200, 250):
+        steady = synthetic_trajectory("steady_rotation_plus_noise", rate, 6, 81, noise_rad_s=0)
+        assert np.allclose(steady.true_angular_velocity_rad_s, 2 * np.pi * 8)
+        noisy = synthetic_trajectory("steady_rotation_plus_noise", rate, 6, 81)
+        time = noisy.time_sec.to_numpy(float)
+        axis = (-np.rad2deg(noisy.true_angle_rad.to_numpy(float))) % 180.0
+        _, omega = axis_angular_velocity(time, axis)
+        result = analyze(time, omega)
+        medians = [result.frame[f"sd_per_mean_{width:g}s"].median() for width in (0.1, 0.2, 0.5, 1, 1.5, 2)]
+        assert max(medians) / min(medians) < 1.15
 
 
 def test_major_axis_mapping_from_opencv_ellipse():
@@ -145,7 +159,7 @@ def test_one_poster_png_contains_absolute_velocity_and_log_fft(tmp_path, monkeyp
     script = runpy.run_path(
         str(Path(__file__).resolve().parents[1] / "scripts/09_poster_fluctuation.py"), run_name="poster_test"
     )
-    source = synthetic_trajectory("periodic_plus_noise", 200, 6, 81)
+    source = synthetic_trajectory("steady_rotation_plus_noise", 200, 6, 81)
     source["long_axis_deg"] = (-np.rad2deg(source["true_angle_rad"])) % 180.0
     source["axis_ratio"] = np.nan
     (tmp_path / "tables").mkdir()
@@ -187,7 +201,7 @@ def test_main_routes_measured_plot_to_day_and_preserves_manual_selection(tmp_pat
     measured = tmp_path / "1_rotational_measurements"
     measured.mkdir()
     (measured / "selection.csv").write_text("manual decision\n", encoding="utf-8")
-    source = synthetic_trajectory("periodic_plus_noise", 200, 6, 81)
+    source = synthetic_trajectory("steady_rotation_plus_noise", 200, 6, 81)
     source["long_axis_deg"] = (-np.rad2deg(source["true_angle_rad"])) % 180.0
     source["axis_ratio"] = np.nan
     source = source[["time_sec", "x_um", "y_um", "long_axis_deg", "axis_ratio"]]
@@ -219,14 +233,18 @@ def test_main_routes_measured_plot_to_day_and_preserves_manual_selection(tmp_pat
     index = script["pd"].read_csv(measured / "index.csv")
     assert index.loc[0, "plot_file"] == "20230607/No.01.png"
     assert index.loc[0, "band_ratio_file"] == "20230607/tables/No.01_band_amplitude_ratio.csv"
-    assert len(captured[0].axes) == 10
+    assert len(captured[0].axes) == 12
     assert captured[0].axes[9].get_yscale() == "log"
     assert len(captured[0].axes[9].lines[0].get_xdata()) == 6
+    assert captured[0].axes[10].get_yscale() == "linear"
+    assert captured[0].axes[11].get_yscale() == "linear"
+    ratios = script["pd"].read_csv(measured / "20230607/tables/No.01_band_amplitude_ratio.csv")
+    assert np.allclose(ratios.low_minus_high_amplitude, ratios.low_mean_amplitude - ratios.high_mean_amplitude)
     assert not any(column.startswith("orbit_") for column in index.columns)
     assert not (tmp_path / "index.csv").exists()
 
 
-def test_candidate_ratio_comparison_keeps_four_cells_separate(tmp_path, monkeypatch):
+def test_candidate_band_comparison_keeps_four_cells_separate(tmp_path, monkeypatch):
     script = runpy.run_path(
         str(Path(__file__).resolve().parents[1] / "scripts/09_poster_fluctuation.py"), run_name="poster_test"
     )
@@ -234,7 +252,14 @@ def test_candidate_ratio_comparison_keeps_four_cells_separate(tmp_path, monkeypa
     for day, sample_no in script["POSTER_CANDIDATES"]:
         for width in (0.1, 0.2, 0.5, 1.0, 1.5, 2.0):
             rows.append(
-                {"day": day, "sample_no": sample_no, "window_s": width, "low_to_high_amplitude_ratio": 10 * width}
+                {
+                    "day": day,
+                    "sample_no": sample_no,
+                    "window_s": width,
+                    "low_to_high_amplitude_ratio": 10 * width,
+                    "low_mean_amplitude": width,
+                    "low_minus_high_amplitude": width / 2,
+                }
             )
     captured = []
     original_savefig = script["plt"].Figure.savefig
@@ -245,10 +270,12 @@ def test_candidate_ratio_comparison_keeps_four_cells_separate(tmp_path, monkeypa
 
     monkeypatch.setattr(script["plt"].Figure, "savefig", capture)
     target = tmp_path / "candidate_band_amplitude_ratio.png"
-    script["candidate_ratio_comparison"](pd.DataFrame(rows), target)
+    script["candidate_band_comparison"](pd.DataFrame(rows), target)
     assert target.is_file()
-    assert len(captured[0].axes[0].lines) == 4
+    assert len(captured[0].axes) == 3
+    assert all(len(ax.lines) == 4 for ax in captured[0].axes)
     assert captured[0].axes[0].get_yscale() == "log"
+    assert all(ax.get_yscale() == "linear" for ax in captured[0].axes[1:])
     assert "stops included" in captured[0].axes[0].get_legend().get_texts()[2].get_text()
 
 
@@ -266,24 +293,29 @@ def test_main_routes_synthetic_plots_and_index(tmp_path, monkeypatch):
         return original_savefig(figure, *args, **kwargs)
 
     monkeypatch.setattr(script["plt"].Figure, "savefig", capture)
+    simulation = tmp_path / "2_simulation"
+    (simulation / "tables").mkdir(parents=True)
+    (simulation / "simulation_periodic_plus_noise_200hz_seed81.png").write_bytes(b"obsolete")
+    (simulation / "tables/simulation_periodic_plus_noise_200hz_seed81_metadata.json").write_text("obsolete")
     script["main"](
         Namespace(mode="synthetic", synthetic_rates=[200, 250], synthetic_duration=3, seed=81, null_replicates=1),
         {},
         {},
         tmp_path,
     )
-    simulation = tmp_path / "2_simulation"
-    assert (simulation / "simulation_periodic_plus_noise_200hz_seed81.png").is_file()
+    assert (simulation / "simulation_steady_rotation_plus_noise_200hz_seed81.png").is_file()
     assert (simulation / "simulation_random_only_200hz_seed81.png").is_file()
-    assert (simulation / "simulation_periodic_plus_noise_250hz_seed81.png").is_file()
+    assert (simulation / "simulation_steady_rotation_plus_noise_250hz_seed81.png").is_file()
     assert (simulation / "simulation_random_only_250hz_seed81.png").is_file()
     assert (simulation / "simulation_random_only_ensemble.png").is_file()
     assert (simulation / "tables/simulation_random_only_ensemble.csv").is_file()
+    assert not list(simulation.glob("simulation_periodic_plus_noise_*.png"))
+    assert not list((simulation / "tables").glob("simulation_periodic_plus_noise_*"))
     index = script["pd"].read_csv(simulation / "index.csv")
     assert set(index.plot_file) == {
-        "simulation_periodic_plus_noise_200hz_seed81.png",
+        "simulation_steady_rotation_plus_noise_200hz_seed81.png",
         "simulation_random_only_200hz_seed81.png",
-        "simulation_periodic_plus_noise_250hz_seed81.png",
+        "simulation_steady_rotation_plus_noise_250hz_seed81.png",
         "simulation_random_only_250hz_seed81.png",
     }
     nulls = script["pd"].read_csv(simulation / "tables/simulation_random_only_ensemble.csv")

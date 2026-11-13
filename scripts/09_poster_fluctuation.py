@@ -34,6 +34,11 @@ from utils.run_context import analysis_run  # noqa: E402
 
 DATASETS = {"20231005": "MotAB overexpression", "20230607": "Fixed rotational direction", "20231107": "Brake protein"}
 POSTER_CANDIDATES = (("20230607", 6), ("20230607", 8), ("20231005", 1), ("20231107", 6))
+BAND_PANELS = (
+    ("low_to_high_amplitude_ratio", "Low / High", "Mean FFT amplitude ratio", "log"),
+    ("low_mean_amplitude", "Low only", "Mean FFT amplitude", "linear"),
+    ("low_minus_high_amplitude", "Low − High", "Difference of mean FFT amplitudes", "linear"),
+)
 
 
 def dataset_files(data_root: Path, day: str) -> tuple[list[Path], dict]:
@@ -176,12 +181,8 @@ def figure(
     """One complete long-axis poster sheet per observed cell or synthetic case."""
     if band_ratios is None:
         fig, axes = plt.subplots(3, 3, figsize=(18, 16), constrained_layout=True)
-        ratio_axis = None
     else:
-        fig = plt.figure(figsize=(18, 20), layout="constrained")
-        grid = fig.add_gridspec(4, 3)
-        axes = np.asarray([fig.add_subplot(grid[row, col]) for row in range(3) for col in range(3)]).reshape(3, 3)
-        ratio_axis = fig.add_subplot(grid[3, :])
+        fig, axes = plt.subplots(4, 3, figsize=(18, 20), constrained_layout=True)
     t = frame["time_sec"].to_numpy(float)
     x = frame["x_um"].to_numpy(float)
     y = frame["y_um"].to_numpy(float)
@@ -237,47 +238,41 @@ def figure(
     for ax in axes[2]:
         ax.legend(ncol=2)
     if band_ratios is not None:
-        assert ratio_axis is not None
-        ratio = band_ratios["low_to_high_amplitude_ratio"].to_numpy(float)
-        good = np.isfinite(ratio) & (ratio > 0)
-        ratio_axis.plot(
-            band_ratios.loc[good, "window_s"], ratio[good], "-o", label="mean amplitude: 0–1 Hz / 80–100 Hz"
-        )
-        ratio_axis.set(
-            xlabel="Gaussian window width (s)",
-            ylabel="Low / high mean FFT amplitude (log)",
-            title="Fixed-band ratio (full recording; stops retained)",
-        )
-        ratio_axis.set_xticks(WINDOWS_S)
-        ratio_axis.set_yscale("log")
-        ratio_axis.legend()
-    style_axes(np.asarray([*axes.flat, ratio_axis]) if ratio_axis is not None else axes)
+        for ax, (column, label, ylabel, scale) in zip(axes[3], BAND_PANELS):
+            values = band_ratios[column].to_numpy(float)
+            good = np.isfinite(values) & ((values > 0) if scale == "log" else True)
+            ax.plot(band_ratios.loc[good, "window_s"], values[good], "-o")
+            ax.set(xlabel="Gaussian window width (s)", ylabel=ylabel, title=label)
+            ax.set_xticks(WINDOWS_S)
+            ax.set_yscale(scale)
+            ax.tick_params(axis="x", labelrotation=45)
+        axes[3, 0].set_title("Low / High (full record; stops retained)")
+    style_axes(axes)
     fig.suptitle(title, fontsize=20)
     target.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(target, dpi=180)
     plt.close(fig)
 
 
-def candidate_ratio_comparison(ratios: pd.DataFrame, target: Path) -> None:
+def candidate_band_comparison(ratios: pd.DataFrame, target: Path) -> None:
     """Compare the user-selected cells without averaging distinct cells."""
-    fig, ax = plt.subplots(figsize=(12, 7), constrained_layout=True)
-    for day, sample_no in POSTER_CANDIDATES:
-        group = ratios[(ratios.day == day) & (ratios.sample_no == sample_no)].sort_values("window_s")
-        values = group["low_to_high_amplitude_ratio"].to_numpy(float)
-        good = np.isfinite(values) & (values > 0)
-        label = f"{day} No.{sample_no:02d}"
-        if (day, sample_no) == ("20231005", 1):
-            label += " (stops included)"
-        ax.plot(group.loc[good, "window_s"], values[good], "-o", label=label)
-    ax.set(
-        xlabel="Gaussian window width (s)",
-        ylabel="Low / high mean FFT amplitude (log)",
-        title="Candidate cells: 0–1 Hz / 80–100 Hz",
-    )
-    ax.set_xticks(WINDOWS_S)
-    ax.set_yscale("log")
-    ax.legend()
-    style_axes(np.asarray([ax]))
+    fig, axes = plt.subplots(1, 3, figsize=(20, 7), constrained_layout=True)
+    for ax, (column, title, ylabel, scale) in zip(axes, BAND_PANELS):
+        for day, sample_no in POSTER_CANDIDATES:
+            group = ratios[(ratios.day == day) & (ratios.sample_no == sample_no)].sort_values("window_s")
+            values = group[column].to_numpy(float)
+            good = np.isfinite(values) & ((values > 0) if scale == "log" else True)
+            label = f"{day} No.{sample_no:02d}"
+            if (day, sample_no) == ("20231005", 1):
+                label += " (stops included)"
+            ax.plot(group.loc[good, "window_s"], values[good], "-o", label=label)
+        ax.set(xlabel="Gaussian window width (s)", ylabel=ylabel, title=title)
+        ax.set_xticks(WINDOWS_S)
+        ax.set_yscale(scale)
+        ax.tick_params(axis="x", labelrotation=45)
+    axes[0].legend()
+    fig.suptitle("Candidate cells: Low = 0–1 Hz, High = 80–100 Hz", fontsize=18)
+    style_axes(axes)
     fig.savefig(target, dpi=180)
     plt.close(fig)
 
@@ -416,14 +411,14 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
                 rows.append(row)
     if args.mode in ("all", "synthetic"):
         for rate in args.synthetic_rates:
-            for model in ("periodic_plus_noise", "random_only"):
+            for model in ("steady_rotation_plus_noise", "random_only"):
                 print(f"Simulating {model} at {rate:g} Hz", flush=True)
                 source = synthetic_trajectory(
                     model,
                     rate,
                     args.synthetic_duration,
                     args.seed,
-                    base_hz=8.0 if model == "periodic_plus_noise" else 0.0,
+                    base_hz=8.0 if model == "steady_rotation_plus_noise" else 0.0,
                 )
                 source["source_frame_1based"] = np.arange(1, len(source) + 1)
                 source["long_axis_deg"] = (-np.rad2deg(source["true_angle_rad"])) % 180.0
@@ -455,10 +450,9 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
                             "rate_hz": rate,
                             "duration_s": args.synthetic_duration,
                             "seed": args.seed,
-                            "base_hz": 8.0 if model == "periodic_plus_noise" else 0.0,
-                            "periodic_modulation_hz": 2.0 if model == "periodic_plus_noise" else None,
-                            "periodic_modulation_rad_s": 8.0 if model == "periodic_plus_noise" else 0.0,
+                            "base_hz": 8.0 if model == "steady_rotation_plus_noise" else 0.0,
                             "white_noise_sd_rad_s": 3.0,
+                            "angular_velocity_model": "constant mean plus independent Gaussian noise per frame",
                             "radius_um": 0.5,
                             "coordinate_noise_sd_um": 0.01,
                         },
@@ -496,6 +490,11 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
         style_axes(axes)
         fig.savefig(simulation_dir / "simulation_random_only_ensemble.png", dpi=180)
         plt.close(fig)
+        for obsolete in (
+            *simulation_dir.glob("simulation_periodic_plus_noise_*.png"),
+            *tables.glob("simulation_periodic_plus_noise_*"),
+        ):
+            obsolete.unlink()
     destination.mkdir(parents=True, exist_ok=True)
     measured_rows = [r for r in rows if r["kind"] == "measured"]
     synthetic_rows = [r for r in rows if r["kind"] == "synthetic"]
@@ -515,7 +514,7 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
             comparison_tables = measured_dir / "tables"
             comparison_tables.mkdir(parents=True, exist_ok=True)
             comparison.to_csv(comparison_tables / "candidate_band_amplitude_ratio.csv", index=False)
-            candidate_ratio_comparison(comparison, measured_dir / "candidate_band_amplitude_ratio.png")
+            candidate_band_comparison(comparison, measured_dir / "candidate_band_amplitude_ratio.png")
     if args.mode in ("all", "synthetic"):
         simulation_dir = destination / "2_simulation"
         simulation_dir.mkdir(parents=True, exist_ok=True)
@@ -541,11 +540,13 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
             "Measured plots are 1_rotational_measurements/<day>/No.XX.png; simulations are in 2_simulation/. "
             "Each measured PNG contains t-x, t-y, x-y, inferred relative phase wrapped to [-pi, pi), separate signed "
             "and absolute long-axis angular velocity, all six SD/Mean windows, standardized inputs, their FFTs, "
-            "and a low/high FFT mean-amplitude ratio for 0<f<1 Hz versus 80<=f<100 Hz. "
+            "and side-by-side Low/High, Low-only and Low-High mean FFT amplitude metrics for 0<f<1 Hz and 80<=f<100 Hz. "
             "The ratio includes stops and is unavailable when either band has no bins or the high-band mean is zero. "
             "A full measured run also writes the four candidate-cell comparison PNG and table under 1_rotational_measurements/. "
             "The FFT plot extends to half the frame rate and uses a logarithmic amplitude axis. "
             "Each case's numeric series, spectra and metadata are in its sibling tables/. "
+            "Synthetic rotation uses a constant 8 Hz mean plus independent Gaussian angular-velocity noise (SD 3 rad/s per frame), or zero-mean noise only; neither injects periodic velocity modulation. "
+            "The orbit radius is 0.5 um and independent x/y coordinate-noise SD is 0.01 um. Defaults are 200/250 fps, 6 s, seed 81. "
             "Synthetic orbit velocity is for truth validation only. Each category has index.csv; "
             "1_rotational_measurements/selection_template.csv marks excluded duplicate AVIs. "
             "Long-axis angle has 180-degree ambiguity. Derived measured plots and series stay local.\n"
