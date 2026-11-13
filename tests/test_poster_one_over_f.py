@@ -10,7 +10,11 @@ import pytest
 
 from utils.functions.frequency_analysis import fft
 from utils.functions.poster_fluctuation import synthetic_long_axis
-from utils.functions.poster_one_over_f import amplitude_envelope, fit_amplitude, random_phase_inverse_fft
+from utils.functions.poster_one_over_f import (
+    amplitude_envelope,
+    fit_amplitude,
+    random_phase_inverse_fft,
+)
 
 
 def script_functions():
