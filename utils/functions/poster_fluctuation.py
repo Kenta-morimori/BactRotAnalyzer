@@ -19,6 +19,8 @@ from utils.functions.frequency_analysis import (
 )
 
 WINDOWS_S = (0.1, 0.2, 0.5, 1.0, 1.5, 2.0)
+LOW_BAND_HZ = (0.0, 1.0)
+HIGH_BAND_HZ = (80.0, 100.0)
 
 
 def duplicate_source_map(files_by_day: dict[str, list[Path]]) -> dict[tuple[str, int], str | None]:
@@ -38,6 +40,43 @@ class SeriesResult:
     frame: pd.DataFrame
     spectra: pd.DataFrame
     metadata: list[dict]
+
+
+def band_amplitude_ratios(spectra: pd.DataFrame) -> pd.DataFrame:
+    """Mean FFT amplitude in fixed low/high bands for each SD/Mean window.
+
+    Both bands exclude their upper bound. FFT frequencies are rounded only for
+    band assignment so a nominal 1 Hz bin cannot enter the open low band due
+    to floating-point error. DC is excluded explicitly. A band
+    with no usable FFT bins, or a zero high-band mean, has an unavailable ratio.
+    """
+    rows = []
+    for width, group in spectra.groupby("window_s", sort=True):
+        freq = group["frequency_hz"].to_numpy(float)
+        band_freq = np.round(freq, decimals=9)
+        amp = group["amplitude"].to_numpy(float)
+        usable = np.isfinite(freq) & np.isfinite(amp) & (amp >= 0)
+        low = amp[usable & (band_freq > LOW_BAND_HZ[0]) & (band_freq < LOW_BAND_HZ[1])]
+        high = amp[usable & (band_freq >= HIGH_BAND_HZ[0]) & (band_freq < HIGH_BAND_HZ[1])]
+        low_mean = float(np.mean(low)) if len(low) else np.nan
+        high_mean = float(np.mean(high)) if len(high) else np.nan
+        rows.append(
+            {
+                "window_s": float(width),
+                "low_band_start_hz_exclusive": LOW_BAND_HZ[0],
+                "low_band_end_hz_exclusive": LOW_BAND_HZ[1],
+                "high_band_start_hz_inclusive": HIGH_BAND_HZ[0],
+                "high_band_end_hz_exclusive": HIGH_BAND_HZ[1],
+                "low_bin_count": len(low),
+                "high_bin_count": len(high),
+                "low_mean_amplitude": low_mean,
+                "high_mean_amplitude": high_mean,
+                "low_to_high_amplitude_ratio": (
+                    low_mean / high_mean if np.isfinite(high_mean) and high_mean > 0 else np.nan
+                ),
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 def major_axis_deg(ellipse: Optional[tuple]) -> float:

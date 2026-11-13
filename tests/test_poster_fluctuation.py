@@ -11,6 +11,7 @@ import pandas as pd
 from utils.functions.poster_fluctuation import (
     analyze,
     axis_angular_velocity,
+    band_amplitude_ratios,
     duplicate_source_map,
     major_axis_deg,
     orbit_angular_velocity,
@@ -61,6 +62,37 @@ def test_fluctuation_window_slides_one_frame_at_both_acquisition_rates():
         frame = analyze(time, omega, windows=(0.1,)).frame
         interior_second = (time >= 2) & (time < 3)
         assert frame.loc[interior_second, "sd_per_mean_0.1s"].notna().sum() == rate
+
+
+def test_fixed_band_ratio_uses_mean_amplitudes_and_excludes_band_edges():
+    spectrum = pd.DataFrame(
+        {
+            "window_s": [0.1] * 8 + [0.2] * 3,
+            "frequency_hz": [0, 0.25, 0.5, 1, 79.9, 80, 90, 100, 0.5, 80, 90],
+            "amplitude": [100, 2, 4, 900, 800, 1, 3, 1000, 2, 0, 0],
+        }
+    )
+    ratio = band_amplitude_ratios(spectrum)
+    assert ratio.loc[0, "low_bin_count"] == 2
+    assert ratio.loc[0, "high_bin_count"] == 2
+    assert ratio.loc[0, "low_mean_amplitude"] == 3
+    assert ratio.loc[0, "high_mean_amplitude"] == 2
+    assert ratio.loc[0, "low_to_high_amplitude_ratio"] == 1.5
+    assert np.isnan(ratio.loc[1, "low_to_high_amplitude_ratio"])
+
+
+def test_fixed_band_ratio_assigns_nominal_fft_boundaries_consistently():
+    spectrum = pd.DataFrame(
+        {
+            "window_s": [1.0] * 4,
+            "frequency_hz": [0.5, 1 - 1e-12, 80 - 1e-12, 100 - 1e-12],
+            "amplitude": [2, 100, 4, 100],
+        }
+    )
+    ratio = band_amplitude_ratios(spectrum).iloc[0]
+    assert ratio.low_bin_count == 1
+    assert ratio.high_bin_count == 1
+    assert ratio.low_to_high_amplitude_ratio == 0.5
 
 
 def test_random_only_control_has_no_injected_periodic_component():
@@ -150,6 +182,14 @@ def test_main_routes_measured_plot_to_day_and_preserves_manual_selection(tmp_pat
     source["long_axis_deg"] = (-np.rad2deg(source["true_angle_rad"])) % 180.0
     source["axis_ratio"] = np.nan
     source = source[["time_sec", "x_um", "y_um", "long_axis_deg", "axis_ratio"]]
+    captured = []
+    original_savefig = script["plt"].Figure.savefig
+
+    def capture(figure, *args, **kwargs):
+        captured.append(figure)
+        return original_savefig(figure, *args, **kwargs)
+
+    monkeypatch.setattr(script["plt"].Figure, "savefig", capture)
     script["main"].__globals__["read_avi"] = lambda _path, _settings: source
     script["main"].__globals__["duplicate_source_map"] = lambda _files: {("20230607", 1): None}
     script["main"](
@@ -160,6 +200,7 @@ def test_main_routes_measured_plot_to_day_and_preserves_manual_selection(tmp_pat
     )
     assert (measured / "20230607/No.01.png").is_file()
     assert (measured / "20230607/tables/No.01_time_series.csv").is_file()
+    assert (measured / "20230607/tables/No.01_band_amplitude_ratio.csv").is_file()
     assert not (measured / "20230607/tables/No.01_orbit_fft.csv").exists()
     measured_series = script["pd"].read_csv(measured / "20230607/tables/No.01_time_series.csv")
     assert not any(column.startswith("orbit_") for column in measured_series.columns)
@@ -168,8 +209,38 @@ def test_main_routes_measured_plot_to_day_and_preserves_manual_selection(tmp_pat
     assert (measured / "selection.csv").read_text(encoding="utf-8") == "manual decision\n"
     index = script["pd"].read_csv(measured / "index.csv")
     assert index.loc[0, "plot_file"] == "20230607/No.01.png"
+    assert index.loc[0, "band_ratio_file"] == "20230607/tables/No.01_band_amplitude_ratio.csv"
+    assert len(captured[0].axes) == 10
+    assert captured[0].axes[9].get_yscale() == "log"
+    assert len(captured[0].axes[9].lines[0].get_xdata()) == 6
     assert not any(column.startswith("orbit_") for column in index.columns)
     assert not (tmp_path / "index.csv").exists()
+
+
+def test_candidate_ratio_comparison_keeps_four_cells_separate(tmp_path, monkeypatch):
+    script = runpy.run_path(
+        str(Path(__file__).resolve().parents[1] / "scripts/09_poster_fluctuation.py"), run_name="poster_test"
+    )
+    rows = []
+    for day, sample_no in script["POSTER_CANDIDATES"]:
+        for width in (0.1, 0.2, 0.5, 1.0, 1.5, 2.0):
+            rows.append(
+                {"day": day, "sample_no": sample_no, "window_s": width, "low_to_high_amplitude_ratio": 10 * width}
+            )
+    captured = []
+    original_savefig = script["plt"].Figure.savefig
+
+    def capture(figure, *args, **kwargs):
+        captured.append(figure)
+        return original_savefig(figure, *args, **kwargs)
+
+    monkeypatch.setattr(script["plt"].Figure, "savefig", capture)
+    target = tmp_path / "candidate_band_amplitude_ratio.png"
+    script["candidate_ratio_comparison"](pd.DataFrame(rows), target)
+    assert target.is_file()
+    assert len(captured[0].axes[0].lines) == 4
+    assert captured[0].axes[0].get_yscale() == "log"
+    assert "stops included" in captured[0].axes[0].get_legend().get_texts()[2].get_text()
 
 
 def test_main_routes_synthetic_plots_and_index(tmp_path, monkeypatch):

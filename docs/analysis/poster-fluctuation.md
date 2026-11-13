@@ -1,6 +1,6 @@
 # ポスター用の長軸角・揺らぎ解析
 
-[基本測定](../adr/0009-poster-long-axis-fluctuation.md)と[表示・評価帯域の更新](../adr/0010-poster-phase-and-nyquist-band.md)に従う。入力は現時点ではTIFFでなく二値AVI。対象は `data/20231005` のNo.1–7、`data/20230607` のNo.1–10、`data/20231107` のNo.1–7の計24細胞。両端の日付のNo.8–10は当時の解析用にNo.7を複製したAVIで、入力一覧に記録するが解析から除外する。各日付は同一条件の別細胞であり、実験反復と自動的にみなさない。
+[基本測定](../adr/0009-poster-long-axis-fluctuation.md)、[表示・評価帯域の更新](../adr/0010-poster-phase-and-nyquist-band.md)、[固定帯域強度比](../adr/0011-poster-fixed-band-ratio.md)に従う。入力は現時点ではTIFFでなく二値AVI。対象は `data/20231005` のNo.1–7、`data/20230607` のNo.1–10、`data/20231107` のNo.1–7の計24細胞。両端の日付のNo.8–10は当時の解析用にNo.7を複製したAVIで、入力一覧に記録するが解析から除外する。各日付は同一条件の別細胞であり、実験反復と自動的にみなさない。
 
 クリーンなコミットから、リポジトリのルートで実行する。
 
@@ -10,9 +10,11 @@ python scripts/09_poster_fluctuation.py --output-root outputs/poster_fluctuation
 
 `--mode synthetic` で合成対照のみ、`--mode measured` で実測のみを実行する。`--days` で日付を選択できる。合成対照は `--seed`、`--synthetic-rates`、`--synthetic-duration`、`--null-replicates` を指定できる。乱数のみの対照は既定で連続40 seed × 200/250 Hzの見かけのピーク分布も保存する。解析CLIは `analysis_run` によるclean Gitゲートと非公開の実行履歴を使う。完了した実行履歴は専用出力の `_run_records/` にもコピーする。
 
-実測は `outputs/poster_fluctuation/1_rotational_measurements/<day>/No.XX.png` に各細胞1枚ずつ保存する。日付ディレクトリは `20230607`、`20231005`、`20231107` で、各日付の `tables/` に対応する時系列・FFT・品質メタデータを保存する。各PNGの9パネルには t-x、t-y、x-y、推定回転位相、符号付き長軸角速度、絶対値長軸角速度、6窓幅を重ねたSD/Meanと標準化系列、FFTを載せる。角度は連続区間ごとに初期角を0とした相対角度を `[-π, π)` に折り返して描き、境界の線は切る。頭尾を識別した物理的な向きではない。角速度と時系列CSVには折り返し前の相対角度も残す。軸ラベル・目盛・凡例は拡大した。実測の周回角速度・揺らぎ・FFTは出力しない。
+実測は `outputs/poster_fluctuation/1_rotational_measurements/<day>/No.XX.png` に各細胞1枚ずつ保存する。日付ディレクトリは `20230607`、`20231005`、`20231107` で、各日付の `tables/` に対応する時系列・FFT・品質メタデータを保存する。各実測PNGの10パネルには t-x、t-y、x-y、推定回転位相、符号付き長軸角速度、絶対値長軸角速度、6窓幅を重ねたSD/Meanと標準化系列、FFT、固定帯域の強度比を載せる。角度は連続区間ごとに初期角を0とした相対角度を `[-π, π)` に折り返して描き、境界の線は切る。頭尾を識別した物理的な向きではない。角速度と時系列CSVには折り返し前の相対角度も残す。軸ラベル・目盛・凡例は拡大した。実測の周回角速度・揺らぎ・FFTは出力しない。
 
 FFTの横軸上限は各AVIのFrame Rateの半分（200 fpsなら100 Hz、250 fpsなら125 Hz）。既存FFTが返す正の周波数点は上限未満で、振幅は対数目盛りの図に描く。振幅0は図に描かずCSVに保持する。長軸のFFT値とピーク判定の計算は維持する。乱数のみの対照のピーク/中央値比は旧0–20 Hzではなく全正周波数帯で再計算し、列名は `peak_to_median_full_band` とする。`1_rotational_measurements/index.csv` は実測の品質一覧で、`plot_file` は日付ディレクトリからの相対パスを示す。`selection_template.csv` は完全一致する重複AVIを示し、異なる動画の採否は目視確認待ちとする。手動採否は同ディレクトリの `selection.csv` に記入し、CLIは上書きしない。
+
+強度比は各窓幅の標準化SD/MeanのFFTから、`0 < f < 1 Hz` の平均振幅を `80 <= f < 100 Hz` の平均振幅で割る。DCは除外し、帯域に点がないか高域平均が0なら比を欠測にする。全24細胞の比の数値・FFT点数・帯域境界は日付別 `tables/No.XX_band_amplitude_ratio.csv` に保存する。図の縦軸は対数目盛り。20230607 No.06・No.08、20231005 No.01、20231107 No.06の暫定候補は `1_rotational_measurements/candidate_band_amplitude_ratio.png` で重ね、数値を同階層の `tables/candidate_band_amplitude_ratio.csv` に保存する。比較図は4候補をすべて含む実測実行時に生成する。20231005 No.01は停止を含む全時系列を使用するため、停止の影響を受け得る。候補比較は最終採否や有意差検定ではない。`selection.csv` はCLIから変更しない。
 
 合成代表例の `simulation_*.png` と乱数のみの複数seed比較 `simulation_random_only_ensemble.png` は `outputs/poster_fluctuation/2_simulation/` に保存する。合成では座標から円中心と周回角速度を再推定し、生成真値との照合だけに使う。周回角の揺らぎ・FFTは出力しない。対応する時系列・長軸FFT・品質メタデータと複数seed集計は同ディレクトリの `tables/`、合成代表例の一覧は `index.csv` に保存する。実行履歴は出力ルートの `_run_records/` に保存する。旧配置の `selection.csv` は新配置へ移し、既存の手動判定を保持する。
 

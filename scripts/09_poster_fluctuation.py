@@ -24,6 +24,7 @@ from utils.functions.poster_fluctuation import (  # noqa: E402
     WINDOWS_S,
     analyze,
     axis_angular_velocity,
+    band_amplitude_ratios,
     duplicate_source_map,
     major_axis_deg,
     orbit_angular_velocity,
@@ -32,6 +33,7 @@ from utils.functions.poster_fluctuation import (  # noqa: E402
 from utils.run_context import analysis_run  # noqa: E402
 
 DATASETS = {"20231005": "MotAB overexpression", "20230607": "Fixed rotational direction", "20231107": "Brake protein"}
+POSTER_CANDIDATES = (("20230607", 6), ("20230607", 8), ("20231005", 1), ("20231107", 6))
 
 
 def dataset_files(data_root: Path, day: str) -> tuple[list[Path], dict]:
@@ -163,9 +165,23 @@ def style_axes(axes: np.ndarray) -> None:
                 label.set_fontsize(11)
 
 
-def figure(frame: pd.DataFrame, spectra: dict[str, pd.DataFrame], title: str, target: Path, rate_hz: float) -> None:
+def figure(
+    frame: pd.DataFrame,
+    spectra: dict[str, pd.DataFrame],
+    title: str,
+    target: Path,
+    rate_hz: float,
+    band_ratios: pd.DataFrame | None = None,
+) -> None:
     """One complete long-axis poster sheet per observed cell or synthetic case."""
-    fig, axes = plt.subplots(3, 3, figsize=(18, 16), constrained_layout=True)
+    if band_ratios is None:
+        fig, axes = plt.subplots(3, 3, figsize=(18, 16), constrained_layout=True)
+        ratio_axis = None
+    else:
+        fig = plt.figure(figsize=(18, 20), layout="constrained")
+        grid = fig.add_gridspec(4, 3)
+        axes = np.asarray([fig.add_subplot(grid[row, col]) for row in range(3) for col in range(3)]).reshape(3, 3)
+        ratio_axis = fig.add_subplot(grid[3, :])
     t = frame["time_sec"].to_numpy(float)
     x = frame["x_um"].to_numpy(float)
     y = frame["y_um"].to_numpy(float)
@@ -220,9 +236,48 @@ def figure(frame: pd.DataFrame, spectra: dict[str, pd.DataFrame], title: str, ta
     axes[2, 2].set_yscale("log")
     for ax in axes[2]:
         ax.legend(ncol=2)
-    style_axes(axes)
+    if band_ratios is not None:
+        assert ratio_axis is not None
+        ratio = band_ratios["low_to_high_amplitude_ratio"].to_numpy(float)
+        good = np.isfinite(ratio) & (ratio > 0)
+        ratio_axis.plot(
+            band_ratios.loc[good, "window_s"], ratio[good], "-o", label="mean amplitude: 0–1 Hz / 80–100 Hz"
+        )
+        ratio_axis.set(
+            xlabel="Gaussian window width (s)",
+            ylabel="Low / high mean FFT amplitude (log)",
+            title="Fixed-band ratio (full recording; stops retained)",
+        )
+        ratio_axis.set_xticks(WINDOWS_S)
+        ratio_axis.set_yscale("log")
+        ratio_axis.legend()
+    style_axes(np.asarray([*axes.flat, ratio_axis]) if ratio_axis is not None else axes)
     fig.suptitle(title, fontsize=20)
     target.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(target, dpi=180)
+    plt.close(fig)
+
+
+def candidate_ratio_comparison(ratios: pd.DataFrame, target: Path) -> None:
+    """Compare the user-selected cells without averaging distinct cells."""
+    fig, ax = plt.subplots(figsize=(12, 7), constrained_layout=True)
+    for day, sample_no in POSTER_CANDIDATES:
+        group = ratios[(ratios.day == day) & (ratios.sample_no == sample_no)].sort_values("window_s")
+        values = group["low_to_high_amplitude_ratio"].to_numpy(float)
+        good = np.isfinite(values) & (values > 0)
+        label = f"{day} No.{sample_no:02d}"
+        if (day, sample_no) == ("20231005", 1):
+            label += " (stops included)"
+        ax.plot(group.loc[good, "window_s"], values[good], "-o", label=label)
+    ax.set(
+        xlabel="Gaussian window width (s)",
+        ylabel="Low / high mean FFT amplitude (log)",
+        title="Candidate cells: 0–1 Hz / 80–100 Hz",
+    )
+    ax.set_xticks(WINDOWS_S)
+    ax.set_yscale("log")
+    ax.legend()
+    style_axes(np.asarray([ax]))
     fig.savefig(target, dpi=180)
     plt.close(fig)
 
@@ -237,12 +292,15 @@ def save_case(source: pd.DataFrame, destination: Path, stem: str, title: str, me
     if not np.isclose(1 / np.median(positive_dt), rate_hz, rtol=1e-6):
         raise ValueError("Frame rate disagrees with the input timebase")
     frame, spectra, info = analyze_frame(source, validate_orbit=metadata["kind"] == "synthetic")
+    band_ratios = band_amplitude_ratios(spectra["long_axis"]) if metadata["kind"] == "measured" else None
     destination.mkdir(parents=True, exist_ok=True)
     tables = destination / "tables"
     tables.mkdir(parents=True, exist_ok=True)
     frame.to_csv(tables / f"{stem}_time_series.csv", index=False)
     for name, spectrum in spectra.items():
         spectrum.to_csv(tables / f"{stem}_{name}_fft.csv", index=False)
+    if band_ratios is not None:
+        band_ratios.to_csv(tables / f"{stem}_band_amplitude_ratio.csv", index=False)
     with (tables / f"{stem}_metadata.json").open("w", encoding="utf-8") as stream:
         json.dump(
             {
@@ -251,12 +309,21 @@ def save_case(source: pd.DataFrame, destination: Path, stem: str, title: str, me
                 "window_widths_s": WINDOWS_S,
                 "fft_input": "z-scored Gaussian-window SD(abs(long-axis angular velocity))/Mean(abs(long-axis angular velocity))",
                 "fft_display_nyquist_hz": rate_hz / 2,
+                **(
+                    {
+                        "band_ratio_definition": "mean FFT amplitude for 0 < f < 1 Hz divided by mean FFT amplitude for 80 <= f < 100 Hz",
+                        "band_ratio_source": "z-scored Gaussian-window SD(abs(long-axis angular velocity))/Mean(abs(long-axis angular velocity))",
+                        "band_ratio_includes_stops": True,
+                    }
+                    if band_ratios is not None
+                    else {}
+                ),
             },
             stream,
             indent=2,
             allow_nan=True,
         )
-    figure(frame, spectra, title, destination / f"{stem}.png", rate_hz)
+    figure(frame, spectra, title, destination / f"{stem}.png", rate_hz, band_ratios)
     obsolete_orbit_fft = tables / f"{stem}_orbit_fft.csv"
     if obsolete_orbit_fft.is_file():
         obsolete_orbit_fft.unlink()
@@ -271,6 +338,8 @@ def save_case(source: pd.DataFrame, destination: Path, stem: str, title: str, me
         "long_axis_true_rmse_rad_s": info["long_axis_true_rmse_rad_s"],
         "long_axis_peak_0.2s_hz": info["long_axis_fft"][1]["peak_frequency_hz"],
     }
+    if band_ratios is not None:
+        row["band_ratio_file"] = f"tables/{stem}_band_amplitude_ratio.csv"
     if metadata["kind"] == "synthetic":
         row["orbit_omega_fraction"] = info["orbit_omega_fraction"]
         row["orbit_true_rmse_rad_s"] = info["orbit_true_rmse_rad_s"]
@@ -343,6 +412,7 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
                     },
                 )
                 row["plot_file"] = f"{day}/{row['plot_file']}"
+                row["band_ratio_file"] = f"{day}/{row['band_ratio_file']}"
                 rows.append(row)
     if args.mode in ("all", "synthetic"):
         for rate in args.synthetic_rates:
@@ -433,6 +503,19 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
         measured_dir = destination / "1_rotational_measurements"
         measured_dir.mkdir(parents=True, exist_ok=True)
         pd.DataFrame(measured_rows).to_csv(measured_dir / "index.csv", index=False)
+        by_cell = {(row["day"], row["sample_no"]): row for row in measured_rows if row.get("band_ratio_file")}
+        if all(candidate in by_cell for candidate in POSTER_CANDIDATES):
+            candidate_tables = []
+            for day, sample_no in POSTER_CANDIDATES:
+                table = pd.read_csv(measured_dir / by_cell[(day, sample_no)]["band_ratio_file"])
+                table.insert(0, "sample_no", sample_no)
+                table.insert(0, "day", day)
+                candidate_tables.append(table)
+            comparison = pd.concat(candidate_tables, ignore_index=True)
+            comparison_tables = measured_dir / "tables"
+            comparison_tables.mkdir(parents=True, exist_ok=True)
+            comparison.to_csv(comparison_tables / "candidate_band_amplitude_ratio.csv", index=False)
+            candidate_ratio_comparison(comparison, measured_dir / "candidate_band_amplitude_ratio.png")
     if args.mode in ("all", "synthetic"):
         simulation_dir = destination / "2_simulation"
         simulation_dir.mkdir(parents=True, exist_ok=True)
@@ -456,8 +539,11 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
         stream.write(
             "Private local poster analysis from binary AVI, not source TIFF. "
             "Measured plots are 1_rotational_measurements/<day>/No.XX.png; simulations are in 2_simulation/. "
-            "Each PNG contains t-x, t-y, x-y, inferred relative phase wrapped to [-pi, pi), separate signed "
-            "and absolute long-axis angular velocity, all six SD/Mean windows, standardized inputs and their FFTs. "
+            "Each measured PNG contains t-x, t-y, x-y, inferred relative phase wrapped to [-pi, pi), separate signed "
+            "and absolute long-axis angular velocity, all six SD/Mean windows, standardized inputs, their FFTs, "
+            "and a low/high FFT mean-amplitude ratio for 0<f<1 Hz versus 80<=f<100 Hz. "
+            "The ratio includes stops and is unavailable when either band has no bins or the high-band mean is zero. "
+            "A full measured run also writes the four candidate-cell comparison PNG and table under 1_rotational_measurements/. "
             "The FFT plot extends to half the frame rate and uses a logarithmic amplitude axis. "
             "Each case's numeric series, spectra and metadata are in its sibling tables/. "
             "Synthetic orbit velocity is for truth validation only. Each category has index.csv; "
