@@ -78,7 +78,6 @@ def axis_angular_velocity(time: np.ndarray, axis_deg: np.ndarray) -> tuple[np.nd
             or delta_t <= 0
             or (np.isfinite(nominal_dt) and delta_t > CONTINUITY_GAP_FACTOR * nominal_dt)
         ):
-            angle[j] = 0.0
             continue
         # Image-space positive angle is visually clockwise; exported CCW is positive.
         delta_deg = (axis_deg[j] - axis_deg[j - 1] + 90.0) % 180.0 - 90.0
@@ -128,7 +127,6 @@ def orbit_angular_velocity(
             or delta_t <= 0
             or (np.isfinite(nominal_dt) and delta_t > CONTINUITY_GAP_FACTOR * nominal_dt)
         ):
-            angle[j] = 0.0
             continue
         delta = (raw[j] - raw[j - 1] + np.pi) % (2 * np.pi) - np.pi
         delta = -delta  # image y increases down; report CCW positive

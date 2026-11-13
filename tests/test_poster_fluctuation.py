@@ -1,5 +1,8 @@
 """Synthetic contracts for the poster measurement path."""
 
+import runpy
+from pathlib import Path
+
 import numpy as np
 
 from utils.functions.poster_fluctuation import (
@@ -73,3 +76,29 @@ def test_duplicate_source_map_marks_byte_identical_cells(tmp_path):
     c.write_bytes(b"synthetic source A")
     result = duplicate_source_map({"day1": [a, b], "day2": [c]})
     assert result == {("day1", 1): None, ("day1", 2): None, ("day2", 1): "day1/No.01"}
+
+
+def test_long_axis_angle_plot_breaks_at_timestamp_gap():
+    time = np.array([0.0, 0.01, 0.02, 0.20, 0.21, 0.22])
+    axis = np.array([10.0, 20.0, 30.0, 40.0, 50.0, 60.0])
+    angle, omega = axis_angular_velocity(time, axis)
+    assert np.isnan(angle[3])
+    assert np.isnan(omega[3:5]).all()
+    assert angle[4] == 0.0
+    assert np.isfinite(omega[5])
+
+
+def test_one_flat_poster_png_contains_all_window_series(tmp_path):
+    script = runpy.run_path(
+        str(Path(__file__).resolve().parents[1] / "scripts/09_poster_fluctuation.py"), run_name="poster_test"
+    )
+    source = synthetic_trajectory("periodic_plus_noise", 200, 6, 81)
+    source["long_axis_deg"] = (-np.rad2deg(source["true_angle_rad"])) % 180.0
+    source["axis_ratio"] = np.nan
+    script["save_case"](source, tmp_path, "synthetic_No.01", "synthetic test", {"kind": "synthetic"})
+    assert [path.name for path in tmp_path.glob("*.png")] == ["synthetic_No.01.png"]
+    assert (tmp_path / "tables/synthetic_No.01_long_axis_fft.csv").is_file()
+    saved = script["pd"].read_csv(tmp_path / "tables/synthetic_No.01_time_series.csv")
+    for width in (0.1, 0.2, 0.5, 1.0, 1.5, 2.0):
+        assert f"long_axis_sd_per_mean_{width:g}s" in saved
+        assert f"long_axis_sd_per_mean_{width:g}s_z" in saved

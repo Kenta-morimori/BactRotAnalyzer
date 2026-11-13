@@ -137,51 +137,60 @@ def analyze_frame(source: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, pd.Data
 
 
 def figure(frame: pd.DataFrame, spectra: dict[str, pd.DataFrame], title: str, target: Path) -> None:
-    fig, axes = plt.subplots(3, 2, figsize=(14, 12), constrained_layout=True)
+    """One complete long-axis poster sheet per observed cell or synthetic case."""
+    fig, axes = plt.subplots(4, 2, figsize=(15, 17), constrained_layout=True)
+    t = frame["time_sec"].to_numpy(float)
     x = frame["x_um"].to_numpy(float)
     y = frame["y_um"].to_numpy(float)
-    t = frame["time_sec"].to_numpy(float)
-    axes[0, 0].plot(x, y, linewidth=0.7)
-    axes[0, 0].set(xlabel="x (um)", ylabel="y (um, image down)", title="Centroid trajectory")
-    axes[0, 0].set_aspect("equal", adjustable="box")
-    axes[0, 0].invert_yaxis()
-    axes[0, 1].plot(t, frame["long_axis_deg"], linewidth=0.7)
-    axes[0, 1].set(xlabel="Time (s)", ylabel="Long-axis orientation (deg, modulo 180)", title="Cell long axis")
+    axes[0, 0].plot(t, x, linewidth=0.7)
+    axes[0, 0].set(xlabel="Time (s)", ylabel="x (um)", title="Centroid x vs time")
+    axes[0, 1].plot(t, y, linewidth=0.7)
+    axes[0, 1].set(xlabel="Time (s)", ylabel="y (um, image down)", title="Centroid y vs time")
+    axes[1, 0].plot(x, y, linewidth=0.7)
+    axes[1, 0].set(xlabel="x (um)", ylabel="y (um, image down)", title="Centroid x-y trajectory")
+    axes[1, 0].set_aspect("equal", adjustable="box")
+    axes[1, 0].invert_yaxis()
+    axes[1, 1].plot(t, frame["long_axis_unwrapped_rad"], linewidth=0.7)
+    axes[1, 1].set(xlabel="Time (s)", ylabel="Angle (rad, CCW +)", title="Cell long-axis angle (unwrapped)")
     if "true_angular_velocity_rad_s" in frame:
-        axes[1, 0].plot(
-            t, frame["true_angular_velocity_rad_s"], linewidth=0.7, color="black", alpha=0.6, label="synthetic truth"
+        axes[2, 0].plot(
+            t, frame["true_angular_velocity_rad_s"], color="black", linewidth=0.7, alpha=0.6, label="generated truth"
         )
-    for name, color in (("long_axis", "tab:blue"), ("orbit", "tab:orange")):
-        axes[1, 0].plot(t, frame[f"{name}_omega_rad_s"], linewidth=0.6, color=color, label=name)
-        key = f"{name}_sd_per_mean_0.2s"
-        axes[1, 1].plot(t, frame[key], linewidth=0.8, color=color, label=name)
-        zkey = f"{name}_sd_per_mean_0.2s_z"
-        axes[2, 0].plot(t, frame[zkey], linewidth=0.8, color=color, label=name)
-        spec = spectra[name]
-        part = spec[spec.window_s == 0.2]
-        axes[2, 1].plot(part.frequency_hz, part.amplitude, linewidth=0.8, color=color, label=name)
-    axes[1, 0].set(xlabel="Time (s)", ylabel="Angular velocity (rad/s, CCW +)", title="Angular velocity")
-    axes[1, 1].set(xlabel="Time (s)", ylabel="SD / Mean", title="Gaussian window, 0.2 s")
-    axes[2, 0].set(xlabel="Time (s)", ylabel="z-score", title="Standardized SD / Mean, 0.2 s")
-    axes[2, 1].set(xlabel="Frequency (Hz)", ylabel="FFT amplitude", title="FFT of standardized SD / Mean (0-20 Hz)")
-    axes[2, 1].set_xlim(0, 20)
+    axes[2, 0].plot(t, frame["long_axis_omega_rad_s"], linewidth=0.7, label="long axis")
+    axes[2, 0].set(xlabel="Time (s)", ylabel="Angular velocity (rad/s, CCW +)", title="Long-axis angular velocity")
+    if "true_angular_velocity_rad_s" in frame:
+        axes[2, 0].legend(fontsize=8)
+    for width in WINDOWS_S:
+        label = f"{width:g} s"
+        prefix = f"long_axis_sd_per_mean_{width:g}s"
+        axes[2, 1].plot(t, frame[prefix], linewidth=0.8, label=label)
+        axes[3, 0].plot(t, frame[f"{prefix}_z"], linewidth=0.8, label=label)
+        spectrum = spectra["long_axis"]
+        part = spectrum[spectrum.window_s == width]
+        axes[3, 1].plot(part.frequency_hz, part.amplitude, linewidth=0.8, label=label)
+    axes[2, 1].set(xlabel="Time (s)", ylabel="SD / Mean", title="Gaussian-window SD / Mean: all widths")
+    axes[3, 0].set(xlabel="Time (s)", ylabel="z-score", title="Standardized SD / Mean: FFT input")
+    axes[3, 1].set(xlabel="Frequency (Hz)", ylabel="FFT amplitude", title="FFT for each standardized window series")
+    axes[3, 1].set_xlim(0, 20)
+    for ax in (axes[2, 1], axes[3, 0], axes[3, 1]):
+        ax.legend(fontsize=8, ncol=2)
     for ax in axes.flat:
         ax.grid(alpha=0.2)
-    for ax in (axes[1, 0], axes[1, 1], axes[2, 0], axes[2, 1]):
-        ax.legend(fontsize=8)
     fig.suptitle(title)
     target.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(target, dpi=150)
     plt.close(fig)
 
 
-def save_case(source: pd.DataFrame, folder: Path, title: str, metadata: dict) -> dict:
+def save_case(source: pd.DataFrame, destination: Path, stem: str, title: str, metadata: dict) -> dict:
     frame, spectra, info = analyze_frame(source)
-    folder.mkdir(parents=True, exist_ok=True)
-    frame.to_csv(folder / "time_series.csv", index=False)
+    destination.mkdir(parents=True, exist_ok=True)
+    tables = destination / "tables"
+    tables.mkdir(parents=True, exist_ok=True)
+    frame.to_csv(tables / f"{stem}_time_series.csv", index=False)
     for name, spectrum in spectra.items():
-        spectrum.to_csv(folder / f"{name}_fft.csv", index=False)
-    with (folder / "metadata.json").open("w", encoding="utf-8") as stream:
+        spectrum.to_csv(tables / f"{stem}_{name}_fft.csv", index=False)
+    with (tables / f"{stem}_metadata.json").open("w", encoding="utf-8") as stream:
         json.dump(
             {
                 **metadata,
@@ -193,9 +202,10 @@ def save_case(source: pd.DataFrame, folder: Path, title: str, metadata: dict) ->
             indent=2,
             allow_nan=True,
         )
-    figure(frame, spectra, title, folder / "overview.png")
+    figure(frame, spectra, title, destination / f"{stem}.png")
     return {
         **metadata,
+        "plot_file": f"{stem}.png",
         "frame_count": info["frame_count"],
         "detected_fraction": info["detected_count"] / info["frame_count"],
         "long_axis_omega_fraction": info["long_axis_omega_fraction"],
@@ -209,46 +219,10 @@ def save_case(source: pd.DataFrame, folder: Path, title: str, metadata: dict) ->
     }
 
 
-def condition_summary(folder: Path, day: str, sample_numbers: list[int]) -> None:
-    """Put all cells on matching axes for local screening."""
-    cells = [folder / f"No.{number:02d}" for number in sample_numbers]
-    if not cells:
-        return
-    loaded = []
-    for cell in cells:
-        frame = pd.read_csv(cell / "time_series.csv")
-        spectrum = pd.read_csv(cell / "long_axis_fft.csv")
-        part = spectrum[(spectrum.window_s == 0.2) & (spectrum.frequency_hz <= 20)]
-        with (cell / "metadata.json").open(encoding="utf-8") as stream:
-            metadata = json.load(stream)
-        loaded.append((cell, frame, part, metadata.get("duplicate_of")))
-    all_z = np.concatenate([frame["long_axis_sd_per_mean_0.2s_z"].to_numpy(float) for _, frame, _, _ in loaded])
-    all_amp = np.concatenate([part.amplitude.to_numpy(float) for _, _, part, _ in loaded])
-    z_limit = max(3.0, float(np.nanmax(np.abs(all_z))) * 1.05) if np.isfinite(all_z).any() else 3.0
-    amp_limit = max(0.1, float(np.nanmax(all_amp)) * 1.05) if np.isfinite(all_amp).any() else 0.1
-    fig, axes = plt.subplots(len(cells), 2, figsize=(14, 2.2 * len(cells)), squeeze=False, constrained_layout=True)
-    for row, (cell, frame, part, duplicate_of) in enumerate(loaded):
-        axes[row, 0].plot(frame.time_sec, frame["long_axis_sd_per_mean_0.2s_z"], linewidth=0.7)
-        axes[row, 0].set_xlim(0, 6)
-        axes[row, 0].set_ylim(-z_limit, z_limit)
-        axes[row, 0].set_ylabel(cell.name + (f" [duplicate of {duplicate_of}]" if duplicate_of else ""))
-        axes[row, 1].plot(part.frequency_hz, part.amplitude, linewidth=0.7)
-        axes[row, 1].set_xlim(0, 20)
-        axes[row, 1].set_ylim(0, amp_limit)
-        for ax in axes[row]:
-            ax.grid(alpha=0.2)
-    axes[-1, 0].set_xlabel("Time (s): z-scored SD/Mean, 0.2 s window")
-    axes[-1, 1].set_xlabel("Frequency (Hz): FFT amplitude")
-    fig.suptitle(f"{DATASETS[day]} ({day}): long-axis fluctuation screening")
-    fig.savefig(folder / "condition_summary.png", dpi=150)
-    plt.close(fig)
-
-
 def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, destination: Path) -> None:
     rows = []
     if args.mode in ("all", "measured"):
         duplicates = duplicate_source_map(files_by_day)
-        included_by_day: dict[str, list[int]] = {day: [] for day in args.days}
         for day in args.days:
             for sample_no, avi in enumerate(files_by_day[day], 1):
                 duplicate_of = duplicates[(day, sample_no)]
@@ -266,13 +240,13 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
                     )
                     print(f"Excluding duplicate {day} No.{sample_no:02d} ({duplicate_of})", flush=True)
                     continue
-                included_by_day[day].append(sample_no)
                 print(f"Analyzing {day} No.{sample_no:02d}", flush=True)
                 source = read_avi(avi, settings_by_day[day])
                 rows.append(
                     save_case(
                         source,
-                        destination / "measured" / day / f"No.{sample_no:02d}",
+                        destination,
+                        f"{day}_No.{sample_no:02d}",
                         f"{DATASETS[day]} | {day} | cell {sample_no:02d}",
                         {
                             "kind": "measured",
@@ -287,8 +261,6 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
                         },
                     )
                 )
-        for day in args.days:
-            condition_summary(destination / "measured" / day, day, included_by_day[day])
     if args.mode in ("all", "synthetic"):
         for rate in args.synthetic_rates:
             for model in ("periodic_plus_noise", "random_only"):
@@ -321,7 +293,8 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
                 rows.append(
                     save_case(
                         source,
-                        destination / "synthetic" / name,
+                        destination,
+                        f"simulation_{name}",
                         name,
                         {
                             "kind": "synthetic",
@@ -363,9 +336,10 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
                         ),
                     }
                 )
-        null_folder = destination / "synthetic"
-        null_folder.mkdir(parents=True, exist_ok=True)
-        pd.DataFrame(null_rows).to_csv(null_folder / "random_only_ensemble.csv", index=False)
+        destination.mkdir(parents=True, exist_ok=True)
+        tables = destination / "tables"
+        tables.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(null_rows).to_csv(tables / "simulation_random_only_ensemble.csv", index=False)
         fig, axes = plt.subplots(1, 2, figsize=(12, 4), constrained_layout=True)
         for rate, group in pd.DataFrame(null_rows).groupby("rate_hz"):
             axes[0].hist(group.peak_frequency_hz, bins=20, alpha=0.5, label=f"{rate:g} Hz")
@@ -375,7 +349,7 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
         for ax in axes:
             ax.legend()
             ax.grid(alpha=0.2)
-        fig.savefig(null_folder / "random_only_ensemble.png", dpi=150)
+        fig.savefig(destination / "simulation_random_only_ensemble.png", dpi=150)
         plt.close(fig)
     destination.mkdir(parents=True, exist_ok=True)
     index_name = "index.csv" if args.mode == "all" else f"{args.mode}_index.csv"
@@ -398,7 +372,7 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
         selection.to_csv(destination / "selection_template.csv", index=False)
     with (destination / "README.txt").open("w", encoding="utf-8") as stream:
         stream.write(
-            "Private local poster analysis. Each cell/model folder contains overview.png, time_series.csv, long_axis_fft.csv, orbit_fft.csv, and metadata.json. index.csv is the combined screening inventory for --mode all; mode-specific runs use measured_index.csv or synthetic_index.csv. selection_template.csv marks byte-identical inputs and leaves unique cells for visual review. Long-axis angle is unoriented (180-degree symmetry). All derived measured plots and time series stay local.\n"
+            "Private local poster analysis. One flat PNG per measured cell (<day>_No.XX.png) or synthetic case (simulation_*.png). Each PNG contains t-x, t-y, x-y, long-axis angle/velocity, all six SD/Mean windows, standardized inputs and their FFTs. Numeric series, spectra and metadata are in tables/ with matching stems. index.csv is the combined inventory; selection_template.csv marks excluded duplicate AVIs. Long-axis angle has 180-degree ambiguity. Derived measured plots and series stay local.\n"
         )
 
 
