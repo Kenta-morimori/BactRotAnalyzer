@@ -14,8 +14,7 @@ from utils.functions.poster_fluctuation import (
     band_amplitude_ratios,
     duplicate_source_map,
     major_axis_deg,
-    orbit_angular_velocity,
-    synthetic_trajectory,
+    synthetic_long_axis,
 )
 
 
@@ -31,16 +30,12 @@ def test_long_axis_angular_velocity_recovers_after_missing_frame_without_crossin
     assert np.allclose(omega[4:], -np.deg2rad(10) * 200)
 
 
-def test_long_axis_and_orbit_sign_on_known_ccw_motion():
-    frame = synthetic_trajectory("steady_rotation_plus_noise", 200, 6, 81, noise_rad_s=0, coordinate_noise_sd_um=0)
+def test_long_axis_sign_on_known_ccw_motion():
+    frame = synthetic_long_axis("constant_angle_step_plus_noise", 200, 6, 81, angle_noise_sd_rad=0)
     time = frame.time_sec.to_numpy(float)
-    axis = (-np.rad2deg(frame.true_angle_rad.to_numpy(float))) % 180
-    _, omega_axis = axis_angular_velocity(time, axis)
-    _, omega_orbit, center = orbit_angular_velocity(time, frame.x_um.to_numpy(float), frame.y_um.to_numpy(float))
-    truth = frame.true_angular_velocity_rad_s.to_numpy(float)
-    assert np.allclose(omega_axis[1:], truth[1:], atol=1e-10)
-    assert np.allclose(omega_orbit[1:], truth[1:], atol=1e-10)
-    assert np.allclose(center, [0, 0], atol=1e-10)
+    _, omega_axis = axis_angular_velocity(time, frame.long_axis_deg.to_numpy(float))
+    assert np.allclose(omega_axis[1:], 2 * np.pi * 8, atol=1e-10)
+    assert not any(column.endswith("_um") or column.startswith("orbit_") for column in frame)
 
 
 def test_fluctuation_preserves_rows_and_missing_window():
@@ -105,25 +100,28 @@ def test_fixed_band_ratio_preserves_windows_when_fft_has_no_valid_segment():
     assert ratios.low_to_high_amplitude_ratio.isna().all()
 
 
-def test_random_only_control_has_no_injected_periodic_component():
-    frame = synthetic_trajectory("random_only", 200, 6, 81)
+def test_random_angle_noise_is_independent_without_rotation():
+    frame = synthetic_long_axis("random_angle_noise", 200, 6, 81)
     assert len(frame) == 1200
-    assert frame.true_angular_velocity_rad_s.std() > 0
-    assert abs(frame.true_angular_velocity_rad_s.mean()) < 0.5
-    assert np.isfinite(frame[["x_um", "y_um"]]).all().all()
+    assert frame.baseline_angle_rad.eq(0).all()
+    assert abs(frame.angle_noise_rad.mean()) < 0.001
+    assert 0.009 < frame.angle_noise_rad.std() < 0.011
+    assert abs(frame.angle_noise_rad.autocorr()) < 0.1
+    assert not any(column.endswith("_um") for column in frame)
 
 
-def test_steady_rotation_has_no_periodic_velocity_modulation_and_flat_window_scale():
+def test_constant_angle_step_with_noise_uses_angle_difference_and_flat_window_scale():
     for rate in (200, 250):
-        steady = synthetic_trajectory("steady_rotation_plus_noise", rate, 6, 81, noise_rad_s=0)
-        assert np.allclose(steady.true_angular_velocity_rad_s, 2 * np.pi * 8)
-        noisy = synthetic_trajectory("steady_rotation_plus_noise", rate, 6, 81)
+        steady = synthetic_long_axis("constant_angle_step_plus_noise", rate, 6, 81, angle_noise_sd_rad=0)
+        assert np.allclose(np.diff(steady.baseline_angle_rad), 2 * np.pi * 8 / rate)
+        noisy = synthetic_long_axis("constant_angle_step_plus_noise", rate, 6, 81)
         time = noisy.time_sec.to_numpy(float)
-        axis = (-np.rad2deg(noisy.true_angle_rad.to_numpy(float))) % 180.0
-        _, omega = axis_angular_velocity(time, axis)
+        _, omega = axis_angular_velocity(time, noisy.long_axis_deg.to_numpy(float))
+        expected = 2 * np.pi * 8 + rate * np.diff(noisy.angle_noise_rad.to_numpy(float))
+        assert np.allclose(omega[1:], expected, atol=1e-10)
         result = analyze(time, omega)
         medians = [result.frame[f"sd_per_mean_{width:g}s"].median() for width in (0.1, 0.2, 0.5, 1, 1.5, 2)]
-        assert max(medians) / min(medians) < 1.15
+        assert max(medians) / min(medians) < 1.2
 
 
 def test_major_axis_mapping_from_opencv_ellipse():
@@ -159,11 +157,8 @@ def test_one_poster_png_contains_absolute_velocity_and_log_fft(tmp_path, monkeyp
     script = runpy.run_path(
         str(Path(__file__).resolve().parents[1] / "scripts/09_poster_fluctuation.py"), run_name="poster_test"
     )
-    source = synthetic_trajectory("steady_rotation_plus_noise", 200, 6, 81)
-    source["long_axis_deg"] = (-np.rad2deg(source["true_angle_rad"])) % 180.0
-    source["axis_ratio"] = np.nan
+    source = synthetic_long_axis("constant_angle_step_plus_noise", 200, 6, 81)
     (tmp_path / "tables").mkdir()
-    (tmp_path / "tables/synthetic_No.01_orbit_fft.csv").write_text("obsolete\n", encoding="utf-8")
     captured = []
     original_savefig = script["plt"].Figure.savefig
 
@@ -178,25 +173,24 @@ def test_one_poster_png_contains_absolute_velocity_and_log_fft(tmp_path, monkeyp
     saved = script["pd"].read_csv(tmp_path / "tables/synthetic_No.01_time_series.csv")
     assert np.allclose(saved["long_axis_abs_omega_rad_s"], np.abs(saved["long_axis_omega_rad_s"]), equal_nan=True)
     assert saved["long_axis_phase_rad"].dropna().between(-np.pi, np.pi, inclusive="left").all()
-    assert "orbit_angle_rad" in saved and "orbit_omega_rad_s" in saved
-    assert not (tmp_path / "tables/synthetic_No.01_orbit_fft.csv").exists()
-    assert len(captured[0].axes) == 12
-    assert len(captured[0].axes[4].lines) == 2  # signed truth and estimate
-    assert len(captured[0].axes[5].lines) == 2  # absolute truth and estimate
-    assert captured[0].axes[8].get_yscale() == "log"
-    assert captured[0].axes[8].get_xlim()[1] == 100
-    assert captured[0].axes[8].get_xticks()[-1] == 100
-    assert captured[0].axes[8].xaxis.label.get_fontsize() >= 14
-    assert captured[0].axes[8].get_xticklabels()[0].get_fontsize() >= 12
+    assert not any(column.endswith("_um") or column.startswith("orbit_") for column in saved)
+    assert len(captured[0].axes) == 9
+    assert len(captured[0].axes[1].lines) == 1
+    assert len(captured[0].axes[2].lines) == 1
+    assert captured[0].axes[5].get_yscale() == "log"
+    assert captured[0].axes[5].get_xlim()[1] == 100
+    assert captured[0].axes[5].get_xticks()[-1] == 100
+    assert captured[0].axes[5].xaxis.label.get_fontsize() >= 14
+    assert captured[0].axes[5].get_xticklabels()[0].get_fontsize() >= 12
     ratios = script["pd"].read_csv(tmp_path / "tables/synthetic_No.01_band_amplitude_ratio.csv")
     assert len(ratios) == 6
     assert np.allclose(ratios.low_minus_high_amplitude, ratios.low_mean_amplitude - ratios.high_mean_amplitude)
-    assert captured[0].axes[9].get_yscale() == "log"
-    assert captured[0].axes[10].get_yscale() == "linear"
-    assert captured[0].axes[11].get_yscale() == "linear"
-    assert len(captured[0].axes[9].lines[0].get_xdata()) == 6
-    assert "stops retained" not in captured[0].axes[9].get_title()
-    assert np.isnan(captured[0].axes[3].lines[0].get_ydata()).sum() > saved.long_axis_phase_rad.isna().sum()
+    assert captured[0].axes[6].get_yscale() == "log"
+    assert captured[0].axes[7].get_yscale() == "linear"
+    assert captured[0].axes[8].get_yscale() == "linear"
+    assert len(captured[0].axes[6].lines[0].get_xdata()) == 6
+    assert "stops retained" not in captured[0].axes[6].get_title()
+    assert np.isnan(captured[0].axes[0].lines[0].get_ydata()).sum() > saved.long_axis_phase_rad.isna().sum()
     for width in (0.1, 0.2, 0.5, 1.0, 1.5, 2.0):
         assert f"long_axis_sd_per_mean_{width:g}s" in saved
         assert f"long_axis_sd_per_mean_{width:g}s_z" in saved
@@ -209,9 +203,9 @@ def test_main_routes_measured_plot_to_day_and_preserves_manual_selection(tmp_pat
     measured = tmp_path / "1_rotational_measurements"
     measured.mkdir()
     (measured / "selection.csv").write_text("manual decision\n", encoding="utf-8")
-    source = synthetic_trajectory("steady_rotation_plus_noise", 200, 6, 81)
-    source["long_axis_deg"] = (-np.rad2deg(source["true_angle_rad"])) % 180.0
-    source["axis_ratio"] = np.nan
+    source = synthetic_long_axis("constant_angle_step_plus_noise", 200, 6, 81)
+    source["x_um"] = 0.5 * np.cos(source.baseline_angle_rad)
+    source["y_um"] = -0.5 * np.sin(source.baseline_angle_rad)
     source = source[["time_sec", "x_um", "y_um", "long_axis_deg", "axis_ratio"]]
     captured = []
     original_savefig = script["plt"].Figure.savefig
@@ -295,42 +289,45 @@ def test_main_routes_synthetic_plots_and_index(tmp_path, monkeypatch):
     original_savefig = script["plt"].Figure.savefig
 
     def capture(figure, *args, **kwargs):
-        if len(figure.axes) == 12:
-            limits.append(figure.axes[8].get_xlim()[1])
-            assert figure.axes[8].get_xticks()[-1] == limits[-1]
-            assert figure.axes[9].get_yscale() == "log"
-            assert all(ax.get_yscale() == "linear" for ax in figure.axes[10:])
+        if len(figure.axes) == 9:
+            limits.append(figure.axes[5].get_xlim()[1])
+            assert figure.axes[5].get_xticks()[-1] == limits[-1]
+            assert figure.axes[6].get_yscale() == "log"
+            assert all(ax.get_yscale() == "linear" for ax in figure.axes[7:])
+            if "random_angle_noise" in figure._suptitle.get_text():
+                assert figure.axes[0].get_ylim()[1] < 0.1
         return original_savefig(figure, *args, **kwargs)
 
     monkeypatch.setattr(script["plt"].Figure, "savefig", capture)
     simulation = tmp_path / "2_simulation"
     (simulation / "tables").mkdir(parents=True)
-    (simulation / "simulation_periodic_plus_noise_200hz_seed81.png").write_bytes(b"obsolete")
-    (simulation / "tables/simulation_periodic_plus_noise_200hz_seed81_metadata.json").write_text("obsolete")
+    (simulation / "simulation_steady_rotation_plus_noise_200hz_seed81.png").write_bytes(b"obsolete")
+    (simulation / "tables/simulation_random_only_200hz_seed81_metadata.json").write_text("obsolete")
     script["main"](
         Namespace(mode="synthetic", synthetic_rates=[200, 250], synthetic_duration=3, seed=81, null_replicates=1),
         {},
         {},
         tmp_path,
     )
-    assert (simulation / "simulation_steady_rotation_plus_noise_200hz_seed81.png").is_file()
-    assert (simulation / "simulation_random_only_200hz_seed81.png").is_file()
-    assert (simulation / "simulation_steady_rotation_plus_noise_250hz_seed81.png").is_file()
-    assert (simulation / "simulation_random_only_250hz_seed81.png").is_file()
-    assert (simulation / "simulation_random_only_ensemble.png").is_file()
-    assert (simulation / "tables/simulation_random_only_ensemble.csv").is_file()
-    assert not list(simulation.glob("simulation_periodic_plus_noise_*.png"))
-    assert not list((simulation / "tables").glob("simulation_periodic_plus_noise_*"))
+    assert (simulation / "simulation_constant_angle_step_plus_noise_200hz_seed81.png").is_file()
+    assert (simulation / "simulation_random_angle_noise_200hz_seed81.png").is_file()
+    assert (simulation / "simulation_constant_angle_step_plus_noise_250hz_seed81.png").is_file()
+    assert (simulation / "simulation_random_angle_noise_250hz_seed81.png").is_file()
+    assert (simulation / "simulation_random_angle_noise_ensemble.png").is_file()
+    assert (simulation / "tables/simulation_random_angle_noise_ensemble.csv").is_file()
+    assert not list(simulation.glob("simulation_steady_rotation_plus_noise_*.png"))
+    assert not list((simulation / "tables").glob("simulation_random_only_*"))
     index = script["pd"].read_csv(simulation / "index.csv")
     assert set(index.plot_file) == {
-        "simulation_steady_rotation_plus_noise_200hz_seed81.png",
-        "simulation_random_only_200hz_seed81.png",
-        "simulation_steady_rotation_plus_noise_250hz_seed81.png",
-        "simulation_random_only_250hz_seed81.png",
+        "simulation_constant_angle_step_plus_noise_200hz_seed81.png",
+        "simulation_random_angle_noise_200hz_seed81.png",
+        "simulation_constant_angle_step_plus_noise_250hz_seed81.png",
+        "simulation_random_angle_noise_250hz_seed81.png",
     }
     assert len(index.band_ratio_file) == 4
     assert all((simulation / path).is_file() for path in index.band_ratio_file)
-    nulls = script["pd"].read_csv(simulation / "tables/simulation_random_only_ensemble.csv")
+    assert not any(column.startswith("orbit_") or column == "coordinate_noise_sd_um" for column in index)
+    nulls = script["pd"].read_csv(simulation / "tables/simulation_random_angle_noise_ensemble.csv")
     assert set(nulls.nyquist_hz) == {100, 125}
     assert "peak_to_median_full_band" in nulls and "peak_to_median_0_20hz" not in nulls
     assert limits == [100, 100, 125, 125]

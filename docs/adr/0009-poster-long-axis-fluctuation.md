@@ -2,7 +2,7 @@
 
 ## 状態
 
-2026-11-13 採用。Issue #81。長軸以外の評価系列、位相図、FFT表示・対照帯域は [ADR 0010](0010-poster-phase-and-nyquist-band.md) で更新。周期角速度を含む合成条件は [ADR 0012](0012-poster-band-components-and-steady-simulation.md) で置換。
+2026-11-13 採用。Issue #81。長軸以外の評価系列、位相図、FFT表示・対照帯域は [ADR 0010](0010-poster-phase-and-nyquist-band.md) で更新。周期角速度を含む合成条件は [ADR 0012](0012-poster-band-components-and-steady-simulation.md) で置換し、合成の入力・座標出力は [ADR 0013](0013-poster-angle-noise-controls.md) で再度更新。
 
 ## 判断
 

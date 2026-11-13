@@ -27,8 +27,7 @@ from utils.functions.poster_fluctuation import (  # noqa: E402
     band_amplitude_ratios,
     duplicate_source_map,
     major_axis_deg,
-    orbit_angular_velocity,
-    synthetic_trajectory,
+    synthetic_long_axis,
 )
 from utils.run_context import analysis_run  # noqa: E402
 
@@ -91,12 +90,8 @@ def read_avi(path: Path, settings: dict) -> pd.DataFrame:
     )
 
 
-def analyze_frame(
-    source: pd.DataFrame, validate_orbit: bool = False
-) -> tuple[pd.DataFrame, dict[str, pd.DataFrame], dict]:
+def analyze_frame(source: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, pd.DataFrame], dict]:
     time = source["time_sec"].to_numpy(float)
-    x = source["x_um"].to_numpy(float)
-    y = source["y_um"].to_numpy(float)
     axis = source["long_axis_deg"].to_numpy(float)
     long_angle, long_omega = axis_angular_velocity(time, axis)
     long_result = analyze(time, long_omega)
@@ -114,40 +109,18 @@ def analyze_frame(
     finite_ratios = ratios[np.isfinite(ratios)]
     raw_delta = (np.diff(axis) + 90.0) % 180.0 - 90.0
     finite_delta = np.abs(raw_delta[np.isfinite(raw_delta)])
-    truth = (
-        source["true_angular_velocity_rad_s"].to_numpy(float)
-        if validate_orbit and "true_angular_velocity_rad_s" in source
-        else None
-    )
-
-    def rmse(estimate: np.ndarray) -> float:
-        if truth is None:
-            return float("nan")
-        mask = np.isfinite(truth) & np.isfinite(estimate)
-        return float(np.sqrt(np.mean((estimate[mask] - truth[mask]) ** 2))) if mask.any() else float("nan")
-
     info = {
         "frame_count": len(frame),
-        "detected_count": int(np.isfinite(x).sum()),
+        "detected_count": (
+            int(np.isfinite(source["x_um"].to_numpy(float)).sum()) if "x_um" in source else int(np.isfinite(axis).sum())
+        ),
         "long_axis_omega_count": valid_axis,
         "long_axis_omega_fraction": valid_axis / max(1, len(frame) - 1),
         "axis_ratio_p10": float(np.percentile(finite_ratios, 10)) if len(finite_ratios) else np.nan,
         "axis_step_abs_deg_p95": float(np.percentile(finite_delta, 95)) if len(finite_delta) else np.nan,
-        "long_axis_true_rmse_rad_s": rmse(long_omega),
         "long_axis_fft": long_result.metadata,
         "angle_warning": "The unoriented long axis has a 180-degree ambiguity; angular changes of >=90 degrees per sample are not identifiable.",
     }
-    if validate_orbit:
-        orbit_angle, orbit_omega, center = orbit_angular_velocity(time, x, y)
-        frame["orbit_angle_rad"] = orbit_angle
-        frame["orbit_omega_rad_s"] = orbit_omega
-        info.update(
-            {
-                "orbit_omega_fraction": int(np.isfinite(orbit_omega).sum()) / max(1, len(frame) - 1),
-                "orbit_center_um": list(center),
-                "orbit_true_rmse_rad_s": rmse(orbit_omega),
-            }
-        )
     return frame, spectra, info
 
 
@@ -181,62 +154,60 @@ def figure(
     includes_stops: bool = False,
 ) -> None:
     """One complete long-axis poster sheet per observed cell or synthetic case."""
-    fig, axes = plt.subplots(4, 3, figsize=(18, 20), constrained_layout=True)
     t = frame["time_sec"].to_numpy(float)
-    x = frame["x_um"].to_numpy(float)
-    y = frame["y_um"].to_numpy(float)
-    axes[0, 0].plot(t, x, linewidth=0.7)
-    axes[0, 0].set(xlabel="Time (s)", ylabel="x (um)", title="Centroid x vs time")
-    axes[0, 1].plot(t, y, linewidth=0.7)
-    axes[0, 1].set(xlabel="Time (s)", ylabel="y (um, image down)", title="Centroid y vs time")
-    axes[0, 2].plot(x, y, linewidth=0.7)
-    axes[0, 2].set(xlabel="x (um)", ylabel="y (um, image down)", title="Centroid x-y trajectory")
-    axes[0, 2].set_aspect("equal", adjustable="box")
-    axes[0, 2].invert_yaxis()
+    measured = "x_um" in frame and "y_um" in frame
+    rows = 4 if measured else 3
+    fig, axes = plt.subplots(rows, 3, figsize=(18, 20 if measured else 16), constrained_layout=True)
+    if measured:
+        x = frame["x_um"].to_numpy(float)
+        y = frame["y_um"].to_numpy(float)
+        axes[0, 0].plot(t, x, linewidth=0.7)
+        axes[0, 0].set(xlabel="Time (s)", ylabel="x (um)", title="Centroid x vs time")
+        axes[0, 1].plot(t, y, linewidth=0.7)
+        axes[0, 1].set(xlabel="Time (s)", ylabel="y (um, image down)", title="Centroid y vs time")
+        axes[0, 2].plot(x, y, linewidth=0.7)
+        axes[0, 2].set(xlabel="x (um)", ylabel="y (um, image down)", title="Centroid x-y trajectory")
+        axes[0, 2].set_aspect("equal", adjustable="box")
+        axes[0, 2].invert_yaxis()
+    phase_ax, signed_ax, absolute_ax = axes[1 if measured else 0]
+    stats_axes = axes[2 if measured else 1]
+    band_axes = axes[3 if measured else 2]
     phase_t, phase = wrapped_phase_plot(t, frame["long_axis_phase_rad"].to_numpy(float))
-    axes[1, 0].plot(phase_t, phase, linewidth=0.7)
-    axes[1, 0].set(
+    phase_ax.plot(phase_t, phase, linewidth=0.7)
+    phase_ax.set(
         xlabel="Time (s)",
         ylabel="Relative phase (rad, CCW +)",
         title="Inferred phase (180° axis ambiguity)",
-        ylim=(-np.pi, np.pi),
     )
-    axes[1, 0].set_yticks([-np.pi, -np.pi / 2, 0, np.pi / 2, np.pi], ["−π", "−π/2", "0", "π/2", "π"])
-    if "true_angular_velocity_rad_s" in frame:
-        axes[1, 1].plot(
-            t, frame["true_angular_velocity_rad_s"], color="black", linewidth=0.7, alpha=0.6, label="generated truth"
-        )
-        axes[1, 2].plot(
-            t,
-            np.abs(frame["true_angular_velocity_rad_s"]),
-            color="black",
-            linewidth=0.7,
-            alpha=0.6,
-            label="|generated truth|",
-        )
-    axes[1, 1].plot(t, frame["long_axis_omega_rad_s"], linewidth=0.7, label="long axis (CCW +)")
-    axes[1, 2].plot(t, frame["long_axis_abs_omega_rad_s"], linewidth=0.7, label="|long axis|")
-    axes[1, 1].set(xlabel="Time (s)", ylabel="rad/s", title="Signed angular velocity")
-    axes[1, 2].set(xlabel="Time (s)", ylabel="rad/s", title="Absolute angular velocity")
-    axes[1, 1].legend()
-    axes[1, 2].legend()
+    if not measured and frame["baseline_angle_rad"].eq(0).all():
+        phase_limit = max(0.01, 1.1 * np.nanmax(np.abs(phase)))
+        phase_ax.set_ylim(-phase_limit, phase_limit)
+    else:
+        phase_ax.set_ylim(-np.pi, np.pi)
+        phase_ax.set_yticks([-np.pi, -np.pi / 2, 0, np.pi / 2, np.pi], ["−π", "−π/2", "0", "π/2", "π"])
+    signed_ax.plot(t, frame["long_axis_omega_rad_s"], linewidth=0.7, label="long axis (CCW +)")
+    absolute_ax.plot(t, frame["long_axis_abs_omega_rad_s"], linewidth=0.7, label="|long axis|")
+    signed_ax.set(xlabel="Time (s)", ylabel="rad/s", title="Signed angular velocity")
+    absolute_ax.set(xlabel="Time (s)", ylabel="rad/s", title="Absolute angular velocity")
+    signed_ax.legend()
+    absolute_ax.legend()
     for width in WINDOWS_S:
         label = f"{width:g} s"
         prefix = f"long_axis_sd_per_mean_{width:g}s"
-        axes[2, 0].plot(t, frame[prefix], linewidth=0.8, label=label)
-        axes[2, 1].plot(t, frame[f"{prefix}_z"], linewidth=0.8, label=label)
+        stats_axes[0].plot(t, frame[prefix], linewidth=0.8, label=label)
+        stats_axes[1].plot(t, frame[f"{prefix}_z"], linewidth=0.8, label=label)
         spectrum = spectra["long_axis"]
         part = spectrum[(spectrum.window_s == width) & np.isfinite(spectrum.amplitude) & (spectrum.amplitude > 0)]
-        axes[2, 2].plot(part.frequency_hz, part.amplitude, linewidth=0.8, label=label)
-    axes[2, 0].set(xlabel="Time (s)", ylabel="SD / Mean", title="Gaussian-window SD / Mean")
-    axes[2, 1].set(xlabel="Time (s)", ylabel="z-score", title="Standardized SD / Mean")
-    axes[2, 2].set(xlabel="Frequency (Hz)", ylabel="FFT amplitude (log)", title="FFT of standardized SD / Mean")
-    axes[2, 2].set_xlim(0, rate_hz / 2)
-    axes[2, 2].set_xticks(np.linspace(0, rate_hz / 2, 6))
-    axes[2, 2].set_yscale("log")
-    for ax in axes[2]:
+        stats_axes[2].plot(part.frequency_hz, part.amplitude, linewidth=0.8, label=label)
+    stats_axes[0].set(xlabel="Time (s)", ylabel="SD / Mean", title="Gaussian-window SD / Mean")
+    stats_axes[1].set(xlabel="Time (s)", ylabel="z-score", title="Standardized SD / Mean")
+    stats_axes[2].set(xlabel="Frequency (Hz)", ylabel="FFT amplitude (log)", title="FFT of standardized SD / Mean")
+    stats_axes[2].set_xlim(0, rate_hz / 2)
+    stats_axes[2].set_xticks(np.linspace(0, rate_hz / 2, 6))
+    stats_axes[2].set_yscale("log")
+    for ax in stats_axes:
         ax.legend(ncol=2)
-    for ax, (column, label, ylabel, scale) in zip(axes[3], BAND_PANELS):
+    for ax, (column, label, ylabel, scale) in zip(band_axes, BAND_PANELS):
         values = band_ratios[column].to_numpy(float)
         good = np.isfinite(values) & ((values > 0) if scale == "log" else True)
         ax.plot(band_ratios.loc[good, "window_s"], values[good], "-o")
@@ -244,7 +215,7 @@ def figure(
         ax.set_xticks(WINDOWS_S)
         ax.set_yscale(scale)
         ax.tick_params(axis="x", labelrotation=45)
-    axes[3, 0].set_title("Low / High (full record; stops retained)" if includes_stops else "Low / High (full record)")
+    band_axes[0].set_title("Low / High (full record; stops retained)" if includes_stops else "Low / High (full record)")
     style_axes(axes)
     fig.suptitle(title, fontsize=20)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -284,7 +255,7 @@ def save_case(source: pd.DataFrame, destination: Path, stem: str, title: str, me
         raise ValueError("A positive frame rate and increasing timestamps are required")
     if not np.isclose(1 / np.median(positive_dt), rate_hz, rtol=1e-6):
         raise ValueError("Frame rate disagrees with the input timebase")
-    frame, spectra, info = analyze_frame(source, validate_orbit=metadata["kind"] == "synthetic")
+    frame, spectra, info = analyze_frame(source)
     band_ratios = band_amplitude_ratios(spectra["long_axis"])
     destination.mkdir(parents=True, exist_ok=True)
     tables = destination / "tables"
@@ -318,9 +289,6 @@ def save_case(source: pd.DataFrame, destination: Path, stem: str, title: str, me
         band_ratios,
         includes_stops=metadata["kind"] == "measured",
     )
-    obsolete_orbit_fft = tables / f"{stem}_orbit_fft.csv"
-    if obsolete_orbit_fft.is_file():
-        obsolete_orbit_fft.unlink()
     row = {
         **metadata,
         "plot_file": f"{stem}.png",
@@ -329,13 +297,9 @@ def save_case(source: pd.DataFrame, destination: Path, stem: str, title: str, me
         "long_axis_omega_fraction": info["long_axis_omega_fraction"],
         "axis_ratio_p10": info["axis_ratio_p10"],
         "axis_step_abs_deg_p95": info["axis_step_abs_deg_p95"],
-        "long_axis_true_rmse_rad_s": info["long_axis_true_rmse_rad_s"],
         "long_axis_peak_0.2s_hz": info["long_axis_fft"][1]["peak_frequency_hz"],
     }
     row["band_ratio_file"] = f"tables/{stem}_band_amplitude_ratio.csv"
-    if metadata["kind"] == "synthetic":
-        row["orbit_omega_fraction"] = info["orbit_omega_fraction"]
-        row["orbit_true_rmse_rad_s"] = info["orbit_true_rmse_rad_s"]
     return row
 
 
@@ -409,32 +373,9 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
                 rows.append(row)
     if args.mode in ("all", "synthetic"):
         for rate in args.synthetic_rates:
-            for model in ("steady_rotation_plus_noise", "random_only"):
+            for model in ("constant_angle_step_plus_noise", "random_angle_noise"):
                 print(f"Simulating {model} at {rate:g} Hz", flush=True)
-                source = synthetic_trajectory(
-                    model,
-                    rate,
-                    args.synthetic_duration,
-                    args.seed,
-                    base_hz=8.0 if model == "steady_rotation_plus_noise" else 0.0,
-                )
-                source["source_frame_1based"] = np.arange(1, len(source) + 1)
-                source["long_axis_deg"] = (-np.rad2deg(source["true_angle_rad"])) % 180.0
-                source["axis_ratio"] = np.nan
-                source = source[
-                    [
-                        "source_frame_1based",
-                        "time_sec",
-                        "x_um",
-                        "y_um",
-                        "long_axis_deg",
-                        "axis_ratio",
-                        "true_angle_rad",
-                        "true_angular_velocity_rad_s",
-                        "true_x_um",
-                        "true_y_um",
-                    ]
-                ]
+                source = synthetic_long_axis(model, rate, args.synthetic_duration, args.seed)
                 name = f"{model}_{int(rate)}hz_seed{args.seed}"
                 rows.append(
                     save_case(
@@ -448,21 +389,22 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
                             "rate_hz": rate,
                             "duration_s": args.synthetic_duration,
                             "seed": args.seed,
-                            "base_hz": 8.0 if model == "steady_rotation_plus_noise" else 0.0,
-                            "white_noise_sd_rad_s": 3.0,
-                            "angular_velocity_model": "constant mean plus independent Gaussian noise per frame",
-                            "radius_um": 0.5,
-                            "coordinate_noise_sd_um": 0.01,
+                            "base_hz": 8.0 if model == "constant_angle_step_plus_noise" else 0.0,
+                            "angle_noise_sd_rad": 0.01,
+                            "angle_model": (
+                                "constant angular step plus independent Gaussian angle noise"
+                                if model == "constant_angle_step_plus_noise"
+                                else "independent Gaussian angle noise only"
+                            ),
                         },
                     )
                 )
         null_rows = []
         for rate in args.synthetic_rates:
             for seed in range(args.seed, args.seed + args.null_replicates):
-                null_source = synthetic_trajectory("random_only", rate, args.synthetic_duration, seed, base_hz=0.0)
+                null_source = synthetic_long_axis("random_angle_noise", rate, args.synthetic_duration, seed)
                 null_time = null_source.time_sec.to_numpy(float)
-                null_axis = (-np.rad2deg(null_source.true_angle_rad.to_numpy(float))) % 180.0
-                _, null_omega = axis_angular_velocity(null_time, null_axis)
+                _, null_omega = axis_angular_velocity(null_time, null_source.long_axis_deg.to_numpy(float))
                 null_result = analyze(null_time, null_omega, windows=(0.2,))
                 null_rows.append(
                     {
@@ -475,22 +417,30 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
         simulation_dir.mkdir(parents=True, exist_ok=True)
         tables = simulation_dir / "tables"
         tables.mkdir(parents=True, exist_ok=True)
-        pd.DataFrame(null_rows).to_csv(tables / "simulation_random_only_ensemble.csv", index=False)
+        pd.DataFrame(null_rows).to_csv(tables / "simulation_random_angle_noise_ensemble.csv", index=False)
         fig, axes = plt.subplots(1, 2, figsize=(14, 5), constrained_layout=True)
         for rate, group in pd.DataFrame(null_rows).groupby("rate_hz"):
             axes[0].hist(group.peak_frequency_hz, bins=20, alpha=0.5, label=f"{rate:g} Hz")
             axes[1].hist(group.peak_to_median_full_band, bins=20, alpha=0.5, label=f"{rate:g} Hz")
-        axes[0].set(xlabel="Peak frequency (Hz)", ylabel="Count", title="Random-only: strongest apparent FFT peak")
+        axes[0].set(
+            xlabel="Peak frequency (Hz)", ylabel="Count", title="Random angle noise: strongest apparent FFT peak"
+        )
         axes[0].set_xlim(0, max(args.synthetic_rates) / 2)
-        axes[1].set(xlabel="Peak / median amplitude, full band", ylabel="Count", title="Random-only peak contrast")
+        axes[1].set(
+            xlabel="Peak / median amplitude, full band", ylabel="Count", title="Random angle noise: peak contrast"
+        )
         for ax in axes:
             ax.legend()
         style_axes(axes)
-        fig.savefig(simulation_dir / "simulation_random_only_ensemble.png", dpi=180)
+        fig.savefig(simulation_dir / "simulation_random_angle_noise_ensemble.png", dpi=180)
         plt.close(fig)
         for obsolete in (
             *simulation_dir.glob("simulation_periodic_plus_noise_*.png"),
             *tables.glob("simulation_periodic_plus_noise_*"),
+            *simulation_dir.glob("simulation_steady_rotation_plus_noise_*.png"),
+            *tables.glob("simulation_steady_rotation_plus_noise_*"),
+            *simulation_dir.glob("simulation_random_only_*.png"),
+            *tables.glob("simulation_random_only_*"),
         ):
             obsolete.unlink()
     destination.mkdir(parents=True, exist_ok=True)
@@ -536,16 +486,16 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
         stream.write(
             "Private local poster analysis from binary AVI, not source TIFF. "
             "Measured plots are 1_rotational_measurements/<day>/No.XX.png; simulations are in 2_simulation/. "
-            "Each measured and synthetic case PNG contains t-x, t-y, x-y, inferred relative phase wrapped to [-pi, pi), separate signed "
+            "Measured PNGs contain t-x, t-y, x-y; synthetic case PNGs omit coordinates. Both contain inferred relative phase wrapped to [-pi, pi), separate signed "
             "and absolute long-axis angular velocity, all six SD/Mean windows, standardized inputs, their FFTs, "
             "and side-by-side Low/High, Low-only and Low-High mean FFT amplitude metrics for 0<f<1 Hz and 80<=f<100 Hz. "
             "Measured ratios include stops; the ratio is unavailable when either band has no bins or the high-band mean is zero. "
             "A full measured run also writes the four candidate-cell comparison PNG and table under 1_rotational_measurements/. "
             "The FFT plot extends to half the frame rate and uses a logarithmic amplitude axis. "
             "Each case's numeric series, spectra and metadata are in its sibling tables/. "
-            "Synthetic rotation uses a constant 8 Hz mean plus independent Gaussian angular-velocity noise (SD 3 rad/s per frame), or zero-mean noise only; neither injects periodic velocity modulation. "
-            "The orbit radius is 0.5 um and independent x/y coordinate-noise SD is 0.01 um. Defaults are 200/250 fps, 6 s, seed 81. "
-            "Synthetic orbit velocity is for truth validation only. Each category has index.csv; "
+            "Synthetic angles use a constant 8 Hz angle step plus independent Gaussian angle noise (SD 0.01 rad per frame), or independent Gaussian angle noise only without rotation. "
+            "Both derive angular velocity from the generated 180-degree long-axis angle. Defaults are 200/250 fps, 6 s, seed 81. "
+            "Each category has index.csv; "
             "1_rotational_measurements/selection_template.csv marks excluded duplicate AVIs. "
             "Long-axis angle has 180-degree ambiguity. Derived measured plots and series stay local.\n"
         )

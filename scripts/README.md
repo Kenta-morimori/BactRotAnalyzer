@@ -195,4 +195,4 @@ python3 scripts/04_repellent_response_analysis.py --day repellent-response/20260
 
 ### ポスター用の回転揺らぎ解析
 
-3条件の菌体長軸角・揺らぎと合成ノイズ対照は [`docs/analysis/poster-fluctuation.md`](../docs/analysis/poster-fluctuation.md) の手順を参照する。合成の重心周回角は真値照合用に限る。生成物はGit管理外の `outputs/poster_fluctuation/` に置く。
+3条件の菌体長軸角・揺らぎと、長軸角から解析する合成ノイズ対照は [`docs/analysis/poster-fluctuation.md`](../docs/analysis/poster-fluctuation.md) の手順を参照する。生成物はGit管理外の `outputs/poster_fluctuation/` に置く。

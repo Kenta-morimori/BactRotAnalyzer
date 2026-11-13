@@ -128,54 +128,6 @@ def axis_angular_velocity(time: np.ndarray, axis_deg: np.ndarray) -> tuple[np.nd
     return angle, omega
 
 
-def circle_center(x: np.ndarray, y: np.ndarray) -> tuple[float, float]:
-    """A single comparison center; return missing for degenerate trajectories."""
-    x = np.asarray(x, dtype=float)
-    y = np.asarray(y, dtype=float)
-    good = np.isfinite(x) & np.isfinite(y)
-    if good.sum() < 10:
-        return float("nan"), float("nan")
-    xx, yy = x[good], y[good]
-    matrix = np.column_stack((2 * xx, 2 * yy, np.ones(len(xx))))
-    if np.linalg.matrix_rank(matrix) < 3:
-        return float("nan"), float("nan")
-    fit, *_ = np.linalg.lstsq(matrix, xx * xx + yy * yy, rcond=None)
-    return float(fit[0]), float(fit[1])
-
-
-def orbit_angular_velocity(
-    time: np.ndarray, x: np.ndarray, y: np.ndarray
-) -> tuple[np.ndarray, np.ndarray, tuple[float, float]]:
-    center = circle_center(x, y)
-    n = len(time)
-    angle = np.full(n, np.nan)
-    omega = np.full(n, np.nan)
-    if not np.all(np.isfinite(center)):
-        return angle, omega, center
-    raw = np.arctan2(np.asarray(y) - center[1], np.asarray(x) - center[0])
-    dt = np.diff(time)
-    valid_dt = dt[np.isfinite(dt) & (dt > 0)]
-    nominal_dt = float(np.median(valid_dt)) if len(valid_dt) else np.nan
-    for j in range(n):
-        if not np.isfinite(time[j]) or not np.isfinite(raw[j]):
-            continue
-        if j == 0 or not np.isfinite(angle[j - 1]):
-            angle[j] = 0.0
-            continue
-        delta_t = dt[j - 1]
-        if (
-            not np.isfinite(delta_t)
-            or delta_t <= 0
-            or (np.isfinite(nominal_dt) and delta_t > CONTINUITY_GAP_FACTOR * nominal_dt)
-        ):
-            continue
-        delta = (raw[j] - raw[j - 1] + np.pi) % (2 * np.pi) - np.pi
-        delta = -delta  # image y increases down; report CCW positive
-        angle[j] = angle[j - 1] + delta
-        omega[j] = delta / delta_t
-    return angle, omega, center
-
-
 def analyze(time: np.ndarray, omega: np.ndarray, windows: tuple[float, ...] = WINDOWS_S) -> SeriesResult:
     """Existing Gaussian-window SD(abs(omega))/Mean and z-scored FFT.
 
@@ -249,38 +201,30 @@ def analyze(time: np.ndarray, omega: np.ndarray, windows: tuple[float, ...] = WI
     return SeriesResult(frame, pd.concat(spectra, ignore_index=True), metadata)
 
 
-def synthetic_trajectory(
+def synthetic_long_axis(
     model: str,
     rate_hz: float,
     duration_s: float,
     seed: int,
-    base_hz: float | None = None,
-    noise_rad_s: float = 3.0,
-    radius_um: float = 0.5,
-    coordinate_noise_sd_um: float = 0.01,
+    angle_noise_sd_rad: float = 0.01,
+    base_hz: float = 8.0,
 ) -> pd.DataFrame:
-    """Known angular velocity -> integrated angle -> image-space orbit."""
-    if model not in ("steady_rotation_plus_noise", "random_only"):
+    """Sample an observed long-axis angle, then use the measured angle path."""
+    if model not in ("constant_angle_step_plus_noise", "random_angle_noise"):
         raise ValueError(model)
-    if base_hz is None:
-        base_hz = 8.0 if model == "steady_rotation_plus_noise" else 0.0
     time = np.arange(int(rate_hz * duration_s), dtype=float) / rate_hz
     rng = np.random.default_rng(seed)
-    omega_true = 2 * np.pi * base_hz + rng.normal(0, noise_rad_s, len(time))
-    theta = np.r_[0.0, np.cumsum(omega_true[1:] / rate_hz)]
-    # Image y down; positive CCW rotates toward decreasing image y.
-    true_x = radius_um * np.cos(theta)
-    true_y = -radius_um * np.sin(theta)
-    x = true_x + rng.normal(0, coordinate_noise_sd_um, len(time))
-    y = true_y + rng.normal(0, coordinate_noise_sd_um, len(time))
+    baseline_hz = base_hz if model == "constant_angle_step_plus_noise" else 0.0
+    baseline_angle = 2 * np.pi * baseline_hz * time
+    angle_noise = rng.normal(0.0, angle_noise_sd_rad, len(time))
+    observed_angle = baseline_angle + angle_noise
     return pd.DataFrame(
         {
+            "source_frame_1based": np.arange(1, len(time) + 1),
             "time_sec": time,
-            "x_um": x,
-            "y_um": y,
-            "true_x_um": true_x,
-            "true_y_um": true_y,
-            "true_angular_velocity_rad_s": omega_true,
-            "true_angle_rad": theta,
+            "long_axis_deg": (-np.rad2deg(observed_angle)) % 180.0,
+            "axis_ratio": np.full(len(time), np.nan),
+            "baseline_angle_rad": baseline_angle,
+            "angle_noise_rad": angle_noise,
         }
     )

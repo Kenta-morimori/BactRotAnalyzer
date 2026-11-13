@@ -1,6 +1,6 @@
 # ポスター用の長軸角・揺らぎ解析
 
-[基本測定](../adr/0009-poster-long-axis-fluctuation.md)、[表示・評価帯域の更新](../adr/0010-poster-phase-and-nyquist-band.md)、[固定帯域強度比](../adr/0011-poster-fixed-band-ratio.md)、[成分表示と非周期合成](../adr/0012-poster-band-components-and-steady-simulation.md)に従う。入力は現時点ではTIFFでなく二値AVI。対象は `data/20231005` のNo.1–7、`data/20230607` のNo.1–10、`data/20231107` のNo.1–7の計24細胞。両端の日付のNo.8–10は当時の解析用にNo.7を複製したAVIで、入力一覧に記録するが解析から除外する。各日付は同一条件の別細胞であり、実験反復と自動的にみなさない。
+[基本測定](../adr/0009-poster-long-axis-fluctuation.md)、[表示・評価帯域の更新](../adr/0010-poster-phase-and-nyquist-band.md)、[固定帯域強度比](../adr/0011-poster-fixed-band-ratio.md)、[成分表示](../adr/0012-poster-band-components-and-steady-simulation.md)、[長軸角の合成対照](../adr/0013-poster-angle-noise-controls.md)に従う。入力は現時点ではTIFFでなく二値AVI。対象は `data/20231005` のNo.1–7、`data/20230607` のNo.1–10、`data/20231107` のNo.1–7の計24細胞。両端の日付のNo.8–10は当時の解析用にNo.7を複製したAVIで、入力一覧に記録するが解析から除外する。各日付は同一条件の別細胞であり、実験反復と自動的にみなさない。
 
 クリーンなコミットから、リポジトリのルートで実行する。
 
@@ -16,8 +16,8 @@ FFTの横軸上限は各AVIのFrame Rateの半分（200 fpsなら100 Hz、250 fp
 
 強度比は各窓幅の標準化SD/MeanのFFTから、`0 < f < 1 Hz` の平均振幅を `80 <= f < 100 Hz` の平均振幅で割る。DCは除外し、帯域に点がないか高域平均が0なら比を欠測にする。全24細胞の比、Low−High、両帯域の平均振幅・FFT点数・帯域境界は日付別 `tables/No.XX_band_amplitude_ratio.csv` に保存する。Low/Highの縦軸は対数目盛り、LowとLow−Highは線形目盛りで表示する。20230607 No.06・No.08、20231005 No.01、20231107 No.06の暫定候補は `1_rotational_measurements/candidate_band_amplitude_ratio.png` で重ね、数値を同階層の `tables/candidate_band_amplitude_ratio.csv` に保存する。比較図は3パネルで、4候補をすべて含む実測実行時に生成する。20231005 No.01は停止を含む全時系列を使用するため、停止の影響を受け得る。候補比較は最終採否や有意差検定ではない。`selection.csv` はCLIから変更しない。
 
-合成角速度は、一定平均8 Hz回転に各フレーム独立の正規ノイズ（標準偏差3 rad/s）を加える `steady_rotation_plus_noise` と、平均回転0 Hzで同じノイズを加える `random_only` の2種類。決定論的な周期変調は入れない。角度を積分して半径0.5 µmの周回座標を作り、x・yに独立の座標ノイズ（標準偏差0.01 µm）を加える。既定は200/250 fps、各6秒、seed 81。座標には周回に伴う周期性があるが、角速度には周期変調を指定していない。
+合成は角度を先に生成し、実測と同じ180°周期の長軸角差分から角速度を定義する。`constant_angle_step_plus_noise` は `θ_i=2π×8 Hz×t_i+ε_i`、`random_angle_noise` は `θ_i=ε_i`。`ε_i` は各フレーム独立の正規角度ノイズ（標準偏差0.01 rad）で、角速度へ直接ノイズを加えない。決定論的な周期変調も入れない。既定は200/250 fps、各6秒、seed 81。この角度ノイズ強度は実測へ校正していない。
 
-合成代表例の `simulation_*.png` と乱数のみの複数seed比較 `simulation_random_only_ensemble.png` は `outputs/poster_fluctuation/2_simulation/` に保存する。合成代表例も各ケース12パネルで、実測と同じ3つの固定帯域指標を最下段に表示する。対応する6窓幅の値は `tables/simulation_*_band_amplitude_ratio.csv` に保存し、`index.csv` の `band_ratio_file` から参照する。合成では座標から円中心と周回角速度を再推定し、生成真値との照合だけに使う。周回角の揺らぎ・FFTは出力しない。対応する時系列・長軸FFT・品質メタデータと複数seed集計も同ディレクトリの `tables/` に保存する。実行履歴は出力ルートの `_run_records/` に保存する。旧配置の `selection.csv` は新配置へ移し、既存の手動判定を保持する。
+合成代表例の `simulation_*.png` と乱数のみの複数seed比較 `simulation_random_angle_noise_ensemble.png` は `outputs/poster_fluctuation/2_simulation/` に保存する。合成代表例は各ケース9パネルで、位相、符号付き/絶対値角速度、6窓幅のSD/Mean・z-score・FFT、3つの固定帯域指標を表示する。重心座標・周回角速度は生成・図示・保存しない。対応する6窓幅の値は `tables/simulation_*_band_amplitude_ratio.csv` に保存し、`index.csv` の `band_ratio_file` から参照する。時系列・長軸FFT・品質メタデータと複数seed集計も同ディレクトリの `tables/` に保存する。実行履歴は出力ルートの `_run_records/` に保存する。旧配置の `selection.csv` は新配置へ移し、既存の手動判定を保持する。
 
 揺らぎは1フレームずつ中心を動かすGaussian窓で `SD(abs(長軸角速度))/Mean(abs(長軸角速度))` を求める。窓幅は0.1/0.2/0.5/1.0/1.5/2.0秒。窓全体が記録内にあり、3点以上の有効値があり、欠測や時刻gapを含まない位置だけを計算する。各窓幅の有効な揺らぎ系列全体をz-score標準化し、最長の連続有効区間をFFTにかける。図には全6窓幅を重ねる。採用前に元AVIで対象と楕円長軸を確認し、主角速度の欠測率と折返し、窓幅を変えたピークの変化、合成対照で生じる見かけのピークを点検する。採否表はローカルに保持し、実測座標・図・再構成可能な系列をIssueやPRに掲載しない。
