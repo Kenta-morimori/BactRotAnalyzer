@@ -28,6 +28,7 @@ from utils.functions.poster_one_over_f import (  # noqa: E402
 from utils.run_context import analysis_run  # noqa: E402
 
 WINDOW_S = 0.5
+PRIMARY_BAND_WIDTH_HZ = 1.0
 SPECTRUM_SUFFIX = "long_axis_fft.csv"
 SERIES_SUFFIX = "time_series.csv"
 METADATA_SUFFIX = "metadata.json"
@@ -139,31 +140,21 @@ def load_case(source_root: Path, case: CaseSpec) -> dict:
 
 
 def draw_comparison(cases: list[dict], target: Path) -> None:
-    fig, axes = plt.subplots(3, len(cases), figsize=(34, 15), constrained_layout=True)
+    fig, axes = plt.subplots(3, len(cases), figsize=(38, 17), constrained_layout=True)
     for column, item in enumerate(cases):
         first, second, third = axes[:, column]
-        first.plot(item["time_sec"], item["sd_per_mean"], linewidth=0.8)
+        first.plot(item["time_sec"], item["sd_per_mean"], linewidth=1.0)
         first.set(title=item["case"].label, xlabel="Time (s)", ylabel="SD / Mean")
         positive = np.isfinite(item["amplitude"]) & (item["amplitude"] > 0)
-        second.plot(item["frequency_hz"][positive], item["amplitude"][positive], linewidth=0.8, label="0.5 s FFT")
+        second.plot(item["frequency_hz"][positive], item["amplitude"][positive], linewidth=1.0)
         second.plot(
             item["frequency_hz"],
             item["fitted_amplitude"],
             color="red",
-            linewidth=1.5,
-            label="Fit: A[(f + Δf)/1 Hz]^(-α)",
-        )
-        second.scatter(
-            item["fit_bin_frequency_hz"],
-            item["fit_bin_amplitude"],
-            s=24,
-            color="darkorange",
-            zorder=3,
-            label="Log-band medians used for fit",
+            linewidth=2.2,
         )
         second.set(xlabel="Frequency (Hz)", ylabel="FFT amplitude (log)", xlim=(0, item["rate_hz"] / 2))
         second.set_yscale("log")
-        second.legend(fontsize=9)
         second.text(
             0.98,
             0.05,
@@ -171,18 +162,19 @@ def draw_comparison(cases: list[dict], target: Path) -> None:
             f"Δf = {item['fit'].offset_hz:.3g} Hz, log R² = {item['fit'].log_bin_r_squared:.2f}",
             transform=second.transAxes,
             ha="right",
-            fontsize=10,
+            fontsize=14,
+            bbox={"facecolor": "white", "alpha": 0.85, "edgecolor": "none"},
         )
-        third.plot(item["segment_time_sec"], item["surrogate"], linewidth=0.8)
+        third.plot(item["segment_time_sec"], item["surrogate"], linewidth=1.0)
         third.axhline(0, color="gray", linewidth=0.5)
         third.set(xlabel="Time (s)", ylabel="Inverse FFT (z units)")
         for ax in (first, second, third):
-            ax.tick_params(labelsize=10)
-            ax.xaxis.label.set_fontsize(11)
-            ax.yaxis.label.set_fontsize(11)
-            ax.title.set_fontsize(13)
+            ax.tick_params(labelsize=14)
+            ax.xaxis.label.set_fontsize(16)
+            ax.yaxis.label.set_fontsize(16)
+            ax.title.set_fontsize(17)
             ax.grid(alpha=0.2)
-    fig.suptitle("0.5 s Gaussian window: SD/Mean, FFT-amplitude fit, random-phase inverse FFT", fontsize=19)
+    fig.suptitle("0.5 s Gaussian window: SD/Mean, FFT-amplitude fit, random-phase inverse FFT", fontsize=22)
     target.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(target, dpi=170)
     plt.close(fig)
@@ -317,8 +309,10 @@ def generate(source_root: Path, output_root: Path, phase_seed: int, cases: tuple
     loaded = []
     for index, case in enumerate(cases):
         item = load_case(source_root, case)
-        fit = fit_amplitude(item["frequency_hz"], item["amplitude"])
-        bin_frequency, bin_amplitude, bin_count = log_frequency_bins(item["frequency_hz"], item["amplitude"])
+        fit = fit_amplitude(item["frequency_hz"], item["amplitude"], equal_width_hz=PRIMARY_BAND_WIDTH_HZ)
+        bin_frequency, bin_amplitude, bin_count = equal_frequency_bins(
+            item["frequency_hz"], item["amplitude"], PRIMARY_BAND_WIDTH_HZ
+        )
         seed = phase_seed + index
         frequency, target_amplitude, phase, surrogate = random_phase_inverse_fft(
             item["sample_count"], 1 / item["rate_hz"], fit.scale, fit.exponent, fit.offset_hz, seed
@@ -392,7 +386,7 @@ def generate(source_root: Path, output_root: Path, phase_seed: int, cases: tuple
         "Private local comparison for four measured cells and two synthetic angle controls. "
         "Row 1 is the raw 0.5 s Gaussian-window SD/Mean on original observation times. "
         "Row 2 fits the z-scored SD/Mean FFT amplitude with A*((f+delta_f)/1 Hz)^(-alpha), "
-        "where delta_f is the first positive FFT frequency. Nine equal log-frequency bands summarize the "
+        "where delta_f is the first positive FFT frequency. Equal-width 1 Hz frequency bands summarize the "
         "positive amplitudes below Nyquist by their medians; log-amplitude residuals of those medians "
         "determine A and alpha. The raw spectrum and fit are displayed on a log-amplitude axis. "
         "This figure describes the FFT amplitude of the fluctuation metric; no noise color is assigned. "

@@ -143,6 +143,11 @@ def test_six_case_output_uses_saved_0_5s_fft_and_18_panels(tmp_path, monkeypatch
     assert (output / "six_case_one_over_f_0.5s.png").is_file()
     assert len(captured) == 1 and len(captured[0].axes) == 18
     assert all(captured[0].axes[6 + column].get_yscale() == "log" for column in range(6))
+    assert all(not axis.collections and axis.get_legend() is None for axis in captured[0].axes)
+    assert all(
+        axis.xaxis.label.get_fontsize() >= 16 and axis.yaxis.label.get_fontsize() >= 16 for axis in captured[0].axes
+    )
+    assert all(axis.xaxis.get_ticklabels()[0].get_fontsize() >= 14 for axis in captured[0].axes)
     plotted_fit = captured[0].axes[6].lines[1].get_ydata()
     saved_fit = pd.read_csv(output / "tables/case_0_fit.csv")["fitted_fft_amplitude"].to_numpy()
     assert np.allclose(plotted_fit, saved_fit, rtol=1e-12, atol=1e-15)
@@ -156,6 +161,17 @@ def test_six_case_output_uses_saved_0_5s_fft_and_18_panels(tmp_path, monkeypatch
     assert len(fit_bins) == index.loc[0, "bin_count"]
     assert fit_bins.fft_point_count.sum() == index.loc[0, "point_count"]
     sensitivity_input = script["load_case"](tmp_path, cases[0])
+    expected_primary = fit_amplitude(
+        sensitivity_input["frequency_hz"], sensitivity_input["amplitude"], equal_width_hz=1.0
+    )
+    assert np.allclose(index.exponent, expected_primary.exponent)
+    assert index.bin_count.eq(expected_primary.bin_count).all()
+    expected_frequency, expected_amplitude, expected_counts = equal_frequency_bins(
+        sensitivity_input["frequency_hz"], sensitivity_input["amplitude"], 1.0
+    )
+    assert np.allclose(fit_bins.frequency_hz, expected_frequency)
+    assert np.allclose(fit_bins.median_fft_amplitude, expected_amplitude)
+    assert np.array_equal(fit_bins.fft_point_count, expected_counts)
     script["draw_fit_sensitivity"](sensitivity_input, output / "fit_sensitivity_case_0_0.5s.png")
     assert (output / "fit_sensitivity_case_0_0.5s.png").is_file()
     assert len(captured[-1].axes) == 6
@@ -172,7 +188,6 @@ def test_six_case_output_uses_saved_0_5s_fft_and_18_panels(tmp_path, monkeypatch
     assert np.isfinite(index.scale).all()
     assert index.exponent.gt(0).all()
     assert np.allclose(index.offset_hz, 100 / index.sample_count)
-    assert index.bin_count.eq(9).all()
     saved = pd.read_csv(folder / "case_0_long_axis_fft.csv")
     saved.loc[saved.window_s == 0.5, "amplitude"] *= 1.1
     saved.to_csv(folder / "case_0_long_axis_fft.csv", index=False)
