@@ -176,13 +176,12 @@ def figure(
     title: str,
     target: Path,
     rate_hz: float,
-    band_ratios: pd.DataFrame | None = None,
+    band_ratios: pd.DataFrame,
+    *,
+    includes_stops: bool = False,
 ) -> None:
     """One complete long-axis poster sheet per observed cell or synthetic case."""
-    if band_ratios is None:
-        fig, axes = plt.subplots(3, 3, figsize=(18, 16), constrained_layout=True)
-    else:
-        fig, axes = plt.subplots(4, 3, figsize=(18, 20), constrained_layout=True)
+    fig, axes = plt.subplots(4, 3, figsize=(18, 20), constrained_layout=True)
     t = frame["time_sec"].to_numpy(float)
     x = frame["x_um"].to_numpy(float)
     y = frame["y_um"].to_numpy(float)
@@ -237,16 +236,15 @@ def figure(
     axes[2, 2].set_yscale("log")
     for ax in axes[2]:
         ax.legend(ncol=2)
-    if band_ratios is not None:
-        for ax, (column, label, ylabel, scale) in zip(axes[3], BAND_PANELS):
-            values = band_ratios[column].to_numpy(float)
-            good = np.isfinite(values) & ((values > 0) if scale == "log" else True)
-            ax.plot(band_ratios.loc[good, "window_s"], values[good], "-o")
-            ax.set(xlabel="Gaussian window width (s)", ylabel=ylabel, title=label)
-            ax.set_xticks(WINDOWS_S)
-            ax.set_yscale(scale)
-            ax.tick_params(axis="x", labelrotation=45)
-        axes[3, 0].set_title("Low / High (full record; stops retained)")
+    for ax, (column, label, ylabel, scale) in zip(axes[3], BAND_PANELS):
+        values = band_ratios[column].to_numpy(float)
+        good = np.isfinite(values) & ((values > 0) if scale == "log" else True)
+        ax.plot(band_ratios.loc[good, "window_s"], values[good], "-o")
+        ax.set(xlabel="Gaussian window width (s)", ylabel=ylabel, title=label)
+        ax.set_xticks(WINDOWS_S)
+        ax.set_yscale(scale)
+        ax.tick_params(axis="x", labelrotation=45)
+    axes[3, 0].set_title("Low / High (full record; stops retained)" if includes_stops else "Low / High (full record)")
     style_axes(axes)
     fig.suptitle(title, fontsize=20)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -287,15 +285,14 @@ def save_case(source: pd.DataFrame, destination: Path, stem: str, title: str, me
     if not np.isclose(1 / np.median(positive_dt), rate_hz, rtol=1e-6):
         raise ValueError("Frame rate disagrees with the input timebase")
     frame, spectra, info = analyze_frame(source, validate_orbit=metadata["kind"] == "synthetic")
-    band_ratios = band_amplitude_ratios(spectra["long_axis"]) if metadata["kind"] == "measured" else None
+    band_ratios = band_amplitude_ratios(spectra["long_axis"])
     destination.mkdir(parents=True, exist_ok=True)
     tables = destination / "tables"
     tables.mkdir(parents=True, exist_ok=True)
     frame.to_csv(tables / f"{stem}_time_series.csv", index=False)
     for name, spectrum in spectra.items():
         spectrum.to_csv(tables / f"{stem}_{name}_fft.csv", index=False)
-    if band_ratios is not None:
-        band_ratios.to_csv(tables / f"{stem}_band_amplitude_ratio.csv", index=False)
+    band_ratios.to_csv(tables / f"{stem}_band_amplitude_ratio.csv", index=False)
     with (tables / f"{stem}_metadata.json").open("w", encoding="utf-8") as stream:
         json.dump(
             {
@@ -304,21 +301,23 @@ def save_case(source: pd.DataFrame, destination: Path, stem: str, title: str, me
                 "window_widths_s": WINDOWS_S,
                 "fft_input": "z-scored Gaussian-window SD(abs(long-axis angular velocity))/Mean(abs(long-axis angular velocity))",
                 "fft_display_nyquist_hz": rate_hz / 2,
-                **(
-                    {
-                        "band_ratio_definition": "mean FFT amplitude for 0 < f < 1 Hz divided by mean FFT amplitude for 80 <= f < 100 Hz",
-                        "band_ratio_source": "z-scored Gaussian-window SD(abs(long-axis angular velocity))/Mean(abs(long-axis angular velocity))",
-                        "band_ratio_includes_stops": True,
-                    }
-                    if band_ratios is not None
-                    else {}
-                ),
+                "band_ratio_definition": "mean FFT amplitude for 0 < f < 1 Hz divided by mean FFT amplitude for 80 <= f < 100 Hz",
+                "band_ratio_source": "z-scored Gaussian-window SD(abs(long-axis angular velocity))/Mean(abs(long-axis angular velocity))",
+                "band_ratio_includes_stops": metadata["kind"] == "measured",
             },
             stream,
             indent=2,
             allow_nan=True,
         )
-    figure(frame, spectra, title, destination / f"{stem}.png", rate_hz, band_ratios)
+    figure(
+        frame,
+        spectra,
+        title,
+        destination / f"{stem}.png",
+        rate_hz,
+        band_ratios,
+        includes_stops=metadata["kind"] == "measured",
+    )
     obsolete_orbit_fft = tables / f"{stem}_orbit_fft.csv"
     if obsolete_orbit_fft.is_file():
         obsolete_orbit_fft.unlink()
@@ -333,8 +332,7 @@ def save_case(source: pd.DataFrame, destination: Path, stem: str, title: str, me
         "long_axis_true_rmse_rad_s": info["long_axis_true_rmse_rad_s"],
         "long_axis_peak_0.2s_hz": info["long_axis_fft"][1]["peak_frequency_hz"],
     }
-    if band_ratios is not None:
-        row["band_ratio_file"] = f"tables/{stem}_band_amplitude_ratio.csv"
+    row["band_ratio_file"] = f"tables/{stem}_band_amplitude_ratio.csv"
     if metadata["kind"] == "synthetic":
         row["orbit_omega_fraction"] = info["orbit_omega_fraction"]
         row["orbit_true_rmse_rad_s"] = info["orbit_true_rmse_rad_s"]
@@ -538,10 +536,10 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
         stream.write(
             "Private local poster analysis from binary AVI, not source TIFF. "
             "Measured plots are 1_rotational_measurements/<day>/No.XX.png; simulations are in 2_simulation/. "
-            "Each measured PNG contains t-x, t-y, x-y, inferred relative phase wrapped to [-pi, pi), separate signed "
+            "Each measured and synthetic case PNG contains t-x, t-y, x-y, inferred relative phase wrapped to [-pi, pi), separate signed "
             "and absolute long-axis angular velocity, all six SD/Mean windows, standardized inputs, their FFTs, "
             "and side-by-side Low/High, Low-only and Low-High mean FFT amplitude metrics for 0<f<1 Hz and 80<=f<100 Hz. "
-            "The ratio includes stops and is unavailable when either band has no bins or the high-band mean is zero. "
+            "Measured ratios include stops; the ratio is unavailable when either band has no bins or the high-band mean is zero. "
             "A full measured run also writes the four candidate-cell comparison PNG and table under 1_rotational_measurements/. "
             "The FFT plot extends to half the frame rate and uses a logarithmic amplitude axis. "
             "Each case's numeric series, spectra and metadata are in its sibling tables/. "

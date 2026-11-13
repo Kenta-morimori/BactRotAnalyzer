@@ -180,7 +180,7 @@ def test_one_poster_png_contains_absolute_velocity_and_log_fft(tmp_path, monkeyp
     assert saved["long_axis_phase_rad"].dropna().between(-np.pi, np.pi, inclusive="left").all()
     assert "orbit_angle_rad" in saved and "orbit_omega_rad_s" in saved
     assert not (tmp_path / "tables/synthetic_No.01_orbit_fft.csv").exists()
-    assert len(captured[0].axes) == 9
+    assert len(captured[0].axes) == 12
     assert len(captured[0].axes[4].lines) == 2  # signed truth and estimate
     assert len(captured[0].axes[5].lines) == 2  # absolute truth and estimate
     assert captured[0].axes[8].get_yscale() == "log"
@@ -188,6 +188,14 @@ def test_one_poster_png_contains_absolute_velocity_and_log_fft(tmp_path, monkeyp
     assert captured[0].axes[8].get_xticks()[-1] == 100
     assert captured[0].axes[8].xaxis.label.get_fontsize() >= 14
     assert captured[0].axes[8].get_xticklabels()[0].get_fontsize() >= 12
+    ratios = script["pd"].read_csv(tmp_path / "tables/synthetic_No.01_band_amplitude_ratio.csv")
+    assert len(ratios) == 6
+    assert np.allclose(ratios.low_minus_high_amplitude, ratios.low_mean_amplitude - ratios.high_mean_amplitude)
+    assert captured[0].axes[9].get_yscale() == "log"
+    assert captured[0].axes[10].get_yscale() == "linear"
+    assert captured[0].axes[11].get_yscale() == "linear"
+    assert len(captured[0].axes[9].lines[0].get_xdata()) == 6
+    assert "stops retained" not in captured[0].axes[9].get_title()
     assert np.isnan(captured[0].axes[3].lines[0].get_ydata()).sum() > saved.long_axis_phase_rad.isna().sum()
     for width in (0.1, 0.2, 0.5, 1.0, 1.5, 2.0):
         assert f"long_axis_sd_per_mean_{width:g}s" in saved
@@ -287,9 +295,11 @@ def test_main_routes_synthetic_plots_and_index(tmp_path, monkeypatch):
     original_savefig = script["plt"].Figure.savefig
 
     def capture(figure, *args, **kwargs):
-        if len(figure.axes) == 9:
+        if len(figure.axes) == 12:
             limits.append(figure.axes[8].get_xlim()[1])
             assert figure.axes[8].get_xticks()[-1] == limits[-1]
+            assert figure.axes[9].get_yscale() == "log"
+            assert all(ax.get_yscale() == "linear" for ax in figure.axes[10:])
         return original_savefig(figure, *args, **kwargs)
 
     monkeypatch.setattr(script["plt"].Figure, "savefig", capture)
@@ -318,6 +328,8 @@ def test_main_routes_synthetic_plots_and_index(tmp_path, monkeypatch):
         "simulation_steady_rotation_plus_noise_250hz_seed81.png",
         "simulation_random_only_250hz_seed81.png",
     }
+    assert len(index.band_ratio_file) == 4
+    assert all((simulation / path).is_file() for path in index.band_ratio_file)
     nulls = script["pd"].read_csv(simulation / "tables/simulation_random_only_ensemble.csv")
     assert set(nulls.nyquist_hz) == {100, 125}
     assert "peak_to_median_full_band" in nulls and "peak_to_median_0_20hz" not in nulls
