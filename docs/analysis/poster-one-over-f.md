@@ -30,3 +30,14 @@ python scripts/10_poster_one_over_f.py \
 ```
 
 `fit_sensitivity_20230607_No08_0.5s.png` と実行履歴をGit管理外に保存する。図は実測に由来するため、リポジトリやPRへ添付しない。
+
+高周波側も線形の周波数軸で等密度に参照点を置く比較は、同じ0.5秒窓FFTを0から2・1・0.5 Hz幅に分け、非空帯域の振幅中央値へαを自由にした同じ式を当てはめる。上段は全周波数、下段は0–10 Hzの拡大である。各帯域中央値は等重みなので、帯域を狭めるほど点数の多い高周波側がフィットに強く効く。この比較も主解析の採用式・逆FFT系列を変更しない。
+
+```bash
+python scripts/10_poster_one_over_f.py \
+  --source-root outputs/poster_fluctuation \
+  --output-root outputs/poster_fluctuation/2_simulation/one_over_f \
+  --equal-hz-sensitivity-case 20230607_No08
+```
+
+`fit_equal_hz_20230607_No08_0.5s.png` と実行履歴をGit管理外に保存する。

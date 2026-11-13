@@ -67,14 +67,44 @@ def log_frequency_bins(
     return np.asarray(centers), np.asarray(medians), np.asarray(counts)
 
 
+def equal_frequency_bins(
+    frequency_hz: np.ndarray, amplitude: np.ndarray, width_hz: float
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Summarize positive FFT amplitudes in constant-width Hz bands from zero."""
+    frequency_hz = np.asarray(frequency_hz, dtype=float)
+    amplitude = np.asarray(amplitude, dtype=float)
+    if frequency_hz.shape != amplitude.shape:
+        raise ValueError("Frequency and amplitude shapes differ")
+    if not np.isfinite(width_hz) or width_hz <= 0:
+        raise ValueError("A finite positive frequency-band width is required")
+    valid = np.isfinite(frequency_hz) & np.isfinite(amplitude) & (frequency_hz > 0) & (amplitude > 0)
+    frequency_hz = frequency_hz[valid]
+    amplitude = amplitude[valid]
+    if len(frequency_hz) < 3 or np.unique(frequency_hz).size < 3:
+        raise ValueError("At least three distinct positive-frequency FFT amplitudes are required")
+    band_index = np.floor(frequency_hz / width_hz).astype(int)
+    centers = []
+    medians = []
+    counts = []
+    for index in np.unique(band_index):
+        selected = band_index == index
+        centers.append(float(np.mean(frequency_hz[selected])))
+        medians.append(float(np.median(amplitude[selected])))
+        counts.append(int(np.sum(selected)))
+    if len(centers) < 3:
+        raise ValueError("At least three nonempty equal-width frequency bands are required")
+    return np.asarray(centers), np.asarray(medians), np.asarray(counts)
+
+
 def fit_amplitude(
     frequency_hz: np.ndarray,
     amplitude: np.ndarray,
     *,
     max_bins: int = MAX_FIT_BINS,
     fixed_exponent: float | None = None,
+    equal_width_hz: float | None = None,
 ) -> AmplitudeFit:
-    """Fit a log-band median envelope, optionally holding the exponent fixed."""
+    """Fit band-median amplitudes; equal-width Hz bands are for sensitivity plots."""
     frequency_hz = np.asarray(frequency_hz, dtype=float)
     amplitude = np.asarray(amplitude, dtype=float)
     if frequency_hz.shape != amplitude.shape:
@@ -86,7 +116,10 @@ def fit_amplitude(
     valid = np.isfinite(frequency_hz) & np.isfinite(amplitude) & (frequency_hz > 0) & (amplitude > 0)
     frequency_hz = frequency_hz[valid]
     amplitude = amplitude[valid]
-    bin_frequency, bin_amplitude, _ = log_frequency_bins(frequency_hz, amplitude, max_bins=max_bins)
+    if equal_width_hz is None:
+        bin_frequency, bin_amplitude, _ = log_frequency_bins(frequency_hz, amplitude, max_bins=max_bins)
+    else:
+        bin_frequency, bin_amplitude, _ = equal_frequency_bins(frequency_hz, amplitude, equal_width_hz)
     x = np.log((bin_frequency + offset_hz) / REFERENCE_HZ)
     y = np.log(bin_amplitude)
     if fixed_exponent is None:

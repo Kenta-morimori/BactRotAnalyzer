@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT))
 from utils.functions.frequency_analysis import fft  # noqa: E402
 from utils.functions.poster_one_over_f import (  # noqa: E402
     amplitude_envelope,
+    equal_frequency_bins,
     fit_amplitude,
     log_frequency_bins,
     random_phase_inverse_fft,
@@ -252,6 +253,66 @@ def draw_fit_sensitivity(item: dict, target: Path, band_counts: tuple[int, ...] 
     plt.close(fig)
 
 
+def draw_equal_hz_sensitivity(item: dict, target: Path, widths_hz: tuple[float, ...] = (2.0, 1.0, 0.5)) -> None:
+    """Compare free-exponent fits to uniformly spaced reference bands."""
+    fig, axes = plt.subplots(2, len(widths_hz), figsize=(21, 11), constrained_layout=True)
+    frequency = item["frequency_hz"]
+    amplitude = item["amplitude"]
+    positive = np.isfinite(amplitude) & (amplitude > 0)
+    for column, width_hz in enumerate(widths_hz):
+        fit = fit_amplitude(frequency, amplitude, equal_width_hz=width_hz)
+        centers, medians, counts = equal_frequency_bins(frequency, amplitude, width_hz)
+        fitted = amplitude_envelope(frequency, fit.scale, exponent=fit.exponent, offset_hz=fit.offset_hz)
+        for row, maximum_hz in enumerate((item["rate_hz"] / 2, 10.0)):
+            ax = axes[row, column]
+            ax.plot(
+                frequency[positive],
+                amplitude[positive],
+                color="steelblue",
+                linewidth=0.65,
+                alpha=0.55,
+                label="FFT amplitude",
+            )
+            ax.plot(frequency, fitted, color="crimson", linewidth=1.8, label="Fitted envelope")
+            ax.scatter(
+                centers,
+                medians,
+                color="gold",
+                edgecolor="black",
+                linewidth=0.3,
+                s=23 if width_hz <= 0.5 else 32,
+                zorder=3,
+                label="Band medians used for fit",
+            )
+            ax.set(xlim=(0, maximum_hz), xlabel="Frequency (Hz)")
+            ax.set_yscale("log")
+            ax.tick_params(labelsize=11)
+            ax.grid(alpha=0.2)
+            if column == 0:
+                ax.set_ylabel("FFT amplitude (log)", fontsize=12)
+            if row == 0:
+                ax.set_title(f"{width_hz:g} Hz bands: {fit.bin_count} reference points", fontsize=14)
+                ax.text(
+                    0.97,
+                    0.95,
+                    f"α = {fit.exponent:.2f}\nA = {fit.scale:.3g}\n" f"FFT points = {sum(counts)}",
+                    transform=ax.transAxes,
+                    ha="right",
+                    va="top",
+                    fontsize=11,
+                    bbox={"facecolor": "white", "alpha": 0.85, "edgecolor": "none"},
+                )
+    axes[0, 0].legend(fontsize=10, loc="lower left")
+    fig.suptitle(
+        f"{item['case'].label}: free-α fits to equally spaced frequency bands\n"
+        "Top: full range; bottom: 0–10 Hz zoom. Same FFT and Δf in every panel; equal weight per band median",
+        fontsize=16,
+    )
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(target, dpi=180)
+    plt.close(fig)
+
+
 def generate(source_root: Path, output_root: Path, phase_seed: int, cases: tuple[CaseSpec, ...] = CASES) -> None:
     loaded = []
     for index, case in enumerate(cases):
@@ -347,14 +408,21 @@ if __name__ == "__main__":
     parser.add_argument("--source-root", default=str(ROOT / "outputs" / "poster_fluctuation"))
     parser.add_argument("--output-root")
     parser.add_argument("--phase-seed", type=int, default=84)
-    parser.add_argument("--fit-sensitivity-case", choices=[case.key for case in CASES])
+    comparison = parser.add_mutually_exclusive_group()
+    comparison.add_argument("--fit-sensitivity-case", choices=[case.key for case in CASES])
+    comparison.add_argument("--equal-hz-sensitivity-case", choices=[case.key for case in CASES])
     args = parser.parse_args()
     source_root = Path(args.source_root).resolve()
     output_root = Path(args.output_root).resolve() if args.output_root else source_root / "2_simulation" / "one_over_f"
-    selected = next((case for case in CASES if case.key == args.fit_sensitivity_case), None)
+    selected_key = args.fit_sensitivity_case or args.equal_hz_sensitivity_case
+    selected = next((case for case in CASES if case.key == selected_key), None)
     inputs = input_paths(source_root, (selected,)) if selected else input_paths(source_root)
     with analysis_run(parameters=vars(args), inputs=inputs, outputs=[output_root]) as run_root:
-        if selected:
+        if args.equal_hz_sensitivity_case and selected:
+            draw_equal_hz_sensitivity(
+                load_case(source_root, selected), output_root / f"fit_equal_hz_{selected.key}_0.5s.png"
+            )
+        elif selected:
             draw_fit_sensitivity(
                 load_case(source_root, selected), output_root / f"fit_sensitivity_{selected.key}_0.5s.png"
             )

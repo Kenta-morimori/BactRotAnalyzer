@@ -12,6 +12,7 @@ from utils.functions.frequency_analysis import fft
 from utils.functions.poster_fluctuation import synthetic_long_axis
 from utils.functions.poster_one_over_f import (
     amplitude_envelope,
+    equal_frequency_bins,
     fit_amplitude,
     log_frequency_bins,
     random_phase_inverse_fft,
@@ -71,6 +72,23 @@ def test_fit_sensitivity_keeps_requested_exponent_and_uses_more_nonempty_bands()
     assert all(fit.log_bin_rmse < fixed[index].log_bin_rmse for index, fit in enumerate(free))
     with pytest.raises(ValueError, match="fixed exponent"):
         fit_amplitude(frequency, observed, fixed_exponent=-1)
+
+
+def test_equal_hz_reference_points_cover_fft_and_keep_exponent_free():
+    frequency = np.arange(1, 501, dtype=float) * 0.2
+    observed = amplitude_envelope(frequency, 0.75, exponent=1.4, offset_hz=0.2)
+    band_counts = []
+    for width_hz in (2.0, 1.0, 0.5):
+        centers, medians, counts = equal_frequency_bins(frequency, observed, width_hz)
+        fit = fit_amplitude(frequency, observed, equal_width_hz=width_hz)
+        assert counts.sum() == len(frequency)
+        assert len(centers) == len(medians) == fit.bin_count
+        assert fit.exponent == pytest.approx(1.4, abs=0.02)
+        band_counts.append(fit.bin_count)
+    assert band_counts == sorted(band_counts)
+    assert len(set(band_counts)) == 3
+    with pytest.raises(ValueError, match="frequency-band width"):
+        equal_frequency_bins(frequency, observed, 0)
 
 
 @pytest.mark.parametrize("sample_count,rate_hz", [(1100, 200), (1375, 250)])
@@ -143,6 +161,14 @@ def test_six_case_output_uses_saved_0_5s_fft_and_18_panels(tmp_path, monkeypatch
     assert len(captured[-1].axes) == 6
     assert all(axis.get_yscale() == "log" for axis in captured[-1].axes)
     assert all(len(axis.collections[0].get_offsets()) > 0 for axis in captured[-1].axes)
+    script["draw_equal_hz_sensitivity"](sensitivity_input, output / "fit_equal_hz_case_0_0.5s.png")
+    assert (output / "fit_equal_hz_case_0_0.5s.png").is_file()
+    assert len(captured[-1].axes) == 6
+    assert all(axis.get_yscale() == "log" for axis in captured[-1].axes)
+    assert [len(captured[-1].axes[column].collections[0].get_offsets()) for column in range(3)] == [
+        fit_amplitude(sensitivity_input["frequency_hz"], sensitivity_input["amplitude"], equal_width_hz=width).bin_count
+        for width in (2.0, 1.0, 0.5)
+    ]
     assert np.isfinite(index.scale).all()
     assert index.exponent.gt(0).all()
     assert np.allclose(index.offset_hz, 100 / index.sample_count)
