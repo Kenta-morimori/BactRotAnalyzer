@@ -10,5 +10,6 @@
 | [0003](0003-repellent-output-contract.md) | フェーズ別出力、背景前後解析、再計算と再描画の分離 |
 | [0004](0004-execution-provenance.md) | clean GitによるCLI実行、入力・ブランチ・環境を含むローカル実行履歴 |
 | [0009](0009-poster-long-axis-fluctuation.md) | ポスター解析の長軸角、揺らぎ、合成対照 |
+| [0010](0010-poster-phase-and-nyquist-band.md) | ポスター解析の推定回転位相、長軸専用評価、Nyquist帯域 |
 
 各ADRには状態、背景、決定、代替、影響・限界、検証方法を記載する。後日の方針変更は新ADRで置き換え、既存の判断を黙って書き換えない。

@@ -84,33 +84,34 @@ def read_avi(path: Path, settings: dict) -> pd.DataFrame:
     )
 
 
-def analyze_frame(source: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, pd.DataFrame], dict]:
+def analyze_frame(
+    source: pd.DataFrame, validate_orbit: bool = False
+) -> tuple[pd.DataFrame, dict[str, pd.DataFrame], dict]:
     time = source["time_sec"].to_numpy(float)
     x = source["x_um"].to_numpy(float)
     y = source["y_um"].to_numpy(float)
     axis = source["long_axis_deg"].to_numpy(float)
     long_angle, long_omega = axis_angular_velocity(time, axis)
-    orbit_angle, orbit_omega, center = orbit_angular_velocity(time, x, y)
     long_result = analyze(time, long_omega)
-    orbit_result = analyze(time, orbit_omega)
     frame = source.copy()
     frame["long_axis_unwrapped_rad"] = long_angle
+    frame["long_axis_phase_rad"] = (long_angle + np.pi) % (2 * np.pi) - np.pi
     frame["long_axis_omega_rad_s"] = long_omega
     frame["long_axis_abs_omega_rad_s"] = np.abs(long_omega)
-    frame["orbit_angle_rad"] = orbit_angle
-    frame["orbit_omega_rad_s"] = orbit_omega
     for column in long_result.frame.columns:
         if column != "time_sec" and column != "angular_velocity_rad_s":
             frame[f"long_axis_{column}"] = long_result.frame[column]
-            frame[f"orbit_{column}"] = orbit_result.frame[column]
-    spectra = {"long_axis": long_result.spectra, "orbit": orbit_result.spectra}
+    spectra = {"long_axis": long_result.spectra}
     valid_axis = int(np.isfinite(long_omega).sum())
-    valid_orbit = int(np.isfinite(orbit_omega).sum())
     ratios = source["axis_ratio"].to_numpy(float)
     finite_ratios = ratios[np.isfinite(ratios)]
     raw_delta = (np.diff(axis) + 90.0) % 180.0 - 90.0
     finite_delta = np.abs(raw_delta[np.isfinite(raw_delta)])
-    truth = source["true_angular_velocity_rad_s"].to_numpy(float) if "true_angular_velocity_rad_s" in source else None
+    truth = (
+        source["true_angular_velocity_rad_s"].to_numpy(float)
+        if validate_orbit and "true_angular_velocity_rad_s" in source
+        else None
+    )
 
     def rmse(estimate: np.ndarray) -> float:
         if truth is None:
@@ -122,24 +123,49 @@ def analyze_frame(source: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, pd.Data
         "frame_count": len(frame),
         "detected_count": int(np.isfinite(x).sum()),
         "long_axis_omega_count": valid_axis,
-        "orbit_omega_count": valid_orbit,
         "long_axis_omega_fraction": valid_axis / max(1, len(frame) - 1),
-        "orbit_omega_fraction": valid_orbit / max(1, len(frame) - 1),
-        "orbit_center_um": list(center),
         "axis_ratio_p10": float(np.percentile(finite_ratios, 10)) if len(finite_ratios) else np.nan,
         "axis_step_abs_deg_p95": float(np.percentile(finite_delta, 95)) if len(finite_delta) else np.nan,
         "long_axis_true_rmse_rad_s": rmse(long_omega),
-        "orbit_true_rmse_rad_s": rmse(orbit_omega),
         "long_axis_fft": long_result.metadata,
-        "orbit_fft": orbit_result.metadata,
         "angle_warning": "The unoriented long axis has a 180-degree ambiguity; angular changes of >=90 degrees per sample are not identifiable.",
     }
+    if validate_orbit:
+        orbit_angle, orbit_omega, center = orbit_angular_velocity(time, x, y)
+        frame["orbit_angle_rad"] = orbit_angle
+        frame["orbit_omega_rad_s"] = orbit_omega
+        info.update(
+            {
+                "orbit_omega_fraction": int(np.isfinite(orbit_omega).sum()) / max(1, len(frame) - 1),
+                "orbit_center_um": list(center),
+                "orbit_true_rmse_rad_s": rmse(orbit_omega),
+            }
+        )
     return frame, spectra, info
 
 
-def figure(frame: pd.DataFrame, spectra: dict[str, pd.DataFrame], title: str, target: Path) -> None:
+def wrapped_phase_plot(time: np.ndarray, phase: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Keep every observed phase while breaking the line at a 2π wrap."""
+    jumps = np.flatnonzero(np.isfinite(phase[1:]) & np.isfinite(phase[:-1]) & (np.abs(np.diff(phase)) > np.pi)) + 1
+    return np.insert(time, jumps, np.nan), np.insert(phase, jumps, np.nan)
+
+
+def style_axes(axes: np.ndarray) -> None:
+    for ax in axes.flat:
+        ax.title.set_fontsize(16)
+        ax.xaxis.label.set_fontsize(14)
+        ax.yaxis.label.set_fontsize(14)
+        ax.tick_params(labelsize=12)
+        ax.grid(alpha=0.2)
+        legend = ax.get_legend()
+        if legend is not None:
+            for label in legend.get_texts():
+                label.set_fontsize(11)
+
+
+def figure(frame: pd.DataFrame, spectra: dict[str, pd.DataFrame], title: str, target: Path, rate_hz: float) -> None:
     """One complete long-axis poster sheet per observed cell or synthetic case."""
-    fig, axes = plt.subplots(4, 2, figsize=(15, 17), constrained_layout=True)
+    fig, axes = plt.subplots(3, 3, figsize=(18, 16), constrained_layout=True)
     t = frame["time_sec"].to_numpy(float)
     x = frame["x_um"].to_numpy(float)
     y = frame["y_um"].to_numpy(float)
@@ -147,47 +173,70 @@ def figure(frame: pd.DataFrame, spectra: dict[str, pd.DataFrame], title: str, ta
     axes[0, 0].set(xlabel="Time (s)", ylabel="x (um)", title="Centroid x vs time")
     axes[0, 1].plot(t, y, linewidth=0.7)
     axes[0, 1].set(xlabel="Time (s)", ylabel="y (um, image down)", title="Centroid y vs time")
-    axes[1, 0].plot(x, y, linewidth=0.7)
-    axes[1, 0].set(xlabel="x (um)", ylabel="y (um, image down)", title="Centroid x-y trajectory")
-    axes[1, 0].set_aspect("equal", adjustable="box")
-    axes[1, 0].invert_yaxis()
-    axes[1, 1].plot(t, frame["long_axis_unwrapped_rad"], linewidth=0.7)
-    axes[1, 1].set(xlabel="Time (s)", ylabel="Relative angle (rad, CCW +)", title="Cell long-axis angle (unwrapped)")
+    axes[0, 2].plot(x, y, linewidth=0.7)
+    axes[0, 2].set(xlabel="x (um)", ylabel="y (um, image down)", title="Centroid x-y trajectory")
+    axes[0, 2].set_aspect("equal", adjustable="box")
+    axes[0, 2].invert_yaxis()
+    phase_t, phase = wrapped_phase_plot(t, frame["long_axis_phase_rad"].to_numpy(float))
+    axes[1, 0].plot(phase_t, phase, linewidth=0.7)
+    axes[1, 0].set(
+        xlabel="Time (s)",
+        ylabel="Relative phase (rad, CCW +)",
+        title="Inferred phase (180° axis ambiguity)",
+        ylim=(-np.pi, np.pi),
+    )
+    axes[1, 0].set_yticks([-np.pi, -np.pi / 2, 0, np.pi / 2, np.pi], ["−π", "−π/2", "0", "π/2", "π"])
     if "true_angular_velocity_rad_s" in frame:
-        axes[2, 0].plot(
+        axes[1, 1].plot(
             t, frame["true_angular_velocity_rad_s"], color="black", linewidth=0.7, alpha=0.6, label="generated truth"
         )
-    axes[2, 0].plot(t, frame["long_axis_omega_rad_s"], linewidth=0.7, label="long axis (signed, CCW +)")
-    axes[2, 0].plot(t, frame["long_axis_abs_omega_rad_s"], linewidth=0.7, label="long axis |angular velocity|")
-    axes[2, 0].set(xlabel="Time (s)", ylabel="Angular velocity (rad/s)", title="Long-axis angular velocity")
-    axes[2, 0].legend(fontsize=8)
+        axes[1, 2].plot(
+            t,
+            np.abs(frame["true_angular_velocity_rad_s"]),
+            color="black",
+            linewidth=0.7,
+            alpha=0.6,
+            label="|generated truth|",
+        )
+    axes[1, 1].plot(t, frame["long_axis_omega_rad_s"], linewidth=0.7, label="long axis (CCW +)")
+    axes[1, 2].plot(t, frame["long_axis_abs_omega_rad_s"], linewidth=0.7, label="|long axis|")
+    axes[1, 1].set(xlabel="Time (s)", ylabel="rad/s", title="Signed angular velocity")
+    axes[1, 2].set(xlabel="Time (s)", ylabel="rad/s", title="Absolute angular velocity")
+    axes[1, 1].legend()
+    axes[1, 2].legend()
     for width in WINDOWS_S:
         label = f"{width:g} s"
         prefix = f"long_axis_sd_per_mean_{width:g}s"
-        axes[2, 1].plot(t, frame[prefix], linewidth=0.8, label=label)
-        axes[3, 0].plot(t, frame[f"{prefix}_z"], linewidth=0.8, label=label)
+        axes[2, 0].plot(t, frame[prefix], linewidth=0.8, label=label)
+        axes[2, 1].plot(t, frame[f"{prefix}_z"], linewidth=0.8, label=label)
         spectrum = spectra["long_axis"]
         part = spectrum[(spectrum.window_s == width) & np.isfinite(spectrum.amplitude) & (spectrum.amplitude > 0)]
-        axes[3, 1].plot(part.frequency_hz, part.amplitude, linewidth=0.8, label=label)
-    axes[2, 1].set(xlabel="Time (s)", ylabel="SD / Mean", title="Gaussian-window SD / Mean: all widths")
-    axes[3, 0].set(xlabel="Time (s)", ylabel="z-score", title="Standardized SD / Mean: FFT input")
-    axes[3, 1].set(
-        xlabel="Frequency (Hz)", ylabel="FFT amplitude (log scale)", title="FFT for each standardized window series"
-    )
-    axes[3, 1].set_xlim(0, 20)
-    axes[3, 1].set_yscale("log")
-    for ax in (axes[2, 1], axes[3, 0], axes[3, 1]):
-        ax.legend(fontsize=8, ncol=2)
-    for ax in axes.flat:
-        ax.grid(alpha=0.2)
-    fig.suptitle(title)
+        axes[2, 2].plot(part.frequency_hz, part.amplitude, linewidth=0.8, label=label)
+    axes[2, 0].set(xlabel="Time (s)", ylabel="SD / Mean", title="Gaussian-window SD / Mean")
+    axes[2, 1].set(xlabel="Time (s)", ylabel="z-score", title="Standardized SD / Mean")
+    axes[2, 2].set(xlabel="Frequency (Hz)", ylabel="FFT amplitude (log)", title="FFT of standardized SD / Mean")
+    axes[2, 2].set_xlim(0, rate_hz / 2)
+    axes[2, 2].set_xticks(np.linspace(0, rate_hz / 2, 6))
+    axes[2, 2].set_yscale("log")
+    for ax in axes[2]:
+        ax.legend(ncol=2)
+    style_axes(axes)
+    fig.suptitle(title, fontsize=20)
     target.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(target, dpi=150)
+    fig.savefig(target, dpi=180)
     plt.close(fig)
 
 
 def save_case(source: pd.DataFrame, destination: Path, stem: str, title: str, metadata: dict) -> dict:
-    frame, spectra, info = analyze_frame(source)
+    rate_hz = float(metadata["rate_hz"])
+    time = source["time_sec"].to_numpy(float)
+    dt = np.diff(time)
+    positive_dt = dt[np.isfinite(dt) & (dt > 0)]
+    if not np.isfinite(rate_hz) or rate_hz <= 0 or not len(positive_dt):
+        raise ValueError("A positive frame rate and increasing timestamps are required")
+    if not np.isclose(1 / np.median(positive_dt), rate_hz, rtol=1e-6):
+        raise ValueError("Frame rate disagrees with the input timebase")
+    frame, spectra, info = analyze_frame(source, validate_orbit=metadata["kind"] == "synthetic")
     destination.mkdir(parents=True, exist_ok=True)
     tables = destination / "tables"
     tables.mkdir(parents=True, exist_ok=True)
@@ -200,26 +249,56 @@ def save_case(source: pd.DataFrame, destination: Path, stem: str, title: str, me
                 **metadata,
                 **info,
                 "window_widths_s": WINDOWS_S,
-                "fft_input": "z-scored Gaussian-window SD(abs(angular velocity))/Mean(abs(angular velocity))",
+                "fft_input": "z-scored Gaussian-window SD(abs(long-axis angular velocity))/Mean(abs(long-axis angular velocity))",
+                "fft_display_nyquist_hz": rate_hz / 2,
             },
             stream,
             indent=2,
             allow_nan=True,
         )
-    figure(frame, spectra, title, destination / f"{stem}.png")
-    return {
+    figure(frame, spectra, title, destination / f"{stem}.png", rate_hz)
+    obsolete_orbit_fft = tables / f"{stem}_orbit_fft.csv"
+    if obsolete_orbit_fft.is_file():
+        obsolete_orbit_fft.unlink()
+    row = {
         **metadata,
         "plot_file": f"{stem}.png",
         "frame_count": info["frame_count"],
         "detected_fraction": info["detected_count"] / info["frame_count"],
         "long_axis_omega_fraction": info["long_axis_omega_fraction"],
-        "orbit_omega_fraction": info["orbit_omega_fraction"],
         "axis_ratio_p10": info["axis_ratio_p10"],
         "axis_step_abs_deg_p95": info["axis_step_abs_deg_p95"],
         "long_axis_true_rmse_rad_s": info["long_axis_true_rmse_rad_s"],
-        "orbit_true_rmse_rad_s": info["orbit_true_rmse_rad_s"],
         "long_axis_peak_0.2s_hz": info["long_axis_fft"][1]["peak_frequency_hz"],
-        "orbit_peak_0.2s_hz": info["orbit_fft"][1]["peak_frequency_hz"],
+    }
+    if metadata["kind"] == "synthetic":
+        row["orbit_omega_fraction"] = info["orbit_omega_fraction"]
+        row["orbit_true_rmse_rad_s"] = info["orbit_true_rmse_rad_s"]
+    return row
+
+
+def null_spectrum_summary(spectrum: pd.DataFrame, rate_hz: float) -> dict:
+    """Compare random-only peaks over the full positive FFT band below Nyquist."""
+    band = spectrum[
+        np.isfinite(spectrum.frequency_hz)
+        & np.isfinite(spectrum.amplitude)
+        & (spectrum.frequency_hz > 0)
+        & (spectrum.frequency_hz < rate_hz / 2)
+    ]
+    if band.empty:
+        return {
+            "nyquist_hz": rate_hz / 2,
+            "peak_frequency_hz": np.nan,
+            "peak_amplitude": np.nan,
+            "peak_to_median_full_band": np.nan,
+        }
+    peak = band.loc[band.amplitude.idxmax()]
+    median_amp = float(band.amplitude.median())
+    return {
+        "nyquist_hz": rate_hz / 2,
+        "peak_frequency_hz": float(peak.frequency_hz),
+        "peak_amplitude": float(peak.amplitude),
+        "peak_to_median_full_band": float(peak.amplitude / median_amp) if median_amp > 0 else np.nan,
     }
 
 
@@ -323,21 +402,11 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
                 null_axis = (-np.rad2deg(null_source.true_angle_rad.to_numpy(float))) % 180.0
                 _, null_omega = axis_angular_velocity(null_time, null_axis)
                 null_result = analyze(null_time, null_omega, windows=(0.2,))
-                spectrum = null_result.spectra
-                low = spectrum[spectrum.frequency_hz <= 20]
-                amplitudes = low.amplitude.to_numpy(float)
-                median_amp = float(np.median(amplitudes)) if len(amplitudes) else np.nan
                 null_rows.append(
                     {
                         "rate_hz": rate,
                         "seed": seed,
-                        "peak_frequency_hz": null_result.metadata[0]["peak_frequency_hz"],
-                        "peak_amplitude": float(np.max(amplitudes)) if len(amplitudes) else np.nan,
-                        "peak_to_median_0_20hz": (
-                            float(np.max(amplitudes) / median_amp)
-                            if np.isfinite(median_amp) and median_amp > 0
-                            else np.nan
-                        ),
+                        **null_spectrum_summary(null_result.spectra, rate),
                     }
                 )
         simulation_dir = destination / "2_simulation"
@@ -345,16 +414,17 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
         tables = simulation_dir / "tables"
         tables.mkdir(parents=True, exist_ok=True)
         pd.DataFrame(null_rows).to_csv(tables / "simulation_random_only_ensemble.csv", index=False)
-        fig, axes = plt.subplots(1, 2, figsize=(12, 4), constrained_layout=True)
+        fig, axes = plt.subplots(1, 2, figsize=(14, 5), constrained_layout=True)
         for rate, group in pd.DataFrame(null_rows).groupby("rate_hz"):
             axes[0].hist(group.peak_frequency_hz, bins=20, alpha=0.5, label=f"{rate:g} Hz")
-            axes[1].hist(group.peak_to_median_0_20hz, bins=20, alpha=0.5, label=f"{rate:g} Hz")
+            axes[1].hist(group.peak_to_median_full_band, bins=20, alpha=0.5, label=f"{rate:g} Hz")
         axes[0].set(xlabel="Peak frequency (Hz)", ylabel="Count", title="Random-only: strongest apparent FFT peak")
-        axes[1].set(xlabel="Peak / median amplitude, 0-20 Hz", ylabel="Count", title="Random-only peak contrast")
+        axes[0].set_xlim(0, max(args.synthetic_rates) / 2)
+        axes[1].set(xlabel="Peak / median amplitude, full band", ylabel="Count", title="Random-only peak contrast")
         for ax in axes:
             ax.legend()
-            ax.grid(alpha=0.2)
-        fig.savefig(simulation_dir / "simulation_random_only_ensemble.png", dpi=150)
+        style_axes(axes)
+        fig.savefig(simulation_dir / "simulation_random_only_ensemble.png", dpi=180)
         plt.close(fig)
     destination.mkdir(parents=True, exist_ok=True)
     measured_rows = [r for r in rows if r["kind"] == "measured"]
@@ -384,7 +454,15 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
         selection.to_csv(measured_dir / "selection_template.csv", index=False)
     with (destination / "README.txt").open("w", encoding="utf-8") as stream:
         stream.write(
-            "Private local poster analysis. Measured plots are 1_rotational_measurements/<day>/No.XX.png; simulations are in 2_simulation/. Each PNG contains t-x, t-y, x-y, long-axis angle, signed and absolute angular velocity, all six SD/Mean windows, standardized inputs and their FFTs. FFT amplitude uses a logarithmic plot axis; numeric spectra are unchanged. Each case's numeric series, spectra and metadata are in its sibling tables/. Each category has index.csv; 1_rotational_measurements/selection_template.csv marks excluded duplicate AVIs. Long-axis angle has 180-degree ambiguity. Derived measured plots and series stay local.\n"
+            "Private local poster analysis from binary AVI, not source TIFF. "
+            "Measured plots are 1_rotational_measurements/<day>/No.XX.png; simulations are in 2_simulation/. "
+            "Each PNG contains t-x, t-y, x-y, inferred relative phase wrapped to [-pi, pi), separate signed "
+            "and absolute long-axis angular velocity, all six SD/Mean windows, standardized inputs and their FFTs. "
+            "The FFT plot extends to half the frame rate and uses a logarithmic amplitude axis. "
+            "Each case's numeric series, spectra and metadata are in its sibling tables/. "
+            "Synthetic orbit velocity is for truth validation only. Each category has index.csv; "
+            "1_rotational_measurements/selection_template.csv marks excluded duplicate AVIs. "
+            "Long-axis angle has 180-degree ambiguity. Derived measured plots and series stay local.\n"
         )
 
 

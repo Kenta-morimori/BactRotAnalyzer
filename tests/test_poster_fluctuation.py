@@ -1,10 +1,12 @@
 """Synthetic contracts for the poster measurement path."""
 
+import json
 import runpy
 from argparse import Namespace
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 from utils.functions.poster_fluctuation import (
     analyze,
@@ -52,6 +54,15 @@ def test_fluctuation_preserves_rows_and_missing_window():
     assert result.metadata[0]["sample_count"] < 100
 
 
+def test_fluctuation_window_slides_one_frame_at_both_acquisition_rates():
+    for rate in (200, 250):
+        time = np.arange(6 * rate) / rate
+        omega = 10 + np.sin(2 * np.pi * 2 * time)
+        frame = analyze(time, omega, windows=(0.1,)).frame
+        interior_second = (time >= 2) & (time < 3)
+        assert frame.loc[interior_second, "sd_per_mean_0.1s"].notna().sum() == rate
+
+
 def test_random_only_control_has_no_injected_periodic_component():
     frame = synthetic_trajectory("random_only", 200, 6, 81, base_hz=0)
     assert len(frame) == 1200
@@ -96,6 +107,8 @@ def test_one_poster_png_contains_absolute_velocity_and_log_fft(tmp_path, monkeyp
     source = synthetic_trajectory("periodic_plus_noise", 200, 6, 81)
     source["long_axis_deg"] = (-np.rad2deg(source["true_angle_rad"])) % 180.0
     source["axis_ratio"] = np.nan
+    (tmp_path / "tables").mkdir()
+    (tmp_path / "tables/synthetic_No.01_orbit_fft.csv").write_text("obsolete\n", encoding="utf-8")
     captured = []
     original_savefig = script["plt"].Figure.savefig
 
@@ -104,14 +117,23 @@ def test_one_poster_png_contains_absolute_velocity_and_log_fft(tmp_path, monkeyp
         return original_savefig(figure, *args, **kwargs)
 
     monkeypatch.setattr(script["plt"].Figure, "savefig", capture)
-    script["save_case"](source, tmp_path, "synthetic_No.01", "synthetic test", {"kind": "synthetic"})
+    script["save_case"](source, tmp_path, "synthetic_No.01", "synthetic test", {"kind": "synthetic", "rate_hz": 200})
     assert [path.name for path in tmp_path.glob("*.png")] == ["synthetic_No.01.png"]
     assert (tmp_path / "tables/synthetic_No.01_long_axis_fft.csv").is_file()
     saved = script["pd"].read_csv(tmp_path / "tables/synthetic_No.01_time_series.csv")
     assert np.allclose(saved["long_axis_abs_omega_rad_s"], np.abs(saved["long_axis_omega_rad_s"]), equal_nan=True)
-    assert captured[0].axes[6].get_yscale() == "linear"
-    assert captured[0].axes[7].get_yscale() == "log"
-    assert len(captured[0].axes[4].lines) == 3  # generated truth, signed estimate, absolute estimate
+    assert saved["long_axis_phase_rad"].dropna().between(-np.pi, np.pi, inclusive="left").all()
+    assert "orbit_angle_rad" in saved and "orbit_omega_rad_s" in saved
+    assert not (tmp_path / "tables/synthetic_No.01_orbit_fft.csv").exists()
+    assert len(captured[0].axes) == 9
+    assert len(captured[0].axes[4].lines) == 2  # signed truth and estimate
+    assert len(captured[0].axes[5].lines) == 2  # absolute truth and estimate
+    assert captured[0].axes[8].get_yscale() == "log"
+    assert captured[0].axes[8].get_xlim()[1] == 100
+    assert captured[0].axes[8].get_xticks()[-1] == 100
+    assert captured[0].axes[8].xaxis.label.get_fontsize() >= 14
+    assert captured[0].axes[8].get_xticklabels()[0].get_fontsize() >= 12
+    assert np.isnan(captured[0].axes[3].lines[0].get_ydata()).sum() > saved.long_axis_phase_rad.isna().sum()
     for width in (0.1, 0.2, 0.5, 1.0, 1.5, 2.0):
         assert f"long_axis_sd_per_mean_{width:g}s" in saved
         assert f"long_axis_sd_per_mean_{width:g}s_z" in saved
@@ -127,6 +149,7 @@ def test_main_routes_measured_plot_to_day_and_preserves_manual_selection(tmp_pat
     source = synthetic_trajectory("periodic_plus_noise", 200, 6, 81)
     source["long_axis_deg"] = (-np.rad2deg(source["true_angle_rad"])) % 180.0
     source["axis_ratio"] = np.nan
+    source = source[["time_sec", "x_um", "y_um", "long_axis_deg", "axis_ratio"]]
     script["main"].__globals__["read_avi"] = lambda _path, _settings: source
     script["main"].__globals__["duplicate_source_map"] = lambda _files: {("20230607", 1): None}
     script["main"](
@@ -137,18 +160,34 @@ def test_main_routes_measured_plot_to_day_and_preserves_manual_selection(tmp_pat
     )
     assert (measured / "20230607/No.01.png").is_file()
     assert (measured / "20230607/tables/No.01_time_series.csv").is_file()
+    assert not (measured / "20230607/tables/No.01_orbit_fft.csv").exists()
+    measured_series = script["pd"].read_csv(measured / "20230607/tables/No.01_time_series.csv")
+    assert not any(column.startswith("orbit_") for column in measured_series.columns)
+    measured_metadata = json.loads((measured / "20230607/tables/No.01_metadata.json").read_text())
+    assert not any(key.startswith("orbit_") for key in measured_metadata)
     assert (measured / "selection.csv").read_text(encoding="utf-8") == "manual decision\n"
     index = script["pd"].read_csv(measured / "index.csv")
     assert index.loc[0, "plot_file"] == "20230607/No.01.png"
+    assert not any(column.startswith("orbit_") for column in index.columns)
     assert not (tmp_path / "index.csv").exists()
 
 
-def test_main_routes_synthetic_plots_and_index(tmp_path):
+def test_main_routes_synthetic_plots_and_index(tmp_path, monkeypatch):
     script = runpy.run_path(
         str(Path(__file__).resolve().parents[1] / "scripts/09_poster_fluctuation.py"), run_name="poster_test"
     )
+    limits = []
+    original_savefig = script["plt"].Figure.savefig
+
+    def capture(figure, *args, **kwargs):
+        if len(figure.axes) == 9:
+            limits.append(figure.axes[8].get_xlim()[1])
+            assert figure.axes[8].get_xticks()[-1] == limits[-1]
+        return original_savefig(figure, *args, **kwargs)
+
+    monkeypatch.setattr(script["plt"].Figure, "savefig", capture)
     script["main"](
-        Namespace(mode="synthetic", synthetic_rates=[200], synthetic_duration=3, seed=81, null_replicates=1),
+        Namespace(mode="synthetic", synthetic_rates=[200, 250], synthetic_duration=3, seed=81, null_replicates=1),
         {},
         {},
         tmp_path,
@@ -156,11 +195,43 @@ def test_main_routes_synthetic_plots_and_index(tmp_path):
     simulation = tmp_path / "2_simulation"
     assert (simulation / "simulation_periodic_plus_noise_200hz_seed81.png").is_file()
     assert (simulation / "simulation_random_only_200hz_seed81.png").is_file()
+    assert (simulation / "simulation_periodic_plus_noise_250hz_seed81.png").is_file()
+    assert (simulation / "simulation_random_only_250hz_seed81.png").is_file()
     assert (simulation / "simulation_random_only_ensemble.png").is_file()
     assert (simulation / "tables/simulation_random_only_ensemble.csv").is_file()
     index = script["pd"].read_csv(simulation / "index.csv")
     assert set(index.plot_file) == {
         "simulation_periodic_plus_noise_200hz_seed81.png",
         "simulation_random_only_200hz_seed81.png",
+        "simulation_periodic_plus_noise_250hz_seed81.png",
+        "simulation_random_only_250hz_seed81.png",
     }
+    nulls = script["pd"].read_csv(simulation / "tables/simulation_random_only_ensemble.csv")
+    assert set(nulls.nyquist_hz) == {100, 125}
+    assert "peak_to_median_full_band" in nulls and "peak_to_median_0_20hz" not in nulls
+    assert limits == [100, 100, 125, 125]
     assert not (tmp_path / "1_rotational_measurements").exists()
+
+
+def test_wrapped_phase_preserves_observations_and_breaks_only_at_wrap():
+    script = runpy.run_path(
+        str(Path(__file__).resolve().parents[1] / "scripts/09_poster_fluctuation.py"), run_name="poster_test"
+    )
+    time = np.arange(5, dtype=float)
+    phase = np.array([np.pi - 0.1, -np.pi + 0.1, -np.pi + 0.2, np.nan, 0.0])
+    plotted_time, plotted_phase = script["wrapped_phase_plot"](time, phase)
+    assert np.allclose(plotted_time[np.isfinite(plotted_time)], time)
+    assert np.allclose(plotted_phase[np.isfinite(plotted_phase)], phase[np.isfinite(phase)])
+    assert np.isnan(plotted_phase[1])
+
+
+def test_random_only_peak_contrast_uses_full_positive_band_below_nyquist():
+    script = runpy.run_path(
+        str(Path(__file__).resolve().parents[1] / "scripts/09_poster_fluctuation.py"), run_name="poster_test"
+    )
+    spectrum = pd.DataFrame({"frequency_hz": [0, 1, 30, 90, 100], "amplitude": [100, 1, 8, 2, 100]})
+    summary = script["null_spectrum_summary"](spectrum, 200)
+    assert summary["nyquist_hz"] == 100
+    assert summary["peak_frequency_hz"] == 30
+    assert summary["peak_amplitude"] == 8
+    assert summary["peak_to_median_full_band"] == 4
