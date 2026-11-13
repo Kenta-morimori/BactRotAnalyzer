@@ -1,5 +1,7 @@
 # ポスター用の長軸角・揺らぎ解析
 
+候補4細胞と合成対照2条件の追加比較は[0.5秒窓FFT振幅の1/f形フィット](poster-one-over-f.md)を参照する。
+
 [基本測定](../adr/0009-poster-long-axis-fluctuation.md)、[表示・評価帯域の更新](../adr/0010-poster-phase-and-nyquist-band.md)、[固定帯域強度比](../adr/0011-poster-fixed-band-ratio.md)、[成分表示](../adr/0012-poster-band-components-and-steady-simulation.md)、[長軸角の合成対照](../adr/0013-poster-angle-noise-controls.md)に従う。入力は現時点ではTIFFでなく二値AVI。対象は `data/20231005` のNo.1–7、`data/20230607` のNo.1–10、`data/20231107` のNo.1–7の計24細胞。両端の日付のNo.8–10は当時の解析用にNo.7を複製したAVIで、入力一覧に記録するが解析から除外する。各日付は同一条件の別細胞であり、実験反復と自動的にみなさない。
 
 クリーンなコミットから、リポジトリのルートで実行する。

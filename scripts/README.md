@@ -196,3 +196,5 @@ python3 scripts/04_repellent_response_analysis.py --day repellent-response/20260
 ### ポスター用の回転揺らぎ解析
 
 3条件の菌体長軸角・揺らぎと、長軸角から解析する合成ノイズ対照は [`docs/analysis/poster-fluctuation.md`](../docs/analysis/poster-fluctuation.md) の手順を参照する。生成物はGit管理外の `outputs/poster_fluctuation/` に置く。
+
+0.5秒窓FFT振幅の1/f形フィットと乱数位相の逆FFTは [`docs/analysis/poster-one-over-f.md`](../docs/analysis/poster-one-over-f.md) を参照する。
