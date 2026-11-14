@@ -26,6 +26,10 @@ description: Implement BactRotAnalyzer issues and fix existing PRs with isolated
 
 ## PRとレビューへの受け渡し
 
+PR作成前に対象Issueの最新の目的・受入条件と担当範囲、既存PR・headブランチ、base、積み重ねPRの依存、完全な予定差分を照合する。対応Issueが不明なら既存Issueを探し、重複実装を避けてから作成する。対象外の変更や実測成果物を除き、PRとIssueの対応を明記する。
+
+マージ前に別の開いたPRがheadをbaseにしていないか確認し、依存PRのbase変更・差分確認などで移行する。マージ後はGitHub上のheadブランチ削除を確認する。
+
 [PRテンプレート](../../../.github/PULL_REQUEST_TEMPLATE.md)を使い、解決する問題・変更後の動作・対象Issue・検証・重要な限界を基本日本語で記す。1実装Issueにつき1 PRを維持し、Developmentの実際の紐付けをUIまたはAPIで確認する。単なる番号記載や `Closes` の文言で成功と判断せず、baseと既定ブランチの違いを考慮する。確認できなければ未確認と記す。
 
 レビュー依頼前とマージ前に完全なPR差分を読み、一時ヘルパー・作業ログ・ローカル固定パス・不要な依存や参照を整理する。恒久的な仕様・回帰テスト・実行手順・検証根拠と他作業の実験成果物は保持する。GitHub Codexレビューは既存履歴を確認して原則1回とし、追加依頼は適用される `AGENTS.md` の明示承認条件に従う。
