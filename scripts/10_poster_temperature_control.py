@@ -129,7 +129,10 @@ def cell_figure(
     axes[2, 2].set(xlabel="Time (s)", ylabel="z-score", title="Standardized fluctuation")
     axes[3, 0].set(xlabel="Frequency (Hz)", ylabel="FFT amplitude (log)", title="FFT of standardized fluctuation")
     axes[3, 0].set_xlim(0, nominal_rate_hz / 2)
-    axes[3, 0].set_yscale("log")
+    if (spectra.amplitude > 0).any():
+        axes[3, 0].set_yscale("log")
+    else:
+        axes[3, 0].text(0.5, 0.5, "No valid FFT", transform=axes[3, 0].transAxes, ha="center")
     for ax in (axes[2, 1], axes[2, 2], axes[3, 0]):
         ax.legend(ncol=2)
 
@@ -140,7 +143,10 @@ def cell_figure(
         ylabel="Mean amplitude ratio (log)",
         title="Low / High: 0–1 Hz / 80–100 Hz",
     )
-    axes[3, 1].set_yscale("log")
+    if good.any():
+        axes[3, 1].set_yscale("log")
+    else:
+        axes[3, 1].text(0.5, 0.5, "No valid band ratio", transform=axes[3, 1].transAxes, ha="center")
     axes[3, 1].set_xticks(WINDOWS_S)
     axes[3, 1].tick_params(axis="x", labelrotation=45)
     axes[3, 2].axis("off")

@@ -234,6 +234,8 @@ def cell_summary(frame: pd.DataFrame, ratios: pd.DataFrame, temperature_c: int, 
     nominal_dt = np.diff(frame["time_sec"].to_numpy(float))
     positive_dt = nominal_dt[np.isfinite(nominal_dt) & (nominal_dt > 0)]
     ratio_half_second = ratios.loc[np.isclose(ratios["window_s"], 0.5), "low_to_high_amplitude_ratio"]
+    valid_speed = speed[np.isfinite(speed)]
+    valid_radius = radius[np.isfinite(radius)]
     return {
         "temperature_c": temperature_c,
         "sample_no": sample_no,
@@ -243,7 +245,7 @@ def cell_summary(frame: pd.DataFrame, ratios: pd.DataFrame, temperature_c: int, 
             int(np.sum(nominal_dt > CONTINUITY_GAP_FACTOR * np.median(positive_dt))) if len(positive_dt) else 0
         ),
         "corrected_center_frame_count": int(frame["source_center_adjusted"].sum()),
-        "mean_absolute_angular_velocity_rad_s": float(np.nanmean(speed)),
-        "mean_rotation_radius_um": float(np.nanmean(radius)),
+        "mean_absolute_angular_velocity_rad_s": float(np.mean(valid_speed)) if len(valid_speed) else float("nan"),
+        "mean_rotation_radius_um": float(np.mean(valid_radius)) if len(valid_radius) else float("nan"),
         "low_to_high_amplitude_ratio_0.5s": float(ratio_half_second.iloc[0]),
     }

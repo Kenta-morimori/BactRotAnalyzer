@@ -152,3 +152,21 @@ def test_center_method_comparison_uses_matching_cells(tmp_path):
     assert np.isclose(result.loc[0, "delta_mean_rotation_radius_um"], 0.1)
     assert np.isclose(result.loc[0, "log10_low_high_fold_change"], np.log10(2))
     assert (tmp_path / "compare_center_method_effect.png").exists()
+
+
+def test_cell_figure_records_unavailable_center_without_fft(tmp_path):
+    script = runpy.run_path(
+        str(Path(__file__).resolve().parents[1] / "scripts/10_poster_temperature_control.py"),
+        run_name="temperature_test",
+    )
+    time = np.arange(6 * 200) / 200
+    frame = cell_coordinates(_source(time, np.ones(len(time)), np.zeros(len(time))), 1)
+    for column in ("center_x_um", "center_y_um", "centered_x_um", "centered_y_um", "radius_um"):
+        frame[column] = np.nan
+    analyzed, spectra, ratios, _ = analyze_cell(frame)
+    summary = cell_summary(analyzed, ratios, 23, 1)
+    summary["local_conic_center_valid_count"] = 0
+    assert np.isnan(summary["mean_absolute_angular_velocity_rad_s"])
+    assert np.isnan(summary["mean_rotation_radius_um"])
+    script["cell_figure"](analyzed, spectra, ratios, summary, tmp_path / "unavailable.png", 200)
+    assert (tmp_path / "unavailable.png").stat().st_size > 1000
