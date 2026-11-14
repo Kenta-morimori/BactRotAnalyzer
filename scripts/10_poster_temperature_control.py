@@ -213,13 +213,14 @@ def comparison_figures(summary: pd.DataFrame, all_ratios: pd.DataFrame, root: Pa
             ax.plot(points.loc[good, "window_s"], points.loc[good, RATIO], color=COLORS[temp], alpha=0.2, lw=0.8)
         center = group.groupby("window_s", as_index=False)[RATIO].mean()
         good = np.isfinite(center[RATIO]) & (center[RATIO] > 0)
+        valid_cells = group.loc[np.isfinite(group[RATIO]) & (group[RATIO] > 0), "sample_no"].nunique()
         ax.plot(
             center.loc[good, "window_s"],
             center.loc[good, RATIO],
             "-o",
             color=COLORS[temp],
             lw=2.5,
-            label=f"{temp}°C (n={group.sample_no.nunique()})",
+            label=f"{temp}°C (n={valid_cells})",
         )
     ax.set(
         xlabel="Gaussian window width (s)",
