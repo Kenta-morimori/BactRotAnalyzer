@@ -306,6 +306,11 @@ def run_cli(repository, script, *args):
         ("scripts/02_compare_fluctuation_property/compare_fluctuation_main.py", ["--days", "absent"]),
         ("scripts/03_av_analysis/make_dataset.py", []),
         ("scripts/04_repellent_response_analysis.py", ["--day", "absent"]),
+        (
+            "scripts/04_repellent_response_analysis.py",
+            ["--day", "absent", "--input-settings", "absent", "--input-source", "tiff"],
+        ),
+        ("scripts/tiff_roi_centroid.py", ["--input", "absent", "--output", "outputs/synthetic"]),
         ("scripts/05_centroid_diagnostics.py", ["synthetic"]),
         ("scripts/06_centroid_comparison.py", ["synthetic"]),
         ("scripts/07_centroid_review.py", ["--comparison", "absent", "--manifest-root", "absent"]),
@@ -362,3 +367,157 @@ def test_real_repellent_cli_logs_synthetic_run_and_rejects_dirty_repeat(cli_repo
     result = run_cli(cli_repository, script, *arguments)
     assert result.returncode != 0 and "未コミット" in result.stderr
     assert len(list((cli_repository / "outputs/_runs").glob("*/*/manifest.json"))) == 1
+
+
+@pytest.mark.parametrize("with_brightness,implicit", [(False, False), (True, False), (True, True)])
+def test_image_input_cli_logs_original_tiffs_and_exports_grouped_measurements(
+    cli_repository, with_brightness, implicit
+):
+    from tests.test_repellent_image_input import mean_csv, settings_file
+
+    draft, _ = settings_file(cli_repository)
+    settings = cli_repository / ("data/day/repellent_input.json" if implicit else "data/settings.json")
+    draft.replace(settings)
+    if with_brightness:
+        mean_csv(cli_repository)
+        selection = ["--day", "day"] if implicit else ["--settings", settings]
+        registered = run_cli(cli_repository, "scripts/prepare_repellent_input.py", "--attach-brightness", *selection)
+        assert registered.returncode == 0, registered.stderr
+    selection = [] if implicit else ["--input-settings", settings, "--input-source", "tiff"]
+    result = run_cli(
+        cli_repository,
+        "scripts/04_repellent_response_analysis.py",
+        "--day",
+        "day",
+        *selection,
+        "--baseline-ratio",
+        "0.4",
+        "--sigma-threshold",
+        "2.5",
+        "--min-consecutive",
+        "4",
+    )
+    assert result.returncode == 0, result.stderr
+    records = list((cli_repository / "outputs/_runs").glob("*/*/manifest.json"))
+    assert len(records) == 1
+    saved = json.loads(records[0].read_text())
+    assert saved["status"] == "complete"
+    assert saved["parameters"]["input_source"] == (None if implicit else "tiff")
+    files = {item["path"] for item in saved["inputs"]["files"]}
+    assert str(settings) in files and len([p for p in files if p.endswith(".tif")]) == 80
+    output = cli_repository / "outputs/reanalysis_tiff/day/repellent_response"
+    assert (output / "output_manifest.csv").exists() and (output / "index.html").exists()
+    assert (output / "00_all_rotational_analysis/centroid_coordinate/centroid_time_series.csv").exists()
+    if with_brightness:
+        import csv
+
+        exported = json.loads((output / "settings.json").read_text())
+        detection = exported["image_input"]["rise_results"]["7"]
+        assert detection["method"] == "auto" and detection["status"] == "detected"
+        assert detection["parameters"] == dict(baseline_ratio=0.4, sigma_threshold=2.5, min_consecutive=4)
+        with (output / "01_brightness_change/rise_summary.csv").open() as stream:
+            summary = next(csv.DictReader(stream))
+        assert summary["rise_detection_method"] == "auto" and summary["rise_detection_status"] == "detected"
+        assert int(summary["rise_source_frame_1based"]) == detection["rise_source_frame"]
+        assert str(cli_repository / "data/day/brightness_data/recording.csv") in files
+        assert not (cli_repository / "data/day/config.ini").exists()
+
+
+def test_settings_cli_creates_default_json_without_overwriting_prior_choices(cli_repository):
+    from tests.test_repellent_image_input import recording
+
+    recording(cli_repository, frames=10)
+    arguments = ["--init", "--day", "day", "--source", "tiff", "--px2um", "0.2", "0.2"]
+    result = run_cli(cli_repository, "scripts/prepare_repellent_input.py", *arguments)
+    assert result.returncode == 0, result.stderr
+    path = cli_repository / "data/day/repellent_input.json"
+    saved = path.read_bytes()
+    document = json.loads(saved)
+    assert document["source"] == "tiff" and not document["order_confirmed"]
+    assert document["samples"][0]["target_confirmed"] is False
+    repeated = run_cli(cli_repository, "scripts/prepare_repellent_input.py", *arguments)
+    assert repeated.returncode != 0 and path.read_bytes() == saved
+
+
+def test_batch_review_cli_approves_subset_then_day_only_analysis_keeps_original_number(cli_repository):
+    import copy
+    import re
+    import time
+    from urllib.request import Request, urlopen
+
+    import pandas as pd
+
+    from tests.test_repellent_image_input import settings_file
+
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("ffmpeg unavailable")
+    draft, settings = settings_file(cli_repository, frames=24)
+    settings["samples"][0].update(threshold=None, roi=None, seeds={}, target_confirmed=False)
+    held = copy.deepcopy(settings["samples"][0])
+    held.update(sample_no=9, input_id="not-visible", threshold=20000)
+    settings["samples"].append(held)
+    path = cli_repository / "data/day/repellent_input.json"
+    path.write_text(json.dumps(settings))
+    draft.unlink()
+    code = (
+        "import runpy,sys,webbrowser;webbrowser.open=lambda _:None;"
+        "sys.argv=['scripts/prepare_repellent_input.py','--day','day','--configure'];"
+        "runpy.run_path(sys.argv[0],run_name='__main__')"
+    )
+    process = subprocess.Popen(
+        [sys.executable, "-u", "-c", code],
+        cwd=cli_repository,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert process.stdout is not None
+        line = process.stdout.readline()
+        matched = re.search(r"http://127.0.0.1:\d+", line)
+        assert matched is not None, line
+        base = matched.group(0)
+        with urlopen(base, timeout=5) as response:
+            matched = re.search(r"const token='([^']+)'", response.read().decode())
+            assert matched is not None
+            token = matched.group(1)
+
+        def post(route, body):
+            with urlopen(
+                Request(base + route, data=json.dumps(body).encode(), headers={"X-Editor-Token": token}), timeout=20
+            ) as response:
+                return json.load(response)
+
+        initial = post("/settings", {})
+        before = path.read_bytes()
+        post("/review/start", {})
+        for _ in range(400):
+            status = post("/review/status", {})
+            if status["status"] not in {"running", "queued", "finalizing"}:
+                break
+            time.sleep(0.05)
+        assert status["status"] == "complete", status
+        assert path.read_bytes() == before
+        assert status["entries"]["7"]["eligible"] and not status["entries"]["9"]["eligible"]
+        post("/review/approve", dict(samples=[7], revision=initial["revision"]))
+        post("/exit", {})
+        stdout, stderr = process.communicate(timeout=20)
+        assert process.returncode == 0, stdout + stderr
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.communicate()
+    result = run_cli(cli_repository, "scripts/04_repellent_response_analysis.py", "--day", "day")
+    assert result.returncode == 0, result.stderr
+    output = cli_repository / "outputs/reanalysis_tiff/day/repellent_response"
+    table = pd.read_csv(output / "00_all_rotational_analysis/centroid_coordinate/centroid_time_series.csv")
+    assert table.sample_no.unique().tolist() == [7] and len(table) == 24
+    saved = json.loads(path.read_text())
+    assert saved["review"]["held_samples"] == [9]
+    movie = Path(saved["samples"][0]["review_artifact"]).parent / "review.mp4"
+    assert movie.is_file()
+    records = [json.loads(p.read_text()) for p in (cli_repository / "outputs/_runs").glob("*/*/manifest.json")]
+    assert len(records) == 2 and all(r["status"] == "complete" for r in records)
+    assert any(r["parameters"].get("operation") == "central-target-fixed-roi-batch-review-v1" for r in records)
+    inventory = {f["path"] for r in records for f in r["inputs"]["files"]}
+    assert str(movie) in inventory

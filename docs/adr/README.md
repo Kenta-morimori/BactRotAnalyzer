@@ -9,5 +9,10 @@
 | [0002](0002-local-conic-center-completion.md) | 局所楕円モデルによる中心推定と3点平均補完 |
 | [0003](0003-repellent-output-contract.md) | フェーズ別出力、背景前後解析、再計算と再描画の分離 |
 | [0004](0004-execution-provenance.md) | clean GitによるCLI実行、入力・ブランチ・環境を含むローカル実行履歴 |
+| [0005](0005-image-input-settings.md) | config任意のTIFF/AVI入力、対話設定、外部背景とキャッシュ分離 |
+| [0006](0006-provided-brightness-rise.md) | ユーザー作成Mean CSV、TIFF元観測との対応、従来の背景上昇点検出 |
+| [0007](0007-default-image-settings.md) | データセット単位の既定JSON、保存入力源と省略時の互換性 |
+
+| [0008](0008-batch-tiff-review.md) | 中央対象の自動候補、保存動画での一括承認と明示的な解析対象 |
 
 各ADRには状態、背景、決定、代替、影響・限界、検証方法を記載する。後日の方針変更は新ADRで置き換え、既存の判断を黙って書き換えない。

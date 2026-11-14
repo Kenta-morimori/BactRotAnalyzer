@@ -28,7 +28,7 @@ from utils.functions.repellent_output import (  # noqa
     set_ranges,
 )
 from utils.run_context import analysis_run
-from utils.run_inputs import repellent_inputs
+from utils.run_inputs import repellent_inputs, resolve_image_settings
 
 
 def resolve_center_options(center_estimator, stop_measurement_enabled):
@@ -568,16 +568,48 @@ def main(
     stop_measurement_enabled: Optional[bool] = None,
     results_bundle: Optional[str] = None,
     measurement_input: Optional[str] = None,
+    input_settings: Optional[str] = None,
+    input_source: Optional[str] = None,
+    input_samples: Optional[list[int]] = None,
+    force_extract: bool = False,
 ):
     from utils.functions.repellent_result_export import export_bundle, export_results
 
+    if measurement_input is None and results_bundle is None:
+        input_settings, input_source = resolve_image_settings(day, input_settings, input_source)
     base = Path(param.save_dir_bef)
+    if input_settings is not None and output_suffix is None:
+        output_suffix = f"reanalysis_{input_source}" if input_source in {"avi", "tiff"} else None
     if output_suffix:
         suffix = Path(output_suffix)
         if suffix.is_absolute() or ".." in suffix.parts:
             raise ValueError("output-suffix must be relative without parent traversal")
         base = base / suffix
     destination = base / day / "repellent_response"
+    if input_settings is not None:
+        if measurement_input is not None or results_bundle is not None:
+            raise ValueError("input-settings, measurement-input and results-bundle are mutually exclusive")
+        if input_source not in {"avi", "tiff"} or center_estimator not in (None, "local_conic"):
+            raise ValueError("input-settings requires explicit input-source and local_conic estimator")
+        from utils.functions.repellent_input import prepare_measurements
+
+        measurement_input = str(
+            prepare_measurements(
+                input_settings,
+                base / day,
+                source=input_source,
+                day=day,
+                numbers=input_samples,
+                all_frames=all_frames,
+                force=force_extract,
+                rise_detection=dict(
+                    baseline_ratio=baseline_ratio, sigma_threshold=sigma_threshold, min_consecutive=min_consecutive
+                ),
+            )
+        )
+        all_frames = False  # The generated manifest now owns the resolved source scope.
+    elif input_source is not None or input_samples is not None or force_extract:
+        raise ValueError("input-source, input-samples and force-extract require input-settings")
     if results_bundle is not None and measurement_input is not None:
         raise ValueError("results-bundle and measurement-input are mutually exclusive")
     if results_bundle is not None:
@@ -675,6 +707,10 @@ def build_parser():
     parser.add_argument("--stop-activity-ratio", type=float, default=param.stop_activity_ratio)
     parser.add_argument("--stop-min-duration-rotations", type=float, default=param.stop_min_duration_rotations)
     parser.add_argument("--output-suffix", type=str, default=None)
+    parser.add_argument("--input-settings", type=str, help="Confirmed local TIFF/AVI settings; generate measurements")
+    parser.add_argument("--input-source", choices=["tiff", "avi"], help="Explicit source matching input-settings")
+    parser.add_argument("--input-samples", nargs="+", type=int, help="Original sample numbers; never renumber")
+    parser.add_argument("--force-extract", action="store_true", help="Re-extract this input's isolated centroid cache")
     parser.add_argument(
         "--measurement-input",
         type=str,
@@ -709,4 +745,8 @@ if __name__ == "__main__":
             stop_measurement_enabled=args.stop_measurement,
             results_bundle=args.results_bundle,
             measurement_input=args.measurement_input,
+            input_settings=args.input_settings,
+            input_source=args.input_source,
+            input_samples=args.input_samples,
+            force_extract=args.force_extract,
         )

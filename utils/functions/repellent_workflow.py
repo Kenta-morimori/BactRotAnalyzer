@@ -48,7 +48,11 @@ def acquisition_policy(image):
 
 
 def _sha(path):
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def _known_id(values):
@@ -375,6 +379,12 @@ def recalculate_manifest(path):
     if not manifest.get("samples"):
         raise ValueError("measurement manifest requires samples")
     observations, supports, methods, hashes, rise_frames = [], [], {}, {str(path): _sha(path)}, {}
+    image_input = manifest.get("image_input")
+    if image_input is not None:
+        for name, digest in image_input["input_hashes"].items():
+            if _sha(name) != digest:
+                raise ValueError("original image input or settings changed; regenerate measurement manifest")
+            hashes[name] = digest
 
     def source(name):
         value = (path.parent / name).resolve()
@@ -418,7 +428,7 @@ def recalculate_manifest(path):
         frame, support, method = analyze_sample(
             raw,
             sample_no=no,
-            source_id=metadata.get("avi_filename", Path(sample["centroids"]).stem),
+            source_id=metadata.get("source_id", metadata.get("avi_filename", Path(sample["centroids"]).stem)),
             centroid_method=metadata["method"],
             background=background,
             rise_source_frame=cut,
@@ -435,6 +445,8 @@ def recalculate_manifest(path):
             raise RuntimeError("source changed during calculation")
     settings = workflow_settings(rise_frames, methods)
     settings.update(input_manifest_sha256=_sha(path), input_hashes=hashes)
+    if image_input is not None:
+        settings["image_input"] = image_input
     for key in ("details", "samples_per_page", "zoom_ranges"):
         if key in manifest:
             settings[key] = manifest[key]

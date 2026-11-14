@@ -192,3 +192,24 @@ python3 scripts/04_repellent_response_analysis.py --day repellent-response/20260
 切り出し位置を画像から推定・検証して、旧AVIと10倍拡大後の二値化を同座標で比較します。
 実験結果は `outputs/centroid_evaluation/` に実行ごとに保存します。通常解析への採用候補はなく、既存解析・キャッシュは保持します。
 [評価条件・実行手順・採用判断](../docs/centroid-evaluation.md)を参照してください。
+
+
+### 元TIFFの1点指定・自動ROI重心抽出
+
+```bash
+python3 scripts/tiff_roi_centroid.py --input data/example/tiff_frames \
+  --output outputs/tiff_centroid/run01
+```
+
+最初に対象内をクリックし、自動ROIを確認します。元TIFFを10倍線形補間してから固定閾値で抽出し、
+結合・曖昧・ROI端は欠測として、分離後の再捕捉を試みます。記録ギャップ後は再指定します。
+重心CSVと重ね合わせ動画を実行別に保存します。通常回転解析への接続は含みません。
+[操作・設定・欠測規則・検証範囲](../docs/tiff-roi-centroid.md)を参照してください。
+
+### TIFF/AVIの入力設定と標準忌避応答解析への接続
+
+`prepare_repellent_input.py --init`でconfig任意のローカルJSONを作り、`--configure`のHTMLで中央対象・固定ROIの候補と横並び動画を一括生成し、必要な撮影だけ修正してまとめて承認します。確認動画はローカルへ保存され、承認したNo.をday指定だけで解析できます。
+`04_repellent_response_analysis.py --input-settings <JSON> --input-source tiff|avi`は、
+入力源別の校正・キャッシュを使って元画像から標準measurement manifestを生成し、中心以降を再計算します。
+ユーザー作成の`brightness_data/<撮影名>.csv`を登録し、従来の自動処理で上昇点を検出します。背景未提供・未検出の前後指標は未実行です。
+[対象2データのコマンド・設定・外部背景の契約](../docs/analysis/repellent-image-input.md)を参照してください。
