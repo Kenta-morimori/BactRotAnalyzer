@@ -24,6 +24,7 @@ from utils.functions.poster_temperature import (  # noqa: E402
     analyze_cell,
     cell_coordinates,
     cell_summary,
+    local_conic_coordinates,
     read_sources,
     source_paths,
 )
@@ -140,6 +141,14 @@ def cell_figure(
     axes[3, 1].set_xticks(WINDOWS_S)
     axes[3, 1].tick_params(axis="x", labelrotation=45)
     axes[3, 2].axis("off")
+    center_detail = (
+        f"Center-adjusted frames: {summary['corrected_center_frame_count']}"
+        if "local_conic_center_valid_count" not in summary
+        else (
+            f"Stored-center-adjusted frames: {summary['corrected_center_frame_count']}\n"
+            f"Local-conic center valid: {summary['local_conic_center_valid_count']}"
+        )
+    )
     axes[3, 2].text(
         0.03,
         0.95,
@@ -149,7 +158,7 @@ def cell_figure(
         f"0.5 s Low/High: {summary['low_to_high_amplitude_ratio_0.5s']:.3g}\n"
         f"Valid velocity: {summary['valid_velocity_count']}/{summary['source_frame_count']} frames\n"
         f"Timestamp gaps: {summary['timestamp_gap_count']}\n"
-        f"Center-adjusted frames: {summary['corrected_center_frame_count']}",
+        f"{center_detail}",
         transform=axes[3, 2].transAxes,
         va="top",
         fontsize=15,
@@ -231,7 +240,50 @@ def comparison_figures(summary: pd.DataFrame, all_ratios: pd.DataFrame, root: Pa
     plt.close(fig)
 
 
-def run(source_root: Path, config_root: Path, destination: Path) -> None:
+def compare_center_methods(summary: pd.DataFrame, baseline_path: Path, destination: Path) -> None:
+    baseline = pd.read_csv(baseline_path)
+    keys = ["temperature_c", "sample_no"]
+    if baseline.duplicated(keys).any() or summary.duplicated(keys).any():
+        raise ValueError("temperature and cell identities must be unique")
+    joined = baseline[keys + [SPEED, RADIUS, "low_to_high_amplitude_ratio_0.5s"]].merge(
+        summary,
+        on=keys,
+        how="outer",
+        suffixes=("_stored", "_local_conic"),
+        validate="one_to_one",
+        indicator=True,
+    )
+    if not (joined["_merge"] == "both").all():
+        raise ValueError("stored and local_conic cell identities differ")
+    joined = joined.drop(columns="_merge")
+    metrics = [SPEED, RADIUS, "low_to_high_amplitude_ratio_0.5s"]
+    for metric in metrics:
+        joined[f"delta_{metric}"] = joined[f"{metric}_local_conic"] - joined[f"{metric}_stored"]
+    joined["log10_low_high_fold_change"] = np.log10(
+        joined["low_to_high_amplitude_ratio_0.5s_local_conic"] / joined["low_to_high_amplitude_ratio_0.5s_stored"]
+    )
+    joined.to_csv(destination / "compare_center_methods.csv", index=False)
+    fig, axes = plt.subplots(1, 3, figsize=(19, 6), constrained_layout=True)
+    for ax, column, label in (
+        (axes[0], f"delta_{SPEED}", "Δ mean |ω| (rad/s)"),
+        (axes[1], f"delta_{RADIUS}", "Δ mean radius (µm)"),
+        (axes[2], "log10_low_high_fold_change", "log10(Low/High fold change)"),
+    ):
+        for temp in TEMPERATURES_C:
+            group = joined[joined.temperature_c == temp]
+            ax.scatter(np.full(len(group), temp), group[column], color=COLORS[temp], alpha=0.7)
+        ax.axhline(0, color="black", lw=0.8)
+        ax.set(xlabel="Temperature (°C)", ylabel=label)
+        ax.set_xticks(TEMPERATURES_C)
+    _style(axes)
+    fig.suptitle("Local conic minus stored-center analysis: cell-level changes", fontsize=19)
+    fig.savefig(destination / "compare_center_method_effect.png", dpi=180)
+    plt.close(fig)
+
+
+def run(source_root: Path, config_root: Path, destination: Path, *, center_mode: str = "stored") -> None:
+    if center_mode not in {"stored", "local_conic"}:
+        raise ValueError(center_mode)
     destination.mkdir(parents=True, exist_ok=True)
     summaries = []
     all_ratios = []
@@ -243,9 +295,25 @@ def run(source_root: Path, config_root: Path, destination: Path) -> None:
         print(f"{temp}°C: {sources.sample_count} cells", flush=True)
         for no in range(1, sources.sample_count + 1):
             stem = f"No.{no:02d}"
-            raw = cell_coordinates(sources, no)
+            raw, method = (
+                local_conic_coordinates(sources, no)
+                if center_mode == "local_conic"
+                else (cell_coordinates(sources, no), None)
+            )
             frame, spectra, ratios, fft_metadata = analyze_cell(raw)
             summary = cell_summary(frame, ratios, temp, no)
+            if center_mode == "local_conic":
+                status = frame["local_conic_center_status"]
+                summary["local_conic_center_valid_count"] = int(
+                    frame[["center_x_um", "center_y_um"]].notna().all(axis=1).sum()
+                )
+                summary["local_conic_direct_count"] = int((status == "direct").sum())
+                summary["local_conic_short_interpolation_count"] = int((status == "short_interpolation").sum())
+                shift = np.hypot(
+                    frame["center_x_um"] - frame["stored_center_x_um"],
+                    frame["center_y_um"] - frame["stored_center_y_um"],
+                )
+                summary["mean_center_shift_um"] = float(shift.mean())
             summary["plot_file"] = f"{temp}C/{stem}.png"
             summary["series_file"] = f"{temp}C/tables/{stem}_time_series.csv"
             summary["fft_file"] = f"{temp}C/tables/{stem}_fft.csv"
@@ -269,6 +337,8 @@ def run(source_root: Path, config_root: Path, destination: Path) -> None:
                         "velocity_definition": "shortest wrapped phase increment / actual timestamp difference; abs for speed",
                         "fluctuation_definition": "Gaussian-window SD(abs(omega))/Mean(abs(omega)), one-frame slide",
                         "relative_strength_definition": "mean FFT amplitude at 0<f<1 Hz / mean FFT amplitude at 80<=f<100 Hz",
+                        "center_method": center_mode,
+                        "local_conic_method": method,
                     },
                     indent=2,
                     allow_nan=True,
@@ -283,6 +353,12 @@ def run(source_root: Path, config_root: Path, destination: Path) -> None:
     summary_frame.to_csv(destination / "cell_summary.csv", index=False)
     ratio_frame.to_csv(destination / "window_band_amplitude_ratio.csv", index=False)
     comparison_figures(summary_frame, ratio_frame, destination)
+    if center_mode == "local_conic":
+        compare_center_methods(
+            summary_frame,
+            source_root / "poster_fluctuation" / "3_Temperature_Control" / "cell_summary.csv",
+            destination,
+        )
     (destination / "README.txt").write_text(
         "Private local SJW46 temperature-control analysis. The source tables are the existing "
         "SJW46_temp=10/23/30 outputs; they contain corrected-center-relative centroids in µm, "
@@ -296,7 +372,14 @@ def run(source_root: Path, config_root: Path, destination: Path) -> None:
         "amplitude over 0<f<1 Hz divided by mean amplitude over 80<=f<100 Hz. "
         "The comparison scatter uses the 0.5 s window. Group lines are cell means, with "
         "individual cells shown; these cells are not assumed to be independent experimental replicates. "
-        "Previous center corrections and source timestamp gaps are counted in cell_summary.csv.\n",
+        "Previous center corrections and source timestamp gaps are counted in cell_summary.csv. "
+        + (
+            "For local_conic, the same stored raw centroids are refit by the repellent default local_conic "
+            "estimator and completion. Center failures remain missing; compare_center_methods.csv and "
+            "compare_center_method_effect.png compare cell-level results with stored-center analysis.\n"
+            if center_mode == "local_conic"
+            else "\n"
+        ),
         encoding="utf-8",
     )
 
@@ -308,15 +391,20 @@ def main() -> None:
     parser.add_argument(
         "--output-root", type=Path, default=ROOT / "outputs" / "poster_fluctuation" / "3_Temperature_Control"
     )
+    parser.add_argument("--center-mode", choices=("stored", "local_conic"), default="stored")
     args = parser.parse_args()
     source_root, config_root, output_root = (
         args.source_root.resolve(),
         args.config_root.resolve(),
         args.output_root.resolve(),
     )
+    if args.center_mode == "local_conic":
+        output_root /= "local_conic"
     inputs = [path for temp in TEMPERATURES_C for path in source_paths(source_root, config_root, temp)]
+    if args.center_mode == "local_conic":
+        inputs.append(source_root / "poster_fluctuation" / "3_Temperature_Control" / "cell_summary.csv")
     with analysis_run(parameters=vars(args), inputs=inputs, outputs=[output_root]) as run_root:
-        run(source_root, config_root, output_root)
+        run(source_root, config_root, output_root, center_mode=args.center_mode)
     archive = output_root / "_run_records" / run_root.parent.name / run_root.name
     archive.mkdir(parents=True, exist_ok=False)
     shutil.copy2(run_root / "manifest.json", archive / "manifest.json")

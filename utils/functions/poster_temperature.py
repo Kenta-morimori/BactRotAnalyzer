@@ -22,6 +22,7 @@ class TemperatureSources:
     centered_centroid: pd.DataFrame
     corrected_center: pd.DataFrame
     original_center: pd.DataFrame
+    pixel_size_um: tuple[float, float]
 
 
 def source_paths(source_root: Path, config_root: Path, temperature_c: int) -> tuple[Path, ...]:
@@ -43,8 +44,11 @@ def read_sources(source_root: Path, config_root: Path, temperature_c: int) -> Te
         raise FileNotFoundError(paths[0])
     count = config.getint("Settings", "sample_num")
     frame_rate = config.getfloat("Settings", "FrameRate")
+    pixel_size = (config.getfloat("Settings", "px2um_x"), config.getfloat("Settings", "px2um_y"))
     if count < 1 or not np.isfinite(frame_rate) or frame_rate <= 0:
         raise ValueError(f"{temperature_c}°C: invalid sample count or frame rate")
+    if not np.isfinite(pixel_size).all() or min(pixel_size) <= 0:
+        raise ValueError(f"{temperature_c}°C: invalid pixel calibration")
     time, centroid, center, before = (pd.read_csv(path) for path in paths[1:])
     for no in range(1, count + 1):
         required = (
@@ -61,7 +65,7 @@ def read_sources(source_root: Path, config_root: Path, temperature_c: int) -> Te
                 raise ValueError(f"{temperature_c}°C No.{no}: missing source column {column}")
     if len(time.columns) != count:
         raise ValueError(f"{temperature_c}°C: time-list cell count disagrees with config")
-    return TemperatureSources(temperature_c, frame_rate, count, time, centroid, center, before)
+    return TemperatureSources(temperature_c, frame_rate, count, time, centroid, center, before, pixel_size)
 
 
 def _aligned(table: pd.DataFrame, column: str, count: int) -> np.ndarray:
@@ -114,6 +118,62 @@ def cell_coordinates(sources: TemperatureSources, sample_no: int) -> pd.DataFram
             "source_center_adjusted": changed,
         }
     )
+
+
+def local_conic_coordinates(sources: TemperatureSources, sample_no: int) -> tuple[pd.DataFrame, dict]:
+    """Refit the repellent default center using the same saved raw centroids."""
+    from utils.functions.repellent_workflow import analyze_sample
+
+    stored = cell_coordinates(sources, sample_no)
+    time = stored["time_sec"].to_numpy(float)
+    x = stored["centroid_x_um"].to_numpy(float)
+    y = stored["centroid_y_um"].to_numpy(float)
+    dt = np.diff(time)
+    positive_dt = dt[np.isfinite(dt) & (dt > 0)]
+    if not len(positive_dt):
+        raise ValueError(f"{sources.temperature_c}°C No.{sample_no}: no positive frame interval")
+    # The original standard output stores (raw centroid - corrected center).
+    # Re-add that center, then use the configured pixel scale for the same
+    # pixel-space fit used by the repellent local_conic workflow.
+    raw = pd.DataFrame(
+        {
+            "source_frame_1based": stored["source_frame_1based"],
+            "time_sec": time,
+            "x_um": x,
+            "y_um": y,
+            "x_px": x / sources.pixel_size_um[0],
+            "y_px": y / sources.pixel_size_um[1],
+            "detected": np.isfinite(x) & np.isfinite(y),
+        }
+    )
+    observation, _, method = analyze_sample(
+        raw,
+        sample_no=sample_no,
+        source_id=f"SJW46_temp={sources.temperature_c}",
+        centroid_method="stored_standard_centroid_reconstructed_from_centered_output",
+        frame_period_s=float(np.median(positive_dt)),
+        timestamp_quantum_s=1e-6,
+        identity="one original AVI per cell; no track switching assumed",
+    )
+    if not np.array_equal(
+        observation["source_frame_1based"].to_numpy(int), stored["source_frame_1based"].to_numpy(int)
+    ) or not np.allclose(observation["time_sec"], time, equal_nan=True):
+        raise ValueError("local_conic output changed source frame or timestamp identity")
+    frame = stored.copy()
+    frame["stored_center_x_um"] = stored["center_x_um"]
+    frame["stored_center_y_um"] = stored["center_y_um"]
+    frame["center_x_um"] = observation["center_x_um"].to_numpy(float)
+    frame["center_y_um"] = observation["center_y_um"].to_numpy(float)
+    frame["centered_x_um"] = x - frame["center_x_um"]
+    frame["centered_y_um"] = y - frame["center_y_um"]
+    frame["radius_um"] = np.hypot(frame["centered_x_um"], frame["centered_y_um"])
+    frame["local_conic_center_status"] = observation["center_status"].to_numpy()
+    frame["local_conic_center_estimate_status"] = observation["center_estimate_status"].to_numpy()
+    frame["local_conic_center_estimate_reason"] = observation["center_estimate_reason"].to_numpy()
+    frame["local_conic_center_estimate_window_s"] = observation["center_estimate_window_s"].to_numpy()
+    frame["local_conic_center_estimate_degree"] = observation["center_estimate_degree"].to_numpy()
+    frame["local_conic_center_review_required"] = observation["center_review_required"].to_numpy()
+    return frame, method
 
 
 def orbit_kinematics(frame: pd.DataFrame) -> pd.DataFrame:
