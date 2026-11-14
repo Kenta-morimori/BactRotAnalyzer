@@ -6,6 +6,9 @@ import argparse
 import json
 import shutil
 import sys
+from concurrent.futures import ProcessPoolExecutor
+from contextlib import nullcontext
+from itertools import repeat
 from pathlib import Path
 
 import matplotlib
@@ -281,73 +284,79 @@ def compare_center_methods(summary: pd.DataFrame, baseline_path: Path, destinati
     plt.close(fig)
 
 
-def run(source_root: Path, config_root: Path, destination: Path, *, center_mode: str = "stored") -> None:
+def run(
+    source_root: Path, config_root: Path, destination: Path, *, center_mode: str = "stored", workers: int = 4
+) -> None:
     if center_mode not in {"stored", "local_conic"}:
         raise ValueError(center_mode)
+    if workers < 1:
+        raise ValueError("workers must be positive")
     destination.mkdir(parents=True, exist_ok=True)
     summaries = []
     all_ratios = []
-    for temp in TEMPERATURES_C:
-        sources = read_sources(source_root, config_root, temp)
-        folder = destination / f"{temp}C"
-        tables = folder / "tables"
-        tables.mkdir(parents=True, exist_ok=True)
-        print(f"{temp}°C: {sources.sample_count} cells", flush=True)
-        for no in range(1, sources.sample_count + 1):
-            stem = f"No.{no:02d}"
-            raw, method = (
-                local_conic_coordinates(sources, no)
-                if center_mode == "local_conic"
-                else (cell_coordinates(sources, no), None)
+    pool_context = ProcessPoolExecutor(max_workers=workers) if center_mode == "local_conic" else nullcontext(None)
+    with pool_context as pool:
+        for temp in TEMPERATURES_C:
+            sources = read_sources(source_root, config_root, temp)
+            folder = destination / f"{temp}C"
+            tables = folder / "tables"
+            tables.mkdir(parents=True, exist_ok=True)
+            print(f"{temp}°C: {sources.sample_count} cells", flush=True)
+            coordinates = (
+                pool.map(local_conic_coordinates, repeat(sources), range(1, sources.sample_count + 1))
+                if pool is not None
+                else ((cell_coordinates(sources, no), None) for no in range(1, sources.sample_count + 1))
             )
-            frame, spectra, ratios, fft_metadata = analyze_cell(raw)
-            summary = cell_summary(frame, ratios, temp, no)
-            if center_mode == "local_conic":
-                status = frame["local_conic_center_status"]
-                summary["local_conic_center_valid_count"] = int(
-                    frame[["center_x_um", "center_y_um"]].notna().all(axis=1).sum()
+            for no, (raw, method) in enumerate(coordinates, start=1):
+                stem = f"No.{no:02d}"
+                frame, spectra, ratios, fft_metadata = analyze_cell(raw)
+                summary = cell_summary(frame, ratios, temp, no)
+                if center_mode == "local_conic":
+                    status = frame["local_conic_center_status"]
+                    summary["local_conic_center_valid_count"] = int(
+                        frame[["center_x_um", "center_y_um"]].notna().all(axis=1).sum()
+                    )
+                    summary["local_conic_direct_count"] = int((status == "direct").sum())
+                    summary["local_conic_short_interpolation_count"] = int((status == "short_interpolation").sum())
+                    shift = np.hypot(
+                        frame["center_x_um"] - frame["stored_center_x_um"],
+                        frame["center_y_um"] - frame["stored_center_y_um"],
+                    )
+                    summary["mean_center_shift_um"] = float(shift.mean())
+                summary["plot_file"] = f"{temp}C/{stem}.png"
+                summary["series_file"] = f"{temp}C/tables/{stem}_time_series.csv"
+                summary["fft_file"] = f"{temp}C/tables/{stem}_fft.csv"
+                summary["ratio_file"] = f"{temp}C/tables/{stem}_band_amplitude_ratio.csv"
+                summaries.append(summary)
+                ratios.insert(0, "sample_no", no)
+                ratios.insert(0, "temperature_c", temp)
+                all_ratios.append(ratios)
+                frame.to_csv(tables / f"{stem}_time_series.csv", index=False)
+                spectra.to_csv(tables / f"{stem}_fft.csv", index=False)
+                ratios.to_csv(tables / f"{stem}_band_amplitude_ratio.csv", index=False)
+                (tables / f"{stem}_metadata.json").write_text(
+                    json.dumps(
+                        {
+                            "temperature_c": temp,
+                            "sample_no": no,
+                            "configured_frame_rate_hz": sources.frame_rate_hz,
+                            "fft_timebase": fft_metadata,
+                            "centroid_source": "source centroid_coordinate.csv stores centroid minus corrected rotation center in um",
+                            "angle_definition": "atan2(-centered_y, centered_x), wrapped to [-pi,pi), CCW positive",
+                            "velocity_definition": "shortest wrapped phase increment / actual timestamp difference; abs for speed",
+                            "fluctuation_definition": "Gaussian-window SD(abs(omega))/Mean(abs(omega)), one-frame slide",
+                            "relative_strength_definition": "mean FFT amplitude at 0<f<1 Hz / mean FFT amplitude at 80<=f<100 Hz",
+                            "center_method": center_mode,
+                            "local_conic_method": method,
+                        },
+                        indent=2,
+                        allow_nan=True,
+                    )
+                    + "\n",
+                    encoding="utf-8",
                 )
-                summary["local_conic_direct_count"] = int((status == "direct").sum())
-                summary["local_conic_short_interpolation_count"] = int((status == "short_interpolation").sum())
-                shift = np.hypot(
-                    frame["center_x_um"] - frame["stored_center_x_um"],
-                    frame["center_y_um"] - frame["stored_center_y_um"],
-                )
-                summary["mean_center_shift_um"] = float(shift.mean())
-            summary["plot_file"] = f"{temp}C/{stem}.png"
-            summary["series_file"] = f"{temp}C/tables/{stem}_time_series.csv"
-            summary["fft_file"] = f"{temp}C/tables/{stem}_fft.csv"
-            summary["ratio_file"] = f"{temp}C/tables/{stem}_band_amplitude_ratio.csv"
-            summaries.append(summary)
-            ratios.insert(0, "sample_no", no)
-            ratios.insert(0, "temperature_c", temp)
-            all_ratios.append(ratios)
-            frame.to_csv(tables / f"{stem}_time_series.csv", index=False)
-            spectra.to_csv(tables / f"{stem}_fft.csv", index=False)
-            ratios.to_csv(tables / f"{stem}_band_amplitude_ratio.csv", index=False)
-            (tables / f"{stem}_metadata.json").write_text(
-                json.dumps(
-                    {
-                        "temperature_c": temp,
-                        "sample_no": no,
-                        "configured_frame_rate_hz": sources.frame_rate_hz,
-                        "fft_timebase": fft_metadata,
-                        "centroid_source": "source centroid_coordinate.csv stores centroid minus corrected rotation center in um",
-                        "angle_definition": "atan2(-centered_y, centered_x), wrapped to [-pi,pi), CCW positive",
-                        "velocity_definition": "shortest wrapped phase increment / actual timestamp difference; abs for speed",
-                        "fluctuation_definition": "Gaussian-window SD(abs(omega))/Mean(abs(omega)), one-frame slide",
-                        "relative_strength_definition": "mean FFT amplitude at 0<f<1 Hz / mean FFT amplitude at 80<=f<100 Hz",
-                        "center_method": center_mode,
-                        "local_conic_method": method,
-                    },
-                    indent=2,
-                    allow_nan=True,
-                )
-                + "\n",
-                encoding="utf-8",
-            )
-            cell_figure(frame, spectra, ratios, summary, folder / f"{stem}.png", sources.frame_rate_hz)
-            print(f"  No.{no:02d} done", flush=True)
+                cell_figure(frame, spectra, ratios, summary, folder / f"{stem}.png", sources.frame_rate_hz)
+                print(f"  No.{no:02d} done", flush=True)
     summary_frame = pd.DataFrame(summaries)
     ratio_frame = pd.concat(all_ratios, ignore_index=True)
     summary_frame.to_csv(destination / "cell_summary.csv", index=False)
@@ -392,6 +401,7 @@ def main() -> None:
         "--output-root", type=Path, default=ROOT / "outputs" / "poster_fluctuation" / "3_Temperature_Control"
     )
     parser.add_argument("--center-mode", choices=("stored", "local_conic"), default="stored")
+    parser.add_argument("--workers", type=int, default=4, help="parallel local_conic cell fits")
     args = parser.parse_args()
     source_root, config_root, output_root = (
         args.source_root.resolve(),
@@ -404,7 +414,7 @@ def main() -> None:
     if args.center_mode == "local_conic":
         inputs.append(source_root / "poster_fluctuation" / "3_Temperature_Control" / "cell_summary.csv")
     with analysis_run(parameters=vars(args), inputs=inputs, outputs=[output_root]) as run_root:
-        run(source_root, config_root, output_root, center_mode=args.center_mode)
+        run(source_root, config_root, output_root, center_mode=args.center_mode, workers=args.workers)
     archive = output_root / "_run_records" / run_root.parent.name / run_root.name
     archive.mkdir(parents=True, exist_ok=False)
     shutil.copy2(run_root / "manifest.json", archive / "manifest.json")
