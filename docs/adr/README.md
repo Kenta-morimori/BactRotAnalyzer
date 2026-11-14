@@ -14,7 +14,11 @@
 | [0011](0011-poster-fixed-band-ratio.md) | ポスター解析の共通周波数帯による強度比と候補細胞比較 |
 | [0012](0012-poster-band-components-and-steady-simulation.md) | Low・Low−Highの追加と非周期角速度の合成条件 |
 | [0013](0013-poster-angle-noise-controls.md) | 合成対照を長軸角の直接生成に統一し、座標・周回角を除く |
+| [0014](0014-poster-one-over-f-amplitude-surrogates.md) | 0.5秒窓FFT振幅の1/f形フィットと乱数位相の逆FFT |
+| [0015](0015-poster-spectrum-envelope-fit.md) | 0.5秒窓FFT振幅の可変指数包絡フィット（0014のフィットを置換） |
+| [0016](0016-poster-equal-frequency-fit.md) | ポスターFFT振幅を1 Hz等幅帯域の中央値へフィット（0015の主フィットを置換） |
 | [0017](0017-poster-empirical-speed-controls.md) | 3候補の速度平均・SDに校正した角度誤差と独立速度ノイズの比較 |
+| [0018](0018-poster-five-case-comparison.md) | 3実測＋2合成の0.5秒窓FFT振幅比較 |
 | [0019](0019-poster-direct-speed-control.md) | 独立速度ノイズ対照を角度なしで直接解析する |
 | [0020](0020-poster-simulation-duration-extension.md) | 合成対照に30秒系列を追加し6秒出力を保持する |
 
