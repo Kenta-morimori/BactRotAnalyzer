@@ -1,6 +1,6 @@
 # 0.5秒窓FFT振幅の包絡フィットと逆FFT
 
-[ADR 0016](../adr/0016-poster-equal-frequency-fit.md)と[ADR 0018](../adr/0018-poster-five-case-comparison.md)に従い、実測候補3細胞と合成対照2条件を同じ15パネル図に並べる。既存の長軸角・揺らぎ解析が保存したCSVとJSONを入力とし、元AVIやTIFFは再処理しない。実測由来の図・時系列・係数はGit管理外のローカル出力にのみ置く。
+[ADR 0016](../adr/0016-poster-equal-frequency-fit.md)と[ADR 0018](../adr/0018-poster-five-case-comparison.md)に従い、実測候補3細胞と合成対照2条件を同じ15パネル図に並べる。前段の長軸角・直接速度の揺らぎ解析が保存したCSVとJSONを入力とし、元AVIやTIFFは再処理しない。実測由来の図・時系列・係数はGit管理外のローカル出力にのみ置く。
 
 先に [`09_poster_fluctuation.py`](../../scripts/09_poster_fluctuation.py) の実測・合成解析を完了し、cleanなコミットから次を実行する。
 

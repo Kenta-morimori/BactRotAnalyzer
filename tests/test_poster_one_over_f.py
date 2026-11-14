@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 
 from utils.functions.frequency_analysis import fft
-from utils.functions.poster_fluctuation import synthetic_long_axis
+from utils.functions.poster_fluctuation import synthetic_control
 from utils.functions.poster_one_over_f import (
     amplitude_envelope,
     equal_frequency_bins,
@@ -116,7 +116,7 @@ def test_five_case_output_uses_saved_0_5s_fft_and_15_panels(tmp_path, monkeypatc
     analysis_script = runpy.run_path(
         str(Path(__file__).resolve().parents[1] / "scripts/09_poster_fluctuation.py"), run_name="poster_input_test"
     )
-    source = synthetic_long_axis(
+    source = synthetic_control(
         "constant_angle_step_plus_noise",
         100,
         2,
