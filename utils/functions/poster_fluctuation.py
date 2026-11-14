@@ -201,7 +201,7 @@ def analyze(time: np.ndarray, omega: np.ndarray, windows: tuple[float, ...] = WI
     return SeriesResult(frame, pd.concat(spectra, ignore_index=True), metadata)
 
 
-def synthetic_long_axis(
+def synthetic_control(
     model: str,
     rate_hz: float,
     duration_s: float,
@@ -210,13 +210,7 @@ def synthetic_long_axis(
     mean_angular_speed_rad_s: float,
     angular_speed_sd_rad_s: float,
 ) -> pd.DataFrame:
-    """Make distinct angle-error and independent speed-error controls.
-
-    Both controls are reported through the observed 180-degree long-axis path.
-    The angle-error SD is chosen so its differenced speed has the requested SD
-    before folding/absolute value; the speed-error control uses that SD on
-    independent frame intervals and integrates it to an angle.
-    """
+    """Generate an angle-error control or a direct independent-speed control."""
     if model not in ("constant_angle_step_plus_noise", "random_speed_noise"):
         raise ValueError(model)
     if (
@@ -232,27 +226,30 @@ def synthetic_long_axis(
         raise ValueError("Finite positive rate, duration, and mean speed; nonnegative speed SD required")
     count = int(rate_hz * duration_s)
     if count < 3:
-        raise ValueError("At least three angle observations are required")
+        raise ValueError("At least three observations are required")
     time = np.arange(count, dtype=float) / rate_hz
     rng = np.random.default_rng(seed)
-    baseline_angle = mean_angular_speed_rad_s * time
-    angle_noise = np.full(count, np.nan)
-    speed_noise = np.full(count, np.nan)
+    common = {"source_frame_1based": np.arange(1, count + 1), "time_sec": time}
     if model == "constant_angle_step_plus_noise":
+        baseline_angle = mean_angular_speed_rad_s * time
         angle_noise_sd = angular_speed_sd_rad_s / (np.sqrt(2.0) * rate_hz)
         angle_noise = rng.normal(0.0, angle_noise_sd, count)
         observed_angle = baseline_angle + angle_noise
-    else:
-        speed_noise[1:] = rng.normal(0.0, angular_speed_sd_rad_s, count - 1)
-        observed_angle = np.r_[0.0, np.cumsum((mean_angular_speed_rad_s + speed_noise[1:]) / rate_hz)]
+        return pd.DataFrame(
+            {
+                **common,
+                "long_axis_deg": (-np.rad2deg(observed_angle)) % 180.0,
+                "axis_ratio": np.full(count, np.nan),
+                "baseline_angle_rad": baseline_angle,
+                "angle_noise_rad": angle_noise,
+            }
+        )
+    speed_noise = np.full(count, np.nan)
+    speed_noise[1:] = rng.normal(0.0, angular_speed_sd_rad_s, count - 1)
     return pd.DataFrame(
         {
-            "source_frame_1based": np.arange(1, count + 1),
-            "time_sec": time,
-            "long_axis_deg": (-np.rad2deg(observed_angle)) % 180.0,
-            "axis_ratio": np.full(count, np.nan),
-            "baseline_angle_rad": baseline_angle,
-            "angle_noise_rad": angle_noise,
+            **common,
+            "direct_omega_rad_s": mean_angular_speed_rad_s + speed_noise,
             "speed_noise_rad_s": speed_noise,
         }
     )

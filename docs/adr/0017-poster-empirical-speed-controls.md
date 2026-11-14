@@ -2,7 +2,7 @@
 
 ## 状態
 
-2026-11-14 採用。Issue #82、PR #83。[ADR 0013](0013-poster-angle-noise-controls.md)の合成モデルと校正値を置き換える。実測の長軸角測定、Gaussian窓、FFT、固定帯域比は維持する。
+2026-11-14 採用。同日[ADR 0019](0019-poster-direct-speed-control.md)で独立速度ノイズの角度積分・再差分を置き換えた。Issue #82、PR #83。[ADR 0013](0013-poster-angle-noise-controls.md)の合成モデルと校正値を置き換える。実測の長軸角測定、Gaussian窓、FFT、固定帯域比は維持する。
 
 ## 判断
 

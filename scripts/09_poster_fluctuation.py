@@ -27,7 +27,7 @@ from utils.functions.poster_fluctuation import (  # noqa: E402
     band_amplitude_ratios,
     duplicate_source_map,
     major_axis_deg,
-    synthetic_long_axis,
+    synthetic_control,
 )
 from utils.run_context import analysis_run  # noqa: E402
 
@@ -92,12 +92,18 @@ def read_avi(path: Path, settings: dict) -> pd.DataFrame:
 
 def analyze_frame(source: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, pd.DataFrame], dict]:
     time = source["time_sec"].to_numpy(float)
-    axis = source["long_axis_deg"].to_numpy(float)
-    long_angle, long_omega = axis_angular_velocity(time, axis)
+    direct_speed = "direct_omega_rad_s" in source
+    if direct_speed:
+        long_omega = source["direct_omega_rad_s"].to_numpy(float)
+        axis = np.full(len(source), np.nan)
+    else:
+        axis = source["long_axis_deg"].to_numpy(float)
+        long_angle, long_omega = axis_angular_velocity(time, axis)
     long_result = analyze(time, long_omega)
     frame = source.copy()
-    frame["long_axis_unwrapped_rad"] = long_angle
-    frame["long_axis_phase_rad"] = (long_angle + np.pi) % (2 * np.pi) - np.pi
+    if not direct_speed:
+        frame["long_axis_unwrapped_rad"] = long_angle
+        frame["long_axis_phase_rad"] = (long_angle + np.pi) % (2 * np.pi) - np.pi
     frame["long_axis_omega_rad_s"] = long_omega
     frame["long_axis_abs_omega_rad_s"] = np.abs(long_omega)
     for column in long_result.frame.columns:
@@ -105,14 +111,16 @@ def analyze_frame(source: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, pd.Data
             frame[f"long_axis_{column}"] = long_result.frame[column]
     spectra = {"long_axis": long_result.spectra}
     valid_axis = int(np.isfinite(long_omega).sum())
-    ratios = source["axis_ratio"].to_numpy(float)
+    ratios = source["axis_ratio"].to_numpy(float) if "axis_ratio" in source else np.full(len(source), np.nan)
     finite_ratios = ratios[np.isfinite(ratios)]
     raw_delta = (np.diff(axis) + 90.0) % 180.0 - 90.0
     finite_delta = np.abs(raw_delta[np.isfinite(raw_delta)])
     info = {
         "frame_count": len(frame),
         "detected_count": (
-            int(np.isfinite(source["x_um"].to_numpy(float)).sum()) if "x_um" in source else int(np.isfinite(axis).sum())
+            int(np.isfinite(source["x_um"].to_numpy(float)).sum())
+            if "x_um" in source
+            else (int(np.isfinite(axis).sum()) if not direct_speed else np.nan)
         ),
         "long_axis_omega_count": valid_axis,
         "long_axis_omega_fraction": valid_axis / max(1, len(frame) - 1),
@@ -121,7 +129,12 @@ def analyze_frame(source: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, pd.Data
         "axis_ratio_p10": float(np.percentile(finite_ratios, 10)) if len(finite_ratios) else np.nan,
         "axis_step_abs_deg_p95": float(np.percentile(finite_delta, 95)) if len(finite_delta) else np.nan,
         "long_axis_fft": long_result.metadata,
-        "angle_warning": "The unoriented long axis has a 180-degree ambiguity; angular changes of >=90 degrees per sample are not identifiable.",
+        "angular_velocity_source": "direct_generated_speed" if direct_speed else "long_axis_angle_difference",
+        "angle_warning": (
+            "No angle is generated for this direct-speed control."
+            if direct_speed
+            else "The unoriented long axis has a 180-degree ambiguity; angular changes of >=90 degrees per sample are not identifiable."
+        ),
     }
     return frame, spectra, info
 
@@ -201,21 +214,24 @@ def figure(
     phase_ax, signed_ax, absolute_ax = axes[1 if measured else 0]
     stats_axes = axes[2 if measured else 1]
     band_axes = axes[3 if measured else 2]
-    phase_t, phase = wrapped_phase_plot(t, frame["long_axis_phase_rad"].to_numpy(float))
-    phase_ax.plot(phase_t, phase, linewidth=0.7)
-    phase_ax.set(
-        xlabel="Time (s)",
-        ylabel="Relative phase (rad, CCW +)",
-        title="Inferred phase (180° axis ambiguity)",
-    )
-    if not measured and frame["baseline_angle_rad"].eq(0).all():
-        phase_limit = max(0.01, 1.1 * np.nanmax(np.abs(phase)))
-        phase_ax.set_ylim(-phase_limit, phase_limit)
+    direct_speed = "direct_omega_rad_s" in frame
+    if direct_speed:
+        phase_ax.set(title="Angle not generated (direct speed input)")
+        phase_ax.set_xticks([])
+        phase_ax.set_yticks([])
     else:
+        phase_t, phase = wrapped_phase_plot(t, frame["long_axis_phase_rad"].to_numpy(float))
+        phase_ax.plot(phase_t, phase, linewidth=0.7)
+        phase_ax.set(
+            xlabel="Time (s)",
+            ylabel="Relative phase (rad, CCW +)",
+            title="Inferred phase (180° axis ambiguity)",
+        )
         phase_ax.set_ylim(-np.pi, np.pi)
         phase_ax.set_yticks([-np.pi, -np.pi / 2, 0, np.pi / 2, np.pi], ["−π", "−π/2", "0", "π/2", "π"])
-    signed_ax.plot(t, frame["long_axis_omega_rad_s"], linewidth=0.7, label="long axis (CCW +)")
-    absolute_ax.plot(t, frame["long_axis_abs_omega_rad_s"], linewidth=0.7, label="|long axis|")
+    signal_label = "generated speed" if direct_speed else "long axis"
+    signed_ax.plot(t, frame["long_axis_omega_rad_s"], linewidth=0.7, label=f"{signal_label} (CCW +)")
+    absolute_ax.plot(t, frame["long_axis_abs_omega_rad_s"], linewidth=0.7, label=f"|{signal_label}|")
     signed_ax.set(xlabel="Time (s)", ylabel="rad/s", title="Signed angular velocity")
     absolute_ax.set(xlabel="Time (s)", ylabel="rad/s", title="Absolute angular velocity")
     signed_ax.legend()
@@ -286,6 +302,8 @@ def save_case(source: pd.DataFrame, destination: Path, stem: str, title: str, me
         raise ValueError("Frame rate disagrees with the input timebase")
     frame, spectra, info = analyze_frame(source)
     band_ratios = band_amplitude_ratios(spectra["long_axis"])
+    speed_label = "direct generated speed" if "direct_omega_rad_s" in source else "long-axis angular velocity"
+    fluctuation_label = f"z-scored Gaussian-window SD(abs({speed_label}))/Mean(abs({speed_label}))"
     destination.mkdir(parents=True, exist_ok=True)
     tables = destination / "tables"
     tables.mkdir(parents=True, exist_ok=True)
@@ -299,10 +317,10 @@ def save_case(source: pd.DataFrame, destination: Path, stem: str, title: str, me
                 **metadata,
                 **info,
                 "window_widths_s": WINDOWS_S,
-                "fft_input": "z-scored Gaussian-window SD(abs(long-axis angular velocity))/Mean(abs(long-axis angular velocity))",
+                "fft_input": fluctuation_label,
                 "fft_display_nyquist_hz": rate_hz / 2,
                 "band_ratio_definition": "mean FFT amplitude for 0 < f < 1 Hz divided by mean FFT amplitude for 80 <= f < 100 Hz",
-                "band_ratio_source": "z-scored Gaussian-window SD(abs(long-axis angular velocity))/Mean(abs(long-axis angular velocity))",
+                "band_ratio_source": fluctuation_label,
                 "band_ratio_includes_stops": metadata["kind"] == "measured",
             },
             stream,
@@ -409,7 +427,7 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
         for rate in args.synthetic_rates:
             for model in ("constant_angle_step_plus_noise", "random_speed_noise"):
                 print(f"Simulating {model} at {rate:g} Hz", flush=True)
-                source = synthetic_long_axis(
+                source = synthetic_control(
                     model,
                     rate,
                     args.synthetic_duration,
@@ -438,10 +456,10 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
                                 if model == "constant_angle_step_plus_noise"
                                 else np.nan
                             ),
-                            "angle_model": (
+                            "generation_model": (
                                 "constant angular step plus independent Gaussian angle noise"
                                 if model == "constant_angle_step_plus_noise"
-                                else "integrated independent Gaussian angular-velocity noise around measured mean"
+                                else "direct independent Gaussian angular-velocity noise around measured mean"
                             ),
                         },
                     )
@@ -449,7 +467,7 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
         null_rows = []
         for rate in args.synthetic_rates:
             for seed in range(args.seed, args.seed + args.null_replicates):
-                null_source = synthetic_long_axis(
+                null_source = synthetic_control(
                     "random_speed_noise",
                     rate,
                     args.synthetic_duration,
@@ -458,7 +476,7 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
                     angular_speed_sd_rad_s=target_sd,
                 )
                 null_time = null_source.time_sec.to_numpy(float)
-                _, null_omega = axis_angular_velocity(null_time, null_source.long_axis_deg.to_numpy(float))
+                null_omega = null_source.direct_omega_rad_s.to_numpy(float)
                 null_result = analyze(null_time, null_omega, windows=(0.2,))
                 null_rows.append(
                     {
@@ -477,7 +495,7 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
         )
         axes[0].set_xlim(0, max(args.synthetic_rates) / 2)
         axes[1].set(
-            xlabel="Peak / median amplitude, full band", ylabel="Count", title="Random angle noise: peak contrast"
+            xlabel="Peak / median amplitude, full band", ylabel="Count", title="Random speed noise: peak contrast"
         )
         for ax in axes:
             ax.legend()
@@ -538,16 +556,15 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
         stream.write(
             "Private local poster analysis from binary AVI, not source TIFF. "
             "Measured plots are 1_rotational_measurements/<day>/No.XX.png; simulations are in 2_simulation/. "
-            "Measured PNGs contain t-x, t-y, x-y; synthetic case PNGs omit coordinates. Both contain inferred relative phase wrapped to [-pi, pi), separate signed "
-            "and absolute long-axis angular velocity, all six SD/Mean windows, standardized inputs, their FFTs, "
+            "Measured PNGs contain t-x, t-y, x-y; synthetic case PNGs omit coordinates. Angle-derived cases contain inferred relative phase wrapped to [-pi, pi); the direct-speed case leaves the angle panel empty. All contain separate signed "
+            "and absolute angular velocity, all six SD/Mean windows, standardized inputs, their FFTs, "
             "and side-by-side Low/High, Low-only and Low-High mean FFT amplitude metrics for 0<f<1 Hz and 80<=f<100 Hz. "
             "Measured ratios include stops; the ratio is unavailable when either band has no bins or the high-band mean is zero. "
             "A full measured run also writes the three candidate-cell comparison PNG and table under 1_rotational_measurements/. "
             "The FFT plot extends to half the frame rate and uses a logarithmic amplitude axis. "
             "Each case's numeric series, spectra and metadata are in its sibling tables/. "
             "Both synthetic models use the equal-cell mean of absolute angular speed and equal-cell mean of within-cell SD from 20230607 No.06, 20231005 No.01 and 20231107 No.06. "
-            "The constant-step model adds independent Gaussian angle error calibrated to that speed SD; the random-speed model integrates independent Gaussian speed errors about the same mean. "
-            "Both derive reported angular velocity from the generated 180-degree long-axis angle. Defaults are 200/250 fps, 6 s, seed 81. Calibration cells are saved in 2_simulation/tables/. "
+            "The constant-step model adds independent Gaussian angle error calibrated to that speed SD and derives velocity from the generated 180-degree long-axis angle. The random-speed model directly generates independent Gaussian speed errors about the same mean, with no angle generation or integration. Defaults are 200/250 fps, 6 s, seed 81. Calibration cells are saved in 2_simulation/tables/. "
             "Each category has index.csv; "
             "1_rotational_measurements/selection_template.csv marks excluded duplicate AVIs. "
             "Long-axis angle has 180-degree ambiguity. Derived measured plots and series stay local.\n"
