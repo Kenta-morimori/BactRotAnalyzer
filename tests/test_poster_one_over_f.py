@@ -133,10 +133,10 @@ def test_five_case_output_uses_saved_0_5s_fft_and_15_panels(tmp_path, monkeypatc
         frame.to_csv(folder / f"{stem}_time_series.csv", index=False)
         spectra["long_axis"].to_csv(folder / f"{stem}_long_axis_fft.csv", index=False)
         (folder / f"{stem}_metadata.json").write_text(
-            json.dumps({"kind": "synthetic", "rate_hz": 100, "long_axis_fft": info["long_axis_fft"]}),
+            json.dumps({"kind": "synthetic", "rate_hz": 100, "duration_s": 2, "long_axis_fft": info["long_axis_fft"]}),
             encoding="utf-8",
         )
-        cases.append(script["CaseSpec"](f"case_{index}", f"Case {index}", "inputs/tables", stem, "synthetic"))
+        cases.append(script["CaseSpec"](f"case_{index}", f"Case {index}", "inputs/tables", stem, "synthetic", 100, 2))
     captured = []
     original_savefig = script["plt"].Figure.savefig
 
@@ -199,4 +199,10 @@ def test_five_case_output_uses_saved_0_5s_fft_and_15_panels(tmp_path, monkeypatc
     saved.loc[saved.window_s == 0.5, "amplitude"] *= 1.1
     saved.to_csv(folder / "case_0_long_axis_fft.csv", index=False)
     with pytest.raises(ValueError, match="saved FFT does not match"):
+        script["load_case"](tmp_path, cases[0])
+    metadata_path = folder / "case_0_metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["duration_s"] = 30
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    with pytest.raises(ValueError, match="duration disagrees"):
         script["load_case"](tmp_path, cases[0])

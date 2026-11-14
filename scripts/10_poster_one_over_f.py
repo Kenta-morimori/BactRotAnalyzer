@@ -42,6 +42,7 @@ class CaseSpec:
     stem: str
     kind: str
     expected_rate_hz: float | None = None
+    expected_duration_s: float | None = None
 
 
 CASES = (
@@ -56,19 +57,21 @@ CASES = (
     CaseSpec("20231107_No06", "20231107 No.06", "1_rotational_measurements/20231107/tables", "No.06", "measured"),
     CaseSpec(
         "constant_step",
-        "Mean step + angle noise\n200 fps",
+        "Mean step + angle noise\n6 s, 200 fps",
         "2_simulation/tables",
         "simulation_constant_angle_step_plus_noise_200hz_seed81",
         "synthetic",
         200.0,
+        6.0,
     ),
     CaseSpec(
         "random_speed",
-        "Mean speed + random speed noise\n200 fps",
+        "Mean speed + random speed noise\n6 s, 200 fps",
         "2_simulation/tables",
         "simulation_random_speed_noise_200hz_seed81",
         "synthetic",
         200.0,
+        6.0,
     ),
 )
 
@@ -93,6 +96,8 @@ def load_case(source_root: Path, case: CaseSpec) -> dict:
         raise ValueError(f"{case.key}: invalid frame rate")
     if case.expected_rate_hz is not None and not np.isclose(rate_hz, case.expected_rate_hz):
         raise ValueError(f"{case.key}: frame rate disagrees with the case specification")
+    if case.expected_duration_s is not None and not np.isclose(float(metadata["duration_s"]), case.expected_duration_s):
+        raise ValueError(f"{case.key}: duration disagrees with the case specification")
     rows = [item for item in metadata["long_axis_fft"] if np.isclose(item["window_s"], WINDOW_S)]
     if len(rows) != 1:
         raise ValueError(f"{case.key}: 0.5 s FFT segment metadata is unavailable")
