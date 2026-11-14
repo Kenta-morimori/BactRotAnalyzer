@@ -424,46 +424,49 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
         calibration, target_mean, target_sd = synthetic_calibration(destination / "1_rotational_measurements")
         tables.mkdir(parents=True, exist_ok=True)
         calibration.to_csv(tables / "simulation_calibration_cells.csv", index=False)
-        for rate in args.synthetic_rates:
-            for model in ("constant_angle_step_plus_noise", "random_speed_noise"):
-                print(f"Simulating {model} at {rate:g} Hz", flush=True)
-                source = synthetic_control(
-                    model,
-                    rate,
-                    args.synthetic_duration,
-                    args.seed,
-                    mean_angular_speed_rad_s=target_mean,
-                    angular_speed_sd_rad_s=target_sd,
-                )
-                name = f"{model}_{int(rate)}hz_seed{args.seed}"
-                rows.append(
-                    save_case(
-                        source,
-                        destination / "2_simulation",
-                        f"simulation_{name}",
-                        name,
-                        {
-                            "kind": "synthetic",
-                            "model": model,
-                            "rate_hz": rate,
-                            "duration_s": args.synthetic_duration,
-                            "seed": args.seed,
-                            "target_mean_abs_omega_rad_s": target_mean,
-                            "target_sd_abs_omega_rad_s": target_sd,
-                            "baseline_angular_velocity_rad_s": target_mean,
-                            "angle_noise_sd_rad": (
-                                target_sd / (np.sqrt(2.0) * rate)
-                                if model == "constant_angle_step_plus_noise"
-                                else np.nan
-                            ),
-                            "generation_model": (
-                                "constant angular step plus independent Gaussian angle noise"
-                                if model == "constant_angle_step_plus_noise"
-                                else "direct independent Gaussian angular-velocity noise around measured mean"
-                            ),
-                        },
+        durations = (args.synthetic_duration, *getattr(args, "additional_synthetic_durations", []))
+        for duration in durations:
+            for rate in args.synthetic_rates:
+                for model in ("constant_angle_step_plus_noise", "random_speed_noise"):
+                    print(f"Simulating {model} at {rate:g} Hz for {duration:g} s", flush=True)
+                    source = synthetic_control(
+                        model,
+                        rate,
+                        duration,
+                        args.seed,
+                        mean_angular_speed_rad_s=target_mean,
+                        angular_speed_sd_rad_s=target_sd,
                     )
-                )
+                    duration_tag = "" if duration == 6.0 else f"_{duration:g}s"
+                    name = f"{model}_{int(rate)}hz{duration_tag}_seed{args.seed}"
+                    rows.append(
+                        save_case(
+                            source,
+                            destination / "2_simulation",
+                            f"simulation_{name}",
+                            name,
+                            {
+                                "kind": "synthetic",
+                                "model": model,
+                                "rate_hz": rate,
+                                "duration_s": duration,
+                                "seed": args.seed,
+                                "target_mean_abs_omega_rad_s": target_mean,
+                                "target_sd_abs_omega_rad_s": target_sd,
+                                "baseline_angular_velocity_rad_s": target_mean,
+                                "angle_noise_sd_rad": (
+                                    target_sd / (np.sqrt(2.0) * rate)
+                                    if model == "constant_angle_step_plus_noise"
+                                    else np.nan
+                                ),
+                                "generation_model": (
+                                    "constant angular step plus independent Gaussian angle noise"
+                                    if model == "constant_angle_step_plus_noise"
+                                    else "direct independent Gaussian angular-velocity noise around measured mean"
+                                ),
+                            },
+                        )
+                    )
         null_rows = []
         for rate in args.synthetic_rates:
             for seed in range(args.seed, args.seed + args.null_replicates):
@@ -564,7 +567,7 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
             "The FFT plot extends to half the frame rate and uses a logarithmic amplitude axis. "
             "Each case's numeric series, spectra and metadata are in its sibling tables/. "
             "Both synthetic models use the equal-cell mean of absolute angular speed and equal-cell mean of within-cell SD from 20230607 No.06, 20231005 No.01 and 20231107 No.06. "
-            "The constant-step model adds independent Gaussian angle error calibrated to that speed SD and derives velocity from the generated 180-degree long-axis angle. The random-speed model directly generates independent Gaussian speed errors about the same mean, with no angle generation or integration. Defaults are 200/250 fps, 6 s, seed 81. Calibration cells are saved in 2_simulation/tables/. "
+            "The constant-step model adds independent Gaussian angle error calibrated to that speed SD and derives velocity from the generated 180-degree long-axis angle. The random-speed model directly generates independent Gaussian speed errors about the same mean, with no angle generation or integration. Defaults are 200/250 fps, 6 and 30 s, seed 81; the 40-seed null ensemble retains the 6 s primary duration. Calibration cells are saved in 2_simulation/tables/. "
             "Each category has index.csv; "
             "1_rotational_measurements/selection_template.csv marks excluded duplicate AVIs. "
             "Long-axis angle has 180-degree ambiguity. Derived measured plots and series stay local.\n"
@@ -579,11 +582,17 @@ if __name__ == "__main__":
     parser.add_argument("--output-root", default=str(ROOT / "outputs" / "poster_fluctuation"))
     parser.add_argument("--synthetic-rates", nargs="+", type=float, default=[200.0, 250.0])
     parser.add_argument("--synthetic-duration", type=float, default=6.0)
+    parser.add_argument("--additional-synthetic-durations", nargs="*", type=float, default=[30.0])
     parser.add_argument("--seed", type=int, default=81)
     parser.add_argument("--null-replicates", type=int, default=40)
     args = parser.parse_args()
     if args.null_replicates < 1:
         parser.error("--null-replicates must be positive")
+    durations = [args.synthetic_duration, *args.additional_synthetic_durations]
+    if any(not np.isfinite(duration) or duration <= 0 for duration in durations) or len(set(durations)) != len(
+        durations
+    ):
+        parser.error("Synthetic durations must be positive, finite, and distinct")
     data_root = Path(args.data_root).resolve()
     output_root = Path(args.output_root).resolve()
     files_by_day, settings_by_day = {}, {}

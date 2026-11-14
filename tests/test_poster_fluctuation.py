@@ -354,7 +354,14 @@ def test_main_routes_synthetic_plots_and_index(tmp_path, monkeypatch):
             path / f"No.{no:02d}_time_series.csv", index=False
         )
     script["main"](
-        Namespace(mode="synthetic", synthetic_rates=[200, 250], synthetic_duration=3, seed=81, null_replicates=1),
+        Namespace(
+            mode="synthetic",
+            synthetic_rates=[200, 250],
+            synthetic_duration=6,
+            additional_synthetic_durations=[3],
+            seed=81,
+            null_replicates=1,
+        ),
         {},
         {},
         tmp_path,
@@ -363,9 +370,14 @@ def test_main_routes_synthetic_plots_and_index(tmp_path, monkeypatch):
     assert (simulation / "simulation_random_speed_noise_200hz_seed81.png").is_file()
     assert (simulation / "simulation_constant_angle_step_plus_noise_250hz_seed81.png").is_file()
     assert (simulation / "simulation_random_speed_noise_250hz_seed81.png").is_file()
+    assert (simulation / "simulation_constant_angle_step_plus_noise_200hz_3s_seed81.png").is_file()
+    assert (simulation / "simulation_random_speed_noise_200hz_3s_seed81.png").is_file()
+    assert (simulation / "simulation_constant_angle_step_plus_noise_250hz_3s_seed81.png").is_file()
+    assert (simulation / "simulation_random_speed_noise_250hz_3s_seed81.png").is_file()
     assert (simulation / "simulation_random_speed_noise_ensemble.png").is_file()
     assert (simulation / "tables/simulation_random_speed_noise_ensemble.csv").is_file()
-    random_series = pd.read_csv(simulation / "tables/simulation_random_speed_noise_200hz_seed81_time_series.csv")
+    random_series = pd.read_csv(simulation / "tables/simulation_random_speed_noise_200hz_3s_seed81_time_series.csv")
+    assert len(random_series) == 600
     assert "direct_omega_rad_s" in random_series
     assert not {"long_axis_deg", "long_axis_unwrapped_rad", "long_axis_phase_rad"} & set(random_series)
     assert np.allclose(
@@ -379,18 +391,19 @@ def test_main_routes_synthetic_plots_and_index(tmp_path, monkeypatch):
     assert not list(simulation.glob("simulation_random_angle_noise_*.png"))
     index = script["pd"].read_csv(simulation / "index.csv")
     assert set(index.plot_file) == {
-        "simulation_constant_angle_step_plus_noise_200hz_seed81.png",
-        "simulation_random_speed_noise_200hz_seed81.png",
-        "simulation_constant_angle_step_plus_noise_250hz_seed81.png",
-        "simulation_random_speed_noise_250hz_seed81.png",
+        f"simulation_{model}_{rate}hz{'' if duration == 6 else f'_{duration}s'}_seed81.png"
+        for duration in (6, 3)
+        for rate in (200, 250)
+        for model in ("constant_angle_step_plus_noise", "random_speed_noise")
     }
-    assert len(index.band_ratio_file) == 4
+    assert len(index.band_ratio_file) == 8
+    assert set(index.duration_s) == {6, 3}
     assert all((simulation / path).is_file() for path in index.band_ratio_file)
     assert not any(column.startswith("orbit_") or column == "coordinate_noise_sd_um" for column in index)
     nulls = script["pd"].read_csv(simulation / "tables/simulation_random_speed_noise_ensemble.csv")
     assert set(nulls.nyquist_hz) == {100, 125}
     assert "peak_to_median_full_band" in nulls and "peak_to_median_0_20hz" not in nulls
-    assert limits == [100, 100, 125, 125]
+    assert limits == [100, 100, 125, 125] * 2
     assert (measured / "20230607/tables/No.06_time_series.csv").is_file()
 
 

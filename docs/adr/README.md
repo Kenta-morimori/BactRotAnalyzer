@@ -20,5 +20,6 @@
 | [0017](0017-poster-empirical-speed-controls.md) | 3候補の速度平均・SDに校正した角度誤差と独立速度ノイズの比較 |
 | [0018](0018-poster-five-case-comparison.md) | 3実測＋2合成の0.5秒窓FFT振幅比較 |
 | [0019](0019-poster-direct-speed-control.md) | 独立速度ノイズ対照を角度なしで直接解析する |
+| [0020](0020-poster-simulation-duration-extension.md) | 合成対照に30秒系列を追加し6秒出力を保持する |
 
 各ADRには状態、背景、決定、代替、影響・限界、検証方法を記載する。後日の方針変更は新ADRで置き換え、既存の判断を黙って書き換えない。
