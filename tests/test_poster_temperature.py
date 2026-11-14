@@ -11,6 +11,7 @@ from utils.functions.poster_temperature import (
     analyze_cell,
     cell_coordinates,
     cell_summary,
+    local_conic_coordinates,
     orbit_kinematics,
 )
 
@@ -28,6 +29,7 @@ def _source(time, centered_x, centered_y, center_x=None, center_y=None, before_x
         centered_centroid=pd.DataFrame({"x_1": centered_x, "y_1": centered_y}),
         corrected_center=pd.DataFrame({"No.1_x": center_x, "No.1_y": center_y}),
         original_center=pd.DataFrame({"No.1_x": before_x, "No.1_y": center_y}),
+        pixel_size_um=(0.02, 0.02),
     )
 
 
@@ -101,3 +103,70 @@ def test_cell_and_comparison_plots_accept_synthetic_data(tmp_path):
         groups.append(ratios.assign(temperature_c=temp, sample_no=1))
     script["comparison_figures"](pd.DataFrame(rows), pd.concat(groups), tmp_path)
     assert len(list(tmp_path.glob("compare_*.png"))) == 4
+
+
+def test_local_conic_refit_preserves_raw_centroids_and_missing_frames():
+    rate = 200
+    time = np.arange(4 * rate) / rate
+    angle = 2 * np.pi * 7 * time
+    centered_x = np.cos(angle)
+    centered_y = -np.sin(angle)
+    centered_x[400] = np.nan
+    source = _source(time, centered_x, centered_y)
+    stored = cell_coordinates(source, 1)
+    refit, method = local_conic_coordinates(source, 1)
+    assert method["centroid_method"] == "stored_standard_centroid_reconstructed_from_centered_output"
+    assert np.array_equal(refit.source_frame_1based, stored.source_frame_1based)
+    assert np.allclose(refit.time_sec, stored.time_sec)
+    assert np.allclose(refit.centroid_x_um, stored.centroid_x_um, equal_nan=True)
+    assert np.allclose(refit.centroid_y_um, stored.centroid_y_um, equal_nan=True)
+    assert refit.loc[400, ["center_x_um", "center_y_um"]].isna().all()
+    finite = refit[["center_x_um", "center_y_um"]].notna().all(axis=1)
+    assert finite.mean() > 0.8
+    assert abs(refit.loc[finite, "center_x_um"].median() - 5.0) < 0.1
+    assert abs(refit.loc[finite, "center_y_um"].median() - 7.0) < 0.1
+
+
+def test_center_method_comparison_uses_matching_cells(tmp_path):
+    script = runpy.run_path(
+        str(Path(__file__).resolve().parents[1] / "scripts/10_poster_temperature_control.py"),
+        run_name="temperature_test",
+    )
+    baseline = pd.DataFrame(
+        {
+            "temperature_c": [23],
+            "sample_no": [1],
+            "mean_absolute_angular_velocity_rad_s": [40.0],
+            "mean_rotation_radius_um": [1.0],
+            "low_to_high_amplitude_ratio_0.5s": [2.0],
+        }
+    )
+    changed = baseline.copy()
+    changed["mean_absolute_angular_velocity_rad_s"] = 42.0
+    changed["mean_rotation_radius_um"] = 1.1
+    changed["low_to_high_amplitude_ratio_0.5s"] = 4.0
+    baseline.to_csv(tmp_path / "stored.csv", index=False)
+    script["compare_center_methods"](changed, tmp_path / "stored.csv", tmp_path)
+    result = pd.read_csv(tmp_path / "compare_center_methods.csv")
+    assert result.loc[0, "delta_mean_absolute_angular_velocity_rad_s"] == 2.0
+    assert np.isclose(result.loc[0, "delta_mean_rotation_radius_um"], 0.1)
+    assert np.isclose(result.loc[0, "log10_low_high_fold_change"], np.log10(2))
+    assert (tmp_path / "compare_center_method_effect.png").exists()
+
+
+def test_cell_figure_records_unavailable_center_without_fft(tmp_path):
+    script = runpy.run_path(
+        str(Path(__file__).resolve().parents[1] / "scripts/10_poster_temperature_control.py"),
+        run_name="temperature_test",
+    )
+    time = np.arange(6 * 200) / 200
+    frame = cell_coordinates(_source(time, np.ones(len(time)), np.zeros(len(time))), 1)
+    for column in ("center_x_um", "center_y_um", "centered_x_um", "centered_y_um", "radius_um"):
+        frame[column] = np.nan
+    analyzed, spectra, ratios, _ = analyze_cell(frame)
+    summary = cell_summary(analyzed, ratios, 23, 1)
+    summary["local_conic_center_valid_count"] = 0
+    assert np.isnan(summary["mean_absolute_angular_velocity_rad_s"])
+    assert np.isnan(summary["mean_rotation_radius_um"])
+    script["cell_figure"](analyzed, spectra, ratios, summary, tmp_path / "unavailable.png", 200)
+    assert (tmp_path / "unavailable.png").stat().st_size > 1000

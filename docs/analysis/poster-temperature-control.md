@@ -15,3 +15,13 @@ python scripts/10_poster_temperature_control.py
 比較図は `compare_mean_angular_speed.png`、`compare_mean_rotation_radius.png`、`compare_low_frequency_relative_strength.png`、`compare_speed_vs_low_frequency_strength.png` の4枚。条件別の個々の細胞と細胞平均を区別する。速さ対強度は0.5秒窓比を使う。細胞間の記述的比較であり、実験反復としての有意差検定は行わない。
 
 `centroid_coordinate.csv` の座標はすでに補正後中心を引いた値（µm）である。図の絶対重心はそれに補正後中心を足して表示する。半径と角度は中心相対座標から算出する。画像y軸は下向きなので角度は `atan2(-y,x)` とし、反時計回りを正とする。実時刻のgapをまたぐ角速度と揺らぎ窓は欠測にし、図の線もgapで切る。平均速さは有効な絶対値角速度、平均半径は有効な距離のフレーム平均。固定帯域は `0<f<1 Hz` と `80<=f<100 Hz` の平均FFT振幅で、窓幅ごとの比を出す。元の中心補正の影響や追跡品質は別途確認が必要。実測由来の図・時系列・実行ログはGit管理外に保つ。
+
+## 忌避応答の局所中心法との比較
+
+[中心法比較の決定](../adr/0021-poster-temperature-local-conic-comparison.md)に従い、次のコマンドで同じ保存済み重心を忌避応答の既定 `local_conic` で再解析する。
+
+```bash
+python scripts/10_poster_temperature_control.py --center-mode local_conic
+```
+
+入力を別チェックアウトに置くときは上記と同じ `--source-root`・`--config-root` を指定する。`--output-root` は旧温度出力のルートを指し、新結果は必ずその下の `local_conic/` に入る。33細胞の図・表と4種類の温度比較図に加え、`compare_center_methods.csv` と `compare_center_method_effect.png` に旧法との差を出す。`cell_summary.csv` の中心有効数・直接推定数・短区間補間数と、細胞別時系列の中心状態を確認する。推定不能な中心は旧中心で埋めない。旧温度出力は変更しない。
