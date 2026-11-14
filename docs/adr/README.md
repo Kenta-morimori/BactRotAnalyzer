@@ -18,5 +18,6 @@
 | [0015](0015-poster-spectrum-envelope-fit.md) | 0.5秒窓FFT振幅の可変指数包絡フィット（0014のフィットを置換） |
 | [0016](0016-poster-equal-frequency-fit.md) | ポスターFFT振幅を1 Hz等幅帯域の中央値へフィット（0015の主フィットを置換） |
 | [0017](0017-poster-empirical-speed-controls.md) | 3候補の速度平均・SDに校正した角度誤差と独立速度ノイズの比較 |
+| [0018](0018-poster-five-case-comparison.md) | 3実測＋2合成の0.5秒窓FFT振幅比較 |
 
 各ADRには状態、背景、決定、代替、影響・限界、検証方法を記載する。後日の方針変更は新ADRで置き換え、既存の判断を黙って書き換えない。

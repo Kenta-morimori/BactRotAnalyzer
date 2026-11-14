@@ -111,17 +111,24 @@ def test_random_phase_inverse_fft_reproduces_saved_amplitude_even_and_odd(sample
     assert np.all((-np.pi <= phase) & (phase < np.pi))
 
 
-def test_six_case_output_uses_saved_0_5s_fft_and_18_panels(tmp_path, monkeypatch):
+def test_five_case_output_uses_saved_0_5s_fft_and_15_panels(tmp_path, monkeypatch):
     script = script_functions()
     analysis_script = runpy.run_path(
         str(Path(__file__).resolve().parents[1] / "scripts/09_poster_fluctuation.py"), run_name="poster_input_test"
     )
-    source = synthetic_long_axis("constant_angle_step_plus_noise", 100, 2, 84)
+    source = synthetic_long_axis(
+        "constant_angle_step_plus_noise",
+        100,
+        2,
+        84,
+        mean_angular_speed_rad_s=30.0,
+        angular_speed_sd_rad_s=5.0,
+    )
     frame, spectra, info = analysis_script["analyze_frame"](source)
     folder = tmp_path / "inputs/tables"
     folder.mkdir(parents=True)
     cases = []
-    for index in range(6):
+    for index in range(5):
         stem = f"case_{index}"
         frame.to_csv(folder / f"{stem}_time_series.csv", index=False)
         spectra["long_axis"].to_csv(folder / f"{stem}_long_axis_fft.csv", index=False)
@@ -140,20 +147,20 @@ def test_six_case_output_uses_saved_0_5s_fft_and_18_panels(tmp_path, monkeypatch
     monkeypatch.setattr(script["plt"].Figure, "savefig", capture)
     output = tmp_path / "output"
     script["generate"](tmp_path, output, 84, tuple(cases))
-    assert (output / "six_case_one_over_f_0.5s.png").is_file()
-    assert len(captured) == 1 and len(captured[0].axes) == 18
-    assert all(captured[0].axes[6 + column].get_yscale() == "log" for column in range(6))
+    assert (output / "five_case_one_over_f_0.5s.png").is_file()
+    assert len(captured) == 1 and len(captured[0].axes) == 15
+    assert all(captured[0].axes[5 + column].get_yscale() == "log" for column in range(5))
     assert all(not axis.collections and axis.get_legend() is None for axis in captured[0].axes)
     assert all(
         axis.xaxis.label.get_fontsize() >= 16 and axis.yaxis.label.get_fontsize() >= 16 for axis in captured[0].axes
     )
     assert all(axis.xaxis.get_ticklabels()[0].get_fontsize() >= 14 for axis in captured[0].axes)
-    plotted_fit = captured[0].axes[6].lines[1].get_ydata()
+    plotted_fit = captured[0].axes[5].lines[1].get_ydata()
     saved_fit = pd.read_csv(output / "tables/case_0_fit.csv")["fitted_fft_amplitude"].to_numpy()
     assert np.allclose(plotted_fit, saved_fit, rtol=1e-12, atol=1e-15)
     index = pd.read_csv(output / "index.csv")
-    assert len(index) == 6
-    assert index.phase_seed.tolist() == list(range(84, 90))
+    assert len(index) == 5
+    assert index.phase_seed.tolist() == list(range(84, 89))
     assert all((output / path).is_file() for path in index.fit_file)
     assert all((output / path).is_file() for path in index.fit_bins_file)
     assert all((output / path).is_file() for path in index.inverse_fft_file)

@@ -1,4 +1,4 @@
-"""Local six-case FFT-amplitude envelope fits and random-phase inverse FFT figures."""
+"""Local five-case FFT-amplitude envelope fits and random-phase inverse FFT figures."""
 
 import argparse
 import json
@@ -46,7 +46,6 @@ class CaseSpec:
 
 CASES = (
     CaseSpec("20230607_No06", "20230607 No.06", "1_rotational_measurements/20230607/tables", "No.06", "measured"),
-    CaseSpec("20230607_No08", "20230607 No.08", "1_rotational_measurements/20230607/tables", "No.08", "measured"),
     CaseSpec(
         "20231005_No01",
         "20231005 No.01\n(stops included)",
@@ -57,17 +56,17 @@ CASES = (
     CaseSpec("20231107_No06", "20231107 No.06", "1_rotational_measurements/20231107/tables", "No.06", "measured"),
     CaseSpec(
         "constant_step",
-        "8 Hz step + angle noise\n200 fps",
+        "Mean step + angle noise\n200 fps",
         "2_simulation/tables",
         "simulation_constant_angle_step_plus_noise_200hz_seed81",
         "synthetic",
         200.0,
     ),
     CaseSpec(
-        "random_angle",
-        "Random angle noise\n200 fps",
+        "random_speed",
+        "Mean speed + random speed noise\n200 fps",
         "2_simulation/tables",
-        "simulation_random_angle_noise_200hz_seed81",
+        "simulation_random_speed_noise_200hz_seed81",
         "synthetic",
         200.0,
     ),
@@ -381,9 +380,9 @@ def generate(source_root: Path, output_root: Path, phase_seed: int, cases: tuple
             }
         )
     pd.DataFrame(summary).to_csv(output_root / "index.csv", index=False)
-    draw_comparison(loaded, output_root / "six_case_one_over_f_0.5s.png")
+    draw_comparison(loaded, output_root / "five_case_one_over_f_0.5s.png")
     (output_root / "README.txt").write_text(
-        "Private local comparison for four measured cells and two synthetic angle controls. "
+        "Private local comparison for three measured cells and two synthetic angle-derived controls. "
         "Row 1 is the raw 0.5 s Gaussian-window SD/Mean on original observation times. "
         "Row 2 fits the z-scored SD/Mean FFT amplitude with A*((f+delta_f)/1 Hz)^(-alpha), "
         "where delta_f is the first positive FFT frequency. Equal-width 1 Hz frequency bands summarize the "
@@ -395,6 +394,16 @@ def generate(source_root: Path, output_root: Path, phase_seed: int, cases: tuple
         "Seeds and fit diagnostics are in index.csv. Measured results must remain local.\n",
         encoding="utf-8",
     )
+    for obsolete in (
+        "six_case_one_over_f_0.5s.png",
+        "fit_sensitivity_20230607_No08_0.5s.png",
+        "fit_equal_hz_20230607_No08_0.5s.png",
+    ):
+        (output_root / obsolete).unlink(missing_ok=True)
+    for obsolete_file in tables.glob("20230607_No08_*.csv"):
+        obsolete_file.unlink()
+    for obsolete_file in tables.glob("random_angle_*.csv"):
+        obsolete_file.unlink()
 
 
 if __name__ == "__main__":
