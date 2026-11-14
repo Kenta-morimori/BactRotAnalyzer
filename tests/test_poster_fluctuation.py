@@ -18,6 +18,17 @@ from utils.functions.poster_fluctuation import (
 )
 
 
+def synthetic_case(model, rate=200, duration=6, seed=81, mean=53.0, sd=23.4):
+    return synthetic_long_axis(
+        model,
+        rate,
+        duration,
+        seed,
+        mean_angular_speed_rad_s=mean,
+        angular_speed_sd_rad_s=sd,
+    )
+
+
 def test_long_axis_angular_velocity_recovers_after_missing_frame_without_crossing_it():
     time = np.arange(6) / 200.0
     axis = np.array([10.0, 20.0, np.nan, 40.0, 50.0, 60.0])
@@ -31,10 +42,10 @@ def test_long_axis_angular_velocity_recovers_after_missing_frame_without_crossin
 
 
 def test_long_axis_sign_on_known_ccw_motion():
-    frame = synthetic_long_axis("constant_angle_step_plus_noise", 200, 6, 81, angle_noise_sd_rad=0)
+    frame = synthetic_case("constant_angle_step_plus_noise", sd=0)
     time = frame.time_sec.to_numpy(float)
     _, omega_axis = axis_angular_velocity(time, frame.long_axis_deg.to_numpy(float))
-    assert np.allclose(omega_axis[1:], 2 * np.pi * 8, atol=1e-10)
+    assert np.allclose(omega_axis[1:], 53.0, atol=1e-10)
     assert not any(column.endswith("_um") or column.startswith("orbit_") for column in frame)
 
 
@@ -100,28 +111,38 @@ def test_fixed_band_ratio_preserves_windows_when_fft_has_no_valid_segment():
     assert ratios.low_to_high_amplitude_ratio.isna().all()
 
 
-def test_random_angle_noise_is_independent_without_rotation():
-    frame = synthetic_long_axis("random_angle_noise", 200, 6, 81)
+def test_random_speed_noise_is_independent_around_measured_mean():
+    frame = synthetic_case("random_speed_noise")
     assert len(frame) == 1200
-    assert frame.baseline_angle_rad.eq(0).all()
-    assert abs(frame.angle_noise_rad.mean()) < 0.001
-    assert 0.009 < frame.angle_noise_rad.std() < 0.011
-    assert abs(frame.angle_noise_rad.autocorr()) < 0.1
+    assert np.allclose(np.diff(frame.baseline_angle_rad), 53 / 200)
+    assert frame.angle_noise_rad.isna().all()
+    assert abs(frame.speed_noise_rad_s.mean()) < 2
+    assert 21 < frame.speed_noise_rad_s.std() < 26
+    assert abs(frame.speed_noise_rad_s.autocorr()) < 0.1
+    _, speed = axis_angular_velocity(frame.time_sec.to_numpy(float), frame.long_axis_deg.to_numpy(float))
+    assert np.allclose(speed[1:], 53 + frame.speed_noise_rad_s.to_numpy(float)[1:], atol=1e-10)
+    assert abs(np.nanmean(np.abs(speed)) - 53) < 2
     assert not any(column.endswith("_um") for column in frame)
 
 
-def test_constant_angle_step_with_noise_uses_angle_difference_and_flat_window_scale():
+def test_constant_angle_step_with_noise_matches_speed_sd_and_differs_from_random_speed():
     for rate in (200, 250):
-        steady = synthetic_long_axis("constant_angle_step_plus_noise", rate, 6, 81, angle_noise_sd_rad=0)
-        assert np.allclose(np.diff(steady.baseline_angle_rad), 2 * np.pi * 8 / rate)
-        noisy = synthetic_long_axis("constant_angle_step_plus_noise", rate, 6, 81)
+        steady = synthetic_case("constant_angle_step_plus_noise", rate=rate, sd=0)
+        assert np.allclose(np.diff(steady.baseline_angle_rad), 53 / rate)
+        noisy = synthetic_case("constant_angle_step_plus_noise", rate=rate)
         time = noisy.time_sec.to_numpy(float)
         _, omega = axis_angular_velocity(time, noisy.long_axis_deg.to_numpy(float))
-        expected = 2 * np.pi * 8 + rate * np.diff(noisy.angle_noise_rad.to_numpy(float))
+        expected = 53 + rate * np.diff(noisy.angle_noise_rad.to_numpy(float))
         assert np.allclose(omega[1:], expected, atol=1e-10)
+        assert abs(np.nanmean(np.abs(omega)) - 53) < 2
+        assert abs(np.nanstd(np.abs(omega)) - 23.4) < 2
+        assert np.corrcoef(omega[1:-1], omega[2:])[0, 1] < -0.4
+        random = synthetic_case("random_speed_noise", rate=rate)
+        _, random_omega = axis_angular_velocity(time, random.long_axis_deg.to_numpy(float))
+        assert abs(np.corrcoef(random_omega[1:-1], random_omega[2:])[0, 1]) < 0.1
         result = analyze(time, omega)
         medians = [result.frame[f"sd_per_mean_{width:g}s"].median() for width in (0.1, 0.2, 0.5, 1, 1.5, 2)]
-        assert max(medians) / min(medians) < 1.2
+        assert max(medians) / min(medians) < 1.3
 
 
 def test_major_axis_mapping_from_opencv_ellipse():
@@ -157,7 +178,7 @@ def test_one_poster_png_contains_absolute_velocity_and_log_fft(tmp_path, monkeyp
     script = runpy.run_path(
         str(Path(__file__).resolve().parents[1] / "scripts/09_poster_fluctuation.py"), run_name="poster_test"
     )
-    source = synthetic_long_axis("constant_angle_step_plus_noise", 200, 6, 81)
+    source = synthetic_case("constant_angle_step_plus_noise")
     (tmp_path / "tables").mkdir()
     captured = []
     original_savefig = script["plt"].Figure.savefig
@@ -203,7 +224,7 @@ def test_main_routes_measured_plot_to_day_and_preserves_manual_selection(tmp_pat
     measured = tmp_path / "1_rotational_measurements"
     measured.mkdir()
     (measured / "selection.csv").write_text("manual decision\n", encoding="utf-8")
-    source = synthetic_long_axis("constant_angle_step_plus_noise", 200, 6, 81)
+    source = synthetic_case("constant_angle_step_plus_noise")
     source["x_um"] = 0.5 * np.cos(source.baseline_angle_rad)
     source["y_um"] = -0.5 * np.sin(source.baseline_angle_rad)
     source = source[["time_sec", "x_um", "y_um", "long_axis_deg", "axis_ratio"]]
@@ -246,7 +267,7 @@ def test_main_routes_measured_plot_to_day_and_preserves_manual_selection(tmp_pat
     assert not (tmp_path / "index.csv").exists()
 
 
-def test_candidate_band_comparison_keeps_four_cells_separate(tmp_path, monkeypatch):
+def test_candidate_band_comparison_excludes_no08(tmp_path, monkeypatch):
     script = runpy.run_path(
         str(Path(__file__).resolve().parents[1] / "scripts/09_poster_fluctuation.py"), run_name="poster_test"
     )
@@ -275,10 +296,28 @@ def test_candidate_band_comparison_keeps_four_cells_separate(tmp_path, monkeypat
     script["candidate_band_comparison"](pd.DataFrame(rows), target)
     assert target.is_file()
     assert len(captured[0].axes) == 3
-    assert all(len(ax.lines) == 4 for ax in captured[0].axes)
+    assert all(len(ax.lines) == 3 for ax in captured[0].axes)
     assert captured[0].axes[0].get_yscale() == "log"
     assert all(ax.get_yscale() == "linear" for ax in captured[0].axes[1:])
-    assert "stops included" in captured[0].axes[0].get_legend().get_texts()[2].get_text()
+    labels = [item.get_text() for item in captured[0].axes[0].get_legend().get_texts()]
+    assert all("No.08" not in label for label in labels)
+    assert "stops included" in labels[1]
+
+
+def test_synthetic_calibration_uses_equal_cell_weights(tmp_path):
+    script = runpy.run_path(
+        str(Path(__file__).resolve().parents[1] / "scripts/09_poster_fluctuation.py"), run_name="poster_test"
+    )
+    for day, no in script["POSTER_CANDIDATES"]:
+        path = tmp_path / day / "tables"
+        path.mkdir(parents=True)
+        speed = [10, 20, 30] if day == "20230607" else ([20, 30, 40] if day == "20231005" else [40, 50, 60, 50])
+        pd.DataFrame({"long_axis_abs_omega_rad_s": speed}).to_csv(path / f"No.{no:02d}_time_series.csv", index=False)
+    table, mean, sd = script["synthetic_calibration"](tmp_path)
+    assert len(table) == 3
+    assert ("20230607", 8) not in set(zip(table.day, table.sample_no))
+    assert mean == (20 + 30 + 50) / 3
+    assert sd == np.mean([np.std([10, 20, 30]), np.std([20, 30, 40]), np.std([40, 50, 60, 50])])
 
 
 def test_main_routes_synthetic_plots_and_index(tmp_path, monkeypatch):
@@ -294,8 +333,8 @@ def test_main_routes_synthetic_plots_and_index(tmp_path, monkeypatch):
             assert figure.axes[5].get_xticks()[-1] == limits[-1]
             assert figure.axes[6].get_yscale() == "log"
             assert all(ax.get_yscale() == "linear" for ax in figure.axes[7:])
-            if "random_angle_noise" in figure._suptitle.get_text():
-                assert figure.axes[0].get_ylim()[1] < 0.1
+            if "random_speed_noise" in figure._suptitle.get_text():
+                assert figure.axes[0].get_ylim() == (-np.pi, np.pi)
         return original_savefig(figure, *args, **kwargs)
 
     monkeypatch.setattr(script["plt"].Figure, "savefig", capture)
@@ -303,6 +342,14 @@ def test_main_routes_synthetic_plots_and_index(tmp_path, monkeypatch):
     (simulation / "tables").mkdir(parents=True)
     (simulation / "simulation_steady_rotation_plus_noise_200hz_seed81.png").write_bytes(b"obsolete")
     (simulation / "tables/simulation_random_only_200hz_seed81_metadata.json").write_text("obsolete")
+    (simulation / "simulation_random_angle_noise_200hz_seed81.png").write_bytes(b"obsolete")
+    measured = tmp_path / "1_rotational_measurements"
+    for day, no in script["POSTER_CANDIDATES"]:
+        path = measured / day / "tables"
+        path.mkdir(parents=True)
+        pd.DataFrame({"long_axis_abs_omega_rad_s": [40, 50, 60, 50]}).to_csv(
+            path / f"No.{no:02d}_time_series.csv", index=False
+        )
     script["main"](
         Namespace(mode="synthetic", synthetic_rates=[200, 250], synthetic_duration=3, seed=81, null_replicates=1),
         {},
@@ -310,28 +357,30 @@ def test_main_routes_synthetic_plots_and_index(tmp_path, monkeypatch):
         tmp_path,
     )
     assert (simulation / "simulation_constant_angle_step_plus_noise_200hz_seed81.png").is_file()
-    assert (simulation / "simulation_random_angle_noise_200hz_seed81.png").is_file()
+    assert (simulation / "simulation_random_speed_noise_200hz_seed81.png").is_file()
     assert (simulation / "simulation_constant_angle_step_plus_noise_250hz_seed81.png").is_file()
-    assert (simulation / "simulation_random_angle_noise_250hz_seed81.png").is_file()
-    assert (simulation / "simulation_random_angle_noise_ensemble.png").is_file()
-    assert (simulation / "tables/simulation_random_angle_noise_ensemble.csv").is_file()
+    assert (simulation / "simulation_random_speed_noise_250hz_seed81.png").is_file()
+    assert (simulation / "simulation_random_speed_noise_ensemble.png").is_file()
+    assert (simulation / "tables/simulation_random_speed_noise_ensemble.csv").is_file()
+    assert (simulation / "tables/simulation_calibration_cells.csv").is_file()
     assert not list(simulation.glob("simulation_steady_rotation_plus_noise_*.png"))
     assert not list((simulation / "tables").glob("simulation_random_only_*"))
+    assert not list(simulation.glob("simulation_random_angle_noise_*.png"))
     index = script["pd"].read_csv(simulation / "index.csv")
     assert set(index.plot_file) == {
         "simulation_constant_angle_step_plus_noise_200hz_seed81.png",
-        "simulation_random_angle_noise_200hz_seed81.png",
+        "simulation_random_speed_noise_200hz_seed81.png",
         "simulation_constant_angle_step_plus_noise_250hz_seed81.png",
-        "simulation_random_angle_noise_250hz_seed81.png",
+        "simulation_random_speed_noise_250hz_seed81.png",
     }
     assert len(index.band_ratio_file) == 4
     assert all((simulation / path).is_file() for path in index.band_ratio_file)
     assert not any(column.startswith("orbit_") or column == "coordinate_noise_sd_um" for column in index)
-    nulls = script["pd"].read_csv(simulation / "tables/simulation_random_angle_noise_ensemble.csv")
+    nulls = script["pd"].read_csv(simulation / "tables/simulation_random_speed_noise_ensemble.csv")
     assert set(nulls.nyquist_hz) == {100, 125}
     assert "peak_to_median_full_band" in nulls and "peak_to_median_0_20hz" not in nulls
     assert limits == [100, 100, 125, 125]
-    assert not (tmp_path / "1_rotational_measurements").exists()
+    assert (measured / "20230607/tables/No.06_time_series.csv").is_file()
 
 
 def test_wrapped_phase_preserves_observations_and_breaks_only_at_wrap():
