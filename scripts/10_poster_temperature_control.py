@@ -260,7 +260,7 @@ def comparison_figures(
         summary,
         "low_to_high_amplitude_ratio_0.5s",
         "0.5 s Low / High mean amplitude ratio",
-        "0.5 s low-frequency relative strength per cell",
+        "0.5 s Low/High by temperature",
     )
     ax.set_ylim(bottom=0)
     _style([ax])
