@@ -182,6 +182,7 @@ def comparison_figures(summary: pd.DataFrame, all_ratios: pd.DataFrame, root: Pa
 
     fig, ax = plt.subplots(figsize=(10, 8), constrained_layout=True)
     _condition_points(ax, summary, RADIUS, "Mean radius (µm)", "Mean rotation radius per cell")
+    ax.set_ylim(0, 1.0)
     _style([ax])
     fig.savefig(root / "compare_mean_rotation_radius.png", dpi=180)
     plt.close(fig)
@@ -205,11 +206,11 @@ def comparison_figures(summary: pd.DataFrame, all_ratios: pd.DataFrame, root: Pa
         )
     ax.set(
         xlabel="Gaussian window width (s)",
-        ylabel="Mean FFT amplitude ratio (log)",
+        ylabel="Mean FFT amplitude ratio",
         title="Low / High by window width (thin: cells; bold: cell mean)",
     )
     ax.set_xticks(WINDOWS_S)
-    ax.set_yscale("log")
+    ax.set_ylim(bottom=0)
     ax.legend()
     _style([ax])
     fig.savefig(root / "compare_low_frequency_relative_strength.png", dpi=180)
@@ -221,10 +222,10 @@ def comparison_figures(summary: pd.DataFrame, all_ratios: pd.DataFrame, root: Pa
         ax.scatter(group[SPEED], group["low_to_high_amplitude_ratio_0.5s"], s=58, color=COLORS[temp], label=f"{temp}°C")
     ax.set(
         xlabel="Mean |ω| (rad/s)",
-        ylabel="0.5 s Low / High mean amplitude ratio (log)",
+        ylabel="0.5 s Low / High mean amplitude ratio",
         title="Angular speed vs low-frequency relative strength",
     )
-    ax.set_yscale("log")
+    ax.set_ylim(bottom=0)
     ax.legend()
     _style([ax])
     fig.savefig(root / "compare_speed_vs_low_frequency_strength.png", dpi=180)
