@@ -8,7 +8,7 @@
 
 ## 決定
 
-標準回転解析CLIの既定結果先を `outputs/rotation_analysis/<day>/` とし、`--output-root` でこの親ディレクトリを指定可能にする。標準解析の時刻、中心相対重心、中心、角速度、揺らぎ、標準解析専用manifestは同じ結果先へ置く。元フレーム重心キャッシュだけは従来の `outputs/<day>/raw_centroid/<method>/` に保持し、忌避応答と共有する。忌避応答のフェーズ別出力、suffix、再実行契約は変更しない。旧標準解析結果は自動移動せず、既存の比較CLIは新しい結果先を優先し、なければ旧結果を読み取り専用で利用する。
+標準回転解析CLIの既定結果先を `outputs/rotation_analysis/<day>/` とし、`--output-root` でこの親ディレクトリを指定可能にする。標準解析の時刻、中心相対重心、中心、角速度、揺らぎ、標準解析専用manifestは同じ結果先へ置く。元フレーム重心キャッシュだけは従来の `outputs/<day>/raw_centroid/<method>/` に保持し、忌避応答と共有する。忌避応答のフェーズ別出力、suffix、再実行契約は変更しない。旧標準解析結果は自動移動せず、既存の比較CLIは新しい結果先を優先し、なければ旧結果を読み取り専用で利用する。比較図の保存先は `outputs/rotation_analysis/comparisons/<対象名>/`、温度別角速度集計は `outputs/rotation_analysis/03_av_analysis/` とし、両CLIでも `--output-root` を使用する。
 
 ## 代替
 

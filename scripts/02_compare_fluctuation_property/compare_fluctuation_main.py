@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -9,7 +10,11 @@ import pandas as pd
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 from utils import param
 from utils.features import IGNORE_PLOT_COLS, ROTATION_FEATURES, SD_WIDTH_DEPEND_COLS
-from utils.functions import rot_df_manage
+
+
+def rot_df_path(day: str, output_root: Path) -> Path:
+    current = output_root / day / "fluctuation_analysis/rot_df.csv"
+    return current if current.exists() else Path("outputs") / day / "fluctuation_analysis/rot_df.csv"
 
 
 def _get_axis(axs, idx):
@@ -84,9 +89,10 @@ def plot_rot_param_comparison(
     fig_size_x=20,
     fig_size_y=23,
     font_size=20,
+    output_root=Path("outputs/rotation_analysis"),
 ):
     # Orchestrates paging, shared scales per base feature, and final image saving.
-    save_dir = f"{param.save_dir_bef}/{save_label}"
+    save_dir = str(output_root / "comparisons" / save_label)
     os.makedirs(save_dir, exist_ok=True)
     width_time_list = param.SD_window_width_list
 
@@ -142,36 +148,36 @@ def plot_rot_param_comparison(
         fig, axs = _save_and_reset(fig, axs, page_idx, panel_idx_on_page)
 
 
-def main(day_list, plot_labels=None):
+def main(day_list, plot_labels=None, output_root=Path("outputs/rotation_analysis")):
     # Build combined dataframe across days and dispatch plotting.
     save_label = "-".join(day_list)
 
     rot_df_list = []
     for day in day_list:
-        add_rot_df = rot_df_manage.get_rot_df(day)
+        add_rot_df = pd.read_csv(rot_df_path(day, output_root))
         add_rot_df["day"] = day
         rot_df_list.append(add_rot_df)
     rot_df_all = pd.concat(rot_df_list, ignore_index=True)
 
-    plot_rot_param_comparison(day_list, rot_df_all, save_label, plot_labels=plot_labels)
+    plot_rot_param_comparison(day_list, rot_df_all, save_label, plot_labels=plot_labels, output_root=output_root)
 
 
 if __name__ == "__main__":
-    from pathlib import Path
-
     from utils.run_context import analysis_run
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--days", nargs="+", type=str, help="data labels")
     parser.add_argument("--plot-labels", nargs="+", type=str, help="data labels")
+    parser.add_argument("--output-root", type=Path, default=Path("outputs/rotation_analysis"))
 
     args = parser.parse_args()
     day_list = args.days
     plot_labels = args.plot_labels
+    output_root = args.output_root.resolve()
 
     with analysis_run(
         parameters=vars(args),
-        inputs=[Path(param.save_dir_bef) / day / "fluctuation_analysis/rot_df.csv" for day in day_list or []],
-        outputs=[Path(param.save_dir_bef) / "-".join(day_list or [])],
+        inputs=[rot_df_path(day, output_root) for day in day_list or []],
+        outputs=[output_root / "comparisons" / "-".join(day_list or [])],
     ):
-        main(day_list, plot_labels)
+        main(day_list, plot_labels, output_root)

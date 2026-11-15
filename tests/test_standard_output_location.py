@@ -54,3 +54,16 @@ def test_rotation_center_csv_uses_requested_day_and_result_root(tmp_path, monkey
     assert (result / "center_coordinate/center_coordinate.csv").exists()
     get_centroid_coordinate.save_center_of_rotation(result, "day", [[1.0, 2.0]], [[3.0, 4.0]], flag_bef_correct=True)
     assert (result / "center_coordinate/bef_correction/center_coordinate_bef_correct.csv").exists()
+
+
+def test_comparison_reader_prefers_new_result_and_can_read_legacy(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    script = Path(__file__).resolve().parents[1] / "scripts/02_compare_fluctuation_property/compare_fluctuation_main.py"
+    rot_df_path = run_path(str(script))["rot_df_path"]
+    output_root = tmp_path / "outputs/rotation_analysis"
+    legacy = Path("outputs/day/fluctuation_analysis/rot_df.csv")
+    assert rot_df_path("day", output_root) == legacy
+    current = output_root / "day/fluctuation_analysis/rot_df.csv"
+    current.parent.mkdir(parents=True)
+    current.write_text("value\n1\n")
+    assert rot_df_path("day", output_root) == current
