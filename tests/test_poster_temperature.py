@@ -104,7 +104,7 @@ def test_cell_and_comparison_plots_accept_synthetic_data(tmp_path, monkeypatch):
     figure = captured["cell.png"]
     assert figure.axes[2].get_box_aspect() == 1
     fft_ax = next(ax for ax in figure.axes if ax.get_title() == "FFT of standardized fluctuation")
-    assert len(fft_ax.lines) == 3
+    assert len(fft_ax.lines) == 4
     assert fft_ax.get_xlabel() == "Frequency [Hz]"
     assert fft_ax.get_ylabel() == "Amp"
     assert fft_ax.lines[0].get_linewidth() >= 1.4
@@ -112,10 +112,15 @@ def test_cell_and_comparison_plots_accept_synthetic_data(tmp_path, monkeypatch):
         next(ax for ax in figure.axes if ax.get_title() == "Standardized SD / Mean").get_ylabel()
         == "Standardized SD / Mean"
     )
-    assert figure.axes[-1].lines[0].get_color() == "black"
-    assert figure.axes[-1].lines[0].get_alpha() == 0.45
-    assert np.allclose(fft_ax.get_ylim(), figure.axes[-1].get_ylim())
-    assert all(ax.get_box_aspect() == 1.5 for ax in figure.axes[-4:-1])
+    assert len(figure.axes) == 14
+    assert fft_ax.lines[-1].get_color() == "black"
+    assert fft_ax.lines[-1].get_alpha() == 0.45
+    angle_fft, _ = script["wrapped_angle_spectrum"](time, frame["orbit_angle_rad"].to_numpy(float))
+    assert np.allclose(fft_ax.lines[-1].get_ydata(), angle_fft.amplitude_rad[angle_fft.amplitude_rad > 0])
+    for title in ("Gaussian-window fluctuation", "Standardized SD / Mean"):
+        ax = next(ax for ax in figure.axes if ax.get_title() == title)
+        assert np.allclose(ax.get_xlim(), (0, frame.time_sec.max()))
+    assert all(ax.get_box_aspect() == 1.5 for ax in figure.axes[-3:])
     rows = []
     groups = []
     for temp in (10, 23, 30):
