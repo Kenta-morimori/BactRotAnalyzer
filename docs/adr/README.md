@@ -18,6 +18,7 @@
 | [0017](0017-poster-empirical-speed-controls.md) | 3候補の速度平均・SDに校正した角度誤差と独立速度ノイズの比較 |
 | [0019](0019-poster-direct-speed-control.md) | 独立速度ノイズ対照を角度なしで直接解析する |
 | [0020](0020-poster-simulation-duration-extension.md) | 合成対照に30秒系列を追加し6秒出力を保持する |
+| [0021](0021-poster-temperature-local-conic-comparison.md) | SJW46温度解析で忌避応答の局所中心法を別出力として比較 |
 | [0022](0022-poster-figure-layout-and-angle-fft.md) | ポスター図の縦横比、表示3窓幅、折り返し角度FFTの右縦軸 |
 | [0023](0023-poster-candidate-comparison.md) | 代表4細胞の帯域指標の最大値正規化と角度定義の明記 |
 

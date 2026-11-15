@@ -6,6 +6,9 @@ import argparse
 import json
 import shutil
 import sys
+from concurrent.futures import ProcessPoolExecutor
+from contextlib import nullcontext
+from itertools import repeat
 from pathlib import Path
 
 import matplotlib
@@ -30,6 +33,7 @@ from utils.functions.poster_temperature import (  # noqa: E402
     analyze_cell,
     cell_coordinates,
     cell_summary,
+    local_conic_coordinates,
     read_sources,
     source_paths,
 )
@@ -164,7 +168,10 @@ def cell_figure(
     z_ax.set_xlim(0, time_max)
     fft_ax.set(xlabel="Frequency [Hz]", ylabel="Amp", title="FFT of standardized fluctuation")
     fft_ax.set_xlim(0, nominal_rate_hz / 2)
-    fft_ax.set_yscale("log")
+    if (spectra.amplitude > 0).any() or (angle_fft.amplitude_rad > 0).any():
+        fft_ax.set_yscale("log")
+    else:
+        fft_ax.text(0.5, 0.5, "No valid FFT", transform=fft_ax.transAxes, ha="center")
     for data_ax, legend_ax in ((ratio_ax, ratio_legend_ax), (z_ax, z_legend_ax)):
         legend_ax.axis("off")
         handles, labels = data_ax.get_legend_handles_labels()
@@ -188,6 +195,14 @@ def cell_figure(
     fft_legend_ax.axis("off")
     fft_legend_ax.legend(handles, labels, loc="upper left", ncol=1, frameon=False)
 
+    center_detail = (
+        f"Center-adjusted frames: {summary['corrected_center_frame_count']}"
+        if "local_conic_center_valid_count" not in summary
+        else (
+            f"Stored-center-adjusted frames: {summary['corrected_center_frame_count']}\n"
+            f"Local-conic center valid: {summary['local_conic_center_valid_count']}"
+        )
+    )
     summary_ax.axis("off")
     summary_ax.text(
         0.02,
@@ -198,7 +213,7 @@ def cell_figure(
         f"0.5 s Low/High: {summary['low_to_high_amplitude_ratio_0.5s']:.3g}\n"
         f"Valid velocity: {summary['valid_velocity_count']}/{summary['source_frame_count']} frames\n"
         f"Timestamp gaps: {summary['timestamp_gap_count']}\n"
-        f"Center-adjusted frames: {summary['corrected_center_frame_count']}",
+        f"{center_detail}",
         transform=summary_ax.transAxes,
         va="top",
         fontsize=19,
@@ -210,7 +225,11 @@ def cell_figure(
         ax.plot(ratios.loc[good, "window_s"], values[good], "-o")
         ax.set(xlabel="Gaussian window width [s]", ylabel=ylabel, title=label)
         ax.set_xticks(WINDOWS_S)
-        ax.set_yscale(scale)
+        if scale == "log":
+            if good.any():
+                ax.set_yscale("log")
+            else:
+                ax.text(0.5, 0.5, "No valid band ratio", transform=ax.transAxes, ha="center")
         ax.set_box_aspect(1.5)
         ax.tick_params(axis="x", labelrotation=45)
     _style(fig.axes)
@@ -301,13 +320,14 @@ def comparison_figures(
             ax.plot(points.loc[good, "window_s"], points.loc[good, RATIO], color=COLORS[temp], alpha=0.2, lw=0.8)
         center = group.groupby("window_s", as_index=False)[RATIO].mean()
         good = np.isfinite(center[RATIO]) & (center[RATIO] > 0)
+        valid_cells = group.loc[np.isfinite(group[RATIO]) & (group[RATIO] > 0), "sample_no"].nunique()
         ax.plot(
             center.loc[good, "window_s"],
             center.loc[good, RATIO],
             "-o",
             color=COLORS[temp],
             lw=2.5,
-            label=f"{temp}°C (n={group.sample_no.nunique()})",
+            label=f"{temp}°C (n={valid_cells})",
         )
     ax.set(
         xlabel="Gaussian window width [s]",
@@ -389,6 +409,47 @@ def comparison_figures(
         plt.close(overview)
 
 
+def compare_center_methods(summary: pd.DataFrame, baseline_path: Path, destination: Path) -> None:
+    baseline = pd.read_csv(baseline_path)
+    keys = ["temperature_c", "sample_no"]
+    if baseline.duplicated(keys).any() or summary.duplicated(keys).any():
+        raise ValueError("temperature and cell identities must be unique")
+    joined = baseline[keys + [SPEED, RADIUS, "low_to_high_amplitude_ratio_0.5s"]].merge(
+        summary,
+        on=keys,
+        how="outer",
+        suffixes=("_stored", "_local_conic"),
+        validate="one_to_one",
+        indicator=True,
+    )
+    if not (joined["_merge"] == "both").all():
+        raise ValueError("stored and local_conic cell identities differ")
+    joined = joined.drop(columns="_merge")
+    metrics = [SPEED, RADIUS, "low_to_high_amplitude_ratio_0.5s"]
+    for metric in metrics:
+        joined[f"delta_{metric}"] = joined[f"{metric}_local_conic"] - joined[f"{metric}_stored"]
+    joined["log10_low_high_fold_change"] = np.log10(
+        joined["low_to_high_amplitude_ratio_0.5s_local_conic"] / joined["low_to_high_amplitude_ratio_0.5s_stored"]
+    )
+    joined.to_csv(destination / "compare_center_methods.csv", index=False)
+    fig, axes = plt.subplots(1, 3, figsize=(19, 6), constrained_layout=True)
+    for ax, column, label in (
+        (axes[0], f"delta_{SPEED}", "Δ mean rotational speed [rad/s]"),
+        (axes[1], f"delta_{RADIUS}", "Δ mean rotational radius [µm]"),
+        (axes[2], "log10_low_high_fold_change", "log10(Low/High fold change)"),
+    ):
+        for temp in TEMPERATURES_C:
+            group = joined[joined.temperature_c == temp]
+            ax.scatter(np.full(len(group), temp), group[column], color=COLORS[temp], alpha=0.7)
+        ax.axhline(0, color="black", lw=0.8)
+        ax.set(xlabel="Temperature [°C]", ylabel=label)
+        ax.set_xticks(TEMPERATURES_C)
+    _style(axes)
+    fig.suptitle("Local conic minus stored-center analysis: cell-level changes", fontsize=19)
+    fig.savefig(destination / "compare_center_method_effect.png", dpi=180)
+    plt.close(fig)
+
+
 def radius_selection(radius_um: float, maximum_um: float | None) -> tuple[bool, str]:
     if maximum_um is None:
         return True, "included"
@@ -403,85 +464,113 @@ def run(
     source_root: Path,
     config_root: Path,
     destination: Path,
+    *,
+    center_mode: str = "stored",
+    workers: int = 4,
     max_mean_radius_um: float | None = None,
     radius_axis_max_um: float = 1.0,
     other_window_speed_plots: bool = False,
 ) -> None:
+    if center_mode not in {"stored", "local_conic"}:
+        raise ValueError(center_mode)
+    if workers < 1:
+        raise ValueError("workers must be positive")
     destination.mkdir(parents=True, exist_ok=True)
     summaries = []
     all_ratios = []
     selection = []
-    for temp in TEMPERATURES_C:
-        sources = read_sources(source_root, config_root, temp)
-        folder = destination / f"{temp}C"
-        tables = folder / "tables"
-        tables.mkdir(parents=True, exist_ok=True)
-        print(f"{temp}°C: {sources.sample_count} cells", flush=True)
-        for no in range(1, sources.sample_count + 1):
-            stem = f"No.{no:02d}"
-            raw = cell_coordinates(sources, no)
-            frame, spectra, ratios, fft_metadata = analyze_cell(raw)
-            angle_fft, angle_fft_metadata = wrapped_angle_spectrum(
-                frame["time_sec"].to_numpy(float), frame["orbit_angle_rad"].to_numpy(float)
+    pool_context = ProcessPoolExecutor(max_workers=workers) if center_mode == "local_conic" else nullcontext(None)
+    with pool_context as pool:
+        for temp in TEMPERATURES_C:
+            sources = read_sources(source_root, config_root, temp)
+            folder = destination / f"{temp}C"
+            tables = folder / "tables"
+            tables.mkdir(parents=True, exist_ok=True)
+            print(f"{temp}°C: {sources.sample_count} cells", flush=True)
+            coordinates = (
+                pool.map(local_conic_coordinates, repeat(sources), range(1, sources.sample_count + 1))
+                if pool is not None
+                else ((cell_coordinates(sources, no), None) for no in range(1, sources.sample_count + 1))
             )
-            summary = cell_summary(frame, ratios, temp, no)
-            radius = float(summary[RADIUS])
-            selected, reason = radius_selection(radius, max_mean_radius_um)
-            selection.append(
-                {
-                    "temperature_c": temp,
-                    "sample_no": no,
-                    RADIUS: radius,
-                    "selected": selected,
-                    "reason": reason,
-                }
-            )
-            if not selected:
-                print(f"  No.{no:02d} excluded: mean radius {radius:.6g} µm", flush=True)
-                continue
-            summary["plot_file"] = f"{temp}C/{stem}.png"
-            summary["center_relative_xy_plot_file"] = f"{temp}C/center_relative_xy/{stem}.png"
-            summary["series_file"] = f"{temp}C/tables/{stem}_time_series.csv"
-            summary["fft_file"] = f"{temp}C/tables/{stem}_fft.csv"
-            summary["ratio_file"] = f"{temp}C/tables/{stem}_band_amplitude_ratio.csv"
-            summary["angle_fft_file"] = f"{temp}C/tables/{stem}_wrapped_angle_fft.csv"
-            summaries.append(summary)
-            ratios.insert(0, "sample_no", no)
-            ratios.insert(0, "temperature_c", temp)
-            all_ratios.append(ratios)
-            frame.to_csv(tables / f"{stem}_time_series.csv", index=False)
-            spectra.to_csv(tables / f"{stem}_fft.csv", index=False)
-            angle_fft.to_csv(tables / f"{stem}_wrapped_angle_fft.csv", index=False)
-            ratios.to_csv(tables / f"{stem}_band_amplitude_ratio.csv", index=False)
-            (tables / f"{stem}_metadata.json").write_text(
-                json.dumps(
+            for no, (raw, method) in enumerate(coordinates, start=1):
+                stem = f"No.{no:02d}"
+                frame, spectra, ratios, fft_metadata = analyze_cell(raw)
+                angle_fft, angle_fft_metadata = wrapped_angle_spectrum(
+                    frame["time_sec"].to_numpy(float), frame["orbit_angle_rad"].to_numpy(float)
+                )
+                summary = cell_summary(frame, ratios, temp, no)
+                if center_mode == "local_conic":
+                    status = frame["local_conic_center_status"]
+                    summary["local_conic_center_valid_count"] = int(
+                        frame[["center_x_um", "center_y_um"]].notna().all(axis=1).sum()
+                    )
+                    summary["local_conic_direct_count"] = int((status == "direct").sum())
+                    summary["local_conic_short_interpolation_count"] = int((status == "short_interpolation").sum())
+                    shift = np.hypot(
+                        frame["center_x_um"] - frame["stored_center_x_um"],
+                        frame["center_y_um"] - frame["stored_center_y_um"],
+                    )
+                    summary["mean_center_shift_um"] = float(shift.mean())
+                radius = float(summary[RADIUS])
+                selected, reason = radius_selection(radius, max_mean_radius_um)
+                selection.append(
                     {
                         "temperature_c": temp,
                         "sample_no": no,
-                        "configured_frame_rate_hz": sources.frame_rate_hz,
-                        "fft_timebase": fft_metadata,
-                        "wrapped_angle_fft_timebase": angle_fft_metadata,
-                        "wrapped_angle_fft_definition": (
-                            "FFT amplitude of displayed [-pi,pi) orbit angle in rad; "
-                            "longest continuous valid interval; wrap discontinuities retained"
-                        ),
-                        "centroid_source": "source centroid_coordinate.csv stores centroid minus corrected rotation center in um",
-                        "angle_definition": "atan2(-centered_y, centered_x), wrapped to [-pi,pi), CCW positive",
-                        "velocity_definition": "shortest wrapped phase increment / actual timestamp difference; abs for speed",
-                        "fluctuation_definition": "Gaussian-window SD(abs(omega))/Mean(abs(omega)), one-frame slide",
-                        "relative_strength_definition": "mean FFT amplitude at 0<f<1 Hz / mean FFT amplitude at 80<=f<100 Hz",
-                    },
-                    indent=2,
-                    allow_nan=True,
+                        RADIUS: radius,
+                        "selected": selected,
+                        "reason": reason,
+                    }
                 )
-                + "\n",
-                encoding="utf-8",
-            )
-            cell_figure(frame, spectra, ratios, summary, folder / f"{stem}.png", sources.frame_rate_hz, angle_fft)
-            centered_folder = folder / "center_relative_xy"
-            centered_folder.mkdir(exist_ok=True)
-            center_relative_xy_figure(frame, centered_folder / f"{stem}.png", temp, no)
-            print(f"  No.{no:02d} done", flush=True)
+                if not selected:
+                    print(f"  No.{no:02d} excluded: mean radius {radius:.6g} µm", flush=True)
+                    continue
+                summary["plot_file"] = f"{temp}C/{stem}.png"
+                summary["center_relative_xy_plot_file"] = f"{temp}C/center_relative_xy/{stem}.png"
+                summary["series_file"] = f"{temp}C/tables/{stem}_time_series.csv"
+                summary["fft_file"] = f"{temp}C/tables/{stem}_fft.csv"
+                summary["ratio_file"] = f"{temp}C/tables/{stem}_band_amplitude_ratio.csv"
+                summary["angle_fft_file"] = f"{temp}C/tables/{stem}_wrapped_angle_fft.csv"
+                summaries.append(summary)
+                ratios.insert(0, "sample_no", no)
+                ratios.insert(0, "temperature_c", temp)
+                all_ratios.append(ratios)
+                frame.to_csv(tables / f"{stem}_time_series.csv", index=False)
+                spectra.to_csv(tables / f"{stem}_fft.csv", index=False)
+                angle_fft.to_csv(tables / f"{stem}_wrapped_angle_fft.csv", index=False)
+                ratios.to_csv(tables / f"{stem}_band_amplitude_ratio.csv", index=False)
+                (tables / f"{stem}_metadata.json").write_text(
+                    json.dumps(
+                        {
+                            "temperature_c": temp,
+                            "sample_no": no,
+                            "configured_frame_rate_hz": sources.frame_rate_hz,
+                            "fft_timebase": fft_metadata,
+                            "wrapped_angle_fft_timebase": angle_fft_metadata,
+                            "wrapped_angle_fft_definition": (
+                                "FFT amplitude of displayed [-pi,pi) orbit angle in rad; "
+                                "longest continuous valid interval; wrap discontinuities retained"
+                            ),
+                            "centroid_source": "source centroid_coordinate.csv stores centroid minus corrected rotation center in um",
+                            "angle_definition": "atan2(-centered_y, centered_x), wrapped to [-pi,pi), CCW positive",
+                            "velocity_definition": "shortest wrapped phase increment / actual timestamp difference; abs for speed",
+                            "fluctuation_definition": "Gaussian-window SD(abs(omega))/Mean(abs(omega)), one-frame slide",
+                            "relative_strength_definition": "mean FFT amplitude at 0<f<1 Hz / mean FFT amplitude at 80<=f<100 Hz",
+                            "center_method": center_mode,
+                            "local_conic_method": method,
+                        },
+                        indent=2,
+                        allow_nan=True,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                cell_figure(frame, spectra, ratios, summary, folder / f"{stem}.png", sources.frame_rate_hz, angle_fft)
+                centered_folder = folder / "center_relative_xy"
+                centered_folder.mkdir(exist_ok=True)
+                center_relative_xy_figure(frame, centered_folder / f"{stem}.png", temp, no)
+                print(f"  No.{no:02d} done", flush=True)
+
     summary_frame = pd.DataFrame(summaries)
     ratio_frame = pd.concat(all_ratios, ignore_index=True)
     if max_mean_radius_um is not None:
@@ -489,6 +578,12 @@ def run(
     summary_frame.to_csv(destination / "cell_summary.csv", index=False)
     ratio_frame.to_csv(destination / "window_band_amplitude_ratio.csv", index=False)
     comparison_figures(summary_frame, ratio_frame, destination, radius_axis_max_um, other_window_speed_plots)
+    if center_mode == "local_conic":
+        compare_center_methods(
+            summary_frame,
+            source_root / "poster_fluctuation" / "3_Temperature_Control" / "cell_summary.csv",
+            destination,
+        )
     (destination / "README.txt").write_text(
         "Private local SJW46 temperature-control analysis. The source tables are the existing "
         "SJW46_temp=10/23/30 outputs; they contain corrected-center-relative centroids in µm, "
@@ -512,9 +607,16 @@ def run(
         )
         + "Previous center corrections and source timestamp gaps are counted in cell_summary.csv. "
         + (
-            f"This subset includes only cells whose stored-center mean radius is <= {max_mean_radius_um:g} µm. "
-            "selection.csv lists all input cells and exclusion reasons.\n"
+            f"This subset includes only cells whose mean radius is <= {max_mean_radius_um:g} µm. "
+            "selection.csv lists all input cells and exclusion reasons. "
             if max_mean_radius_um is not None
+            else ""
+        )
+        + (
+            "For local_conic, the same stored raw centroids are refit by the repellent default local_conic "
+            "estimator and completion. Center failures remain missing; compare_center_methods.csv and "
+            "compare_center_method_effect.png compare cell-level results with stored-center analysis.\n"
+            if center_mode == "local_conic"
             else "\n"
         ),
         encoding="utf-8",
@@ -528,11 +630,13 @@ def main() -> None:
     parser.add_argument(
         "--output-root", type=Path, default=ROOT / "outputs" / "poster_fluctuation" / "3_Temperature_Control"
     )
+    parser.add_argument("--center-mode", choices=("stored", "local_conic"), default="stored")
+    parser.add_argument("--workers", type=int, default=4, help="parallel local_conic cell fits")
     parser.add_argument(
         "--max-mean-radius-um",
         type=float,
         default=None,
-        help="Include only cells with stored-center mean radius at or below this threshold (µm).",
+        help="Include only cells with mean radius at or below this threshold (µm).",
     )
     parser.add_argument(
         "--radius-axis-max-um", type=float, default=1.0, help="Upper y limit of the temperature mean-radius plot (µm)."
@@ -549,25 +653,29 @@ def main() -> None:
         parser.error("--max-mean-radius-um must be finite and positive")
     if not np.isfinite(args.radius_axis_max_um) or args.radius_axis_max_um <= 0:
         parser.error("--radius-axis-max-um must be finite and positive")
+    if args.center_mode == "local_conic" and args.max_mean_radius_um is not None:
+        parser.error("--max-mean-radius-um is only supported with --center-mode stored")
     source_root, config_root, output_root = (
         args.source_root.resolve(),
         args.config_root.resolve(),
         args.output_root.resolve(),
     )
-    destination = (
-        output_root / f"mean_radius_le_{args.max_mean_radius_um:g}um"
-        if args.max_mean_radius_um is not None
-        else output_root
-    )
+    destination = output_root / "local_conic" if args.center_mode == "local_conic" else output_root
+    if args.max_mean_radius_um is not None:
+        destination /= f"mean_radius_le_{args.max_mean_radius_um:g}um"
     inputs = [path for temp in TEMPERATURES_C for path in source_paths(source_root, config_root, temp)]
+    if args.center_mode == "local_conic":
+        inputs.append(source_root / "poster_fluctuation" / "3_Temperature_Control" / "cell_summary.csv")
     with analysis_run(parameters=vars(args), inputs=inputs, outputs=[destination]) as run_root:
         run(
             source_root,
             config_root,
             destination,
-            args.max_mean_radius_um,
-            args.radius_axis_max_um,
-            args.other_window_speed_plots,
+            center_mode=args.center_mode,
+            workers=args.workers,
+            max_mean_radius_um=args.max_mean_radius_um,
+            radius_axis_max_um=args.radius_axis_max_um,
+            other_window_speed_plots=args.other_window_speed_plots,
         )
     archive = destination / "_run_records" / run_root.parent.name / run_root.name
     archive.mkdir(parents=True, exist_ok=False)
