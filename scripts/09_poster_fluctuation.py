@@ -361,12 +361,12 @@ def candidate_band_comparison(ratios: pd.DataFrame, target: Path) -> None:
             (line,) = ax.plot(group.loc[good, "window_s"], values[good], "-o", linewidth=2.4, markersize=8)
             if ax is axes[0]:
                 handles.append(line)
-                labels.append(label)
-        ax.set(xlabel="Gaussian window width [s]", ylabel="Normalized value (max = 1)", title=title)
+                labels.append("SJW46" if day == "SJW46_23C" else label)
+        ax.set(xlabel="Window width [s]", ylabel="Amp ratio", title=title)
         ax.set_xticks(WINDOWS_S)
         ax.set_ylim(top=1.05)
         ax.tick_params(axis="x", labelrotation=45)
-    fig.legend(handles, labels, loc="outside lower center", ncol=len(labels), fontsize=19)
+    fig.legend(handles, labels, loc="outside right center", ncol=1, fontsize=19)
     fig.suptitle(
         "Representative cells: normalized band metrics\n"
         "SJW46 23°C uses centroid orbit angle; other cells use long-axis angle",
