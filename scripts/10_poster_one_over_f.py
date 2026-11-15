@@ -146,7 +146,8 @@ def load_case(source_root: Path, case: CaseSpec) -> dict:
 
 
 def draw_comparison(cases: list[dict], target: Path) -> None:
-    fig, axes = plt.subplots(3, len(cases), figsize=(38, 15), constrained_layout=True)
+    fig, axes = plt.subplots(3, len(cases), figsize=(38, 16.5), constrained_layout=True)
+    fig.get_layout_engine().set(w_pad=0.28, h_pad=0.30, wspace=0.08, hspace=0.10)
     for column, item in enumerate(cases):
         first, second, third = axes[:, column]
         first.plot(item["time_sec"], item["sd_per_mean"], linewidth=1.0)
@@ -188,7 +189,8 @@ def draw_comparison(cases: list[dict], target: Path) -> None:
 
 def draw_fit_sensitivity(item: dict, target: Path, band_counts: tuple[int, ...] = (9, 18, 36)) -> None:
     """Compare fixed and fitted exponents without changing the primary analysis."""
-    fig, axes = plt.subplots(2, len(band_counts), figsize=(19, 10), sharex=True, sharey=True, constrained_layout=True)
+    fig, axes = plt.subplots(2, len(band_counts), figsize=(19, 11), sharex=True, sharey=True, constrained_layout=True)
+    fig.get_layout_engine().set(w_pad=0.28, h_pad=0.30, wspace=0.08, hspace=0.10)
     positive = np.isfinite(item["amplitude"]) & (item["amplitude"] > 0)
     frequency = item["frequency_hz"]
     amplitude = item["amplitude"]
@@ -256,7 +258,8 @@ def draw_fit_sensitivity(item: dict, target: Path, band_counts: tuple[int, ...] 
 
 def draw_equal_hz_sensitivity(item: dict, target: Path, widths_hz: tuple[float, ...] = (2.0, 1.0, 0.5)) -> None:
     """Compare free-exponent fits to uniformly spaced reference bands."""
-    fig, axes = plt.subplots(2, len(widths_hz), figsize=(21, 11), constrained_layout=True)
+    fig, axes = plt.subplots(2, len(widths_hz), figsize=(21, 12), constrained_layout=True)
+    fig.get_layout_engine().set(w_pad=0.28, h_pad=0.30, wspace=0.08, hspace=0.10)
     frequency = item["frequency_hz"]
     amplitude = item["amplitude"]
     positive = np.isfinite(amplitude) & (amplitude > 0)
