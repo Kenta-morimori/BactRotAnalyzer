@@ -60,6 +60,24 @@ def _style(axes) -> None:
                 label.set_fontsize(19)
 
 
+def _comparison_style(axes, *, overview: bool = False) -> None:
+    _style(axes)
+    label_size, tick_size, legend_size = (30, 26, 24) if overview else (36, 32, 28)
+    for ax in np.ravel(axes):
+        ax.xaxis.label.set_fontsize(label_size)
+        ax.yaxis.label.set_fontsize(label_size)
+        ax.tick_params(labelsize=tick_size, length=7, width=1.4)
+        legend = ax.get_legend()
+        if legend is not None:
+            for label in legend.get_texts():
+                label.set_fontsize(legend_size)
+
+
+def _save_comparison(fig, target: Path) -> None:
+    fig.savefig(target, dpi=180, bbox_inches="tight", pad_inches=0.25)
+    plt.close(fig)
+
+
 def _with_gap_breaks(time: np.ndarray, values: np.ndarray, *, wrap: bool = False) -> tuple[np.ndarray, np.ndarray]:
     """Insert plot-only breaks while retaining every source observation."""
     dt = np.diff(time)
@@ -295,17 +313,15 @@ def comparison_figures(
     fig, ax = plt.subplots(figsize=(9, 8), constrained_layout=True)
     _condition_boxplot(ax, summary, SPEED)
     _condition_points(ax, summary, SPEED, "Mean rotational speed [rad/s]", "Mean rotational speed")
-    _style([ax])
-    fig.savefig(root / "compare_mean_angular_speed.png", dpi=180)
-    plt.close(fig)
+    _comparison_style([ax])
+    _save_comparison(fig, root / "compare_mean_angular_speed.png")
 
     fig, ax = plt.subplots(figsize=(9, 8), constrained_layout=True)
     _condition_boxplot(ax, summary, RADIUS)
     _condition_points(ax, summary, RADIUS, "Mean rotational radius [µm]", "Mean rotational radius")
     ax.set_ylim(0, radius_axis_max_um)
-    _style([ax])
-    fig.savefig(root / "compare_mean_rotation_radius.png", dpi=180)
-    plt.close(fig)
+    _comparison_style([ax])
+    _save_comparison(fig, root / "compare_mean_rotation_radius.png")
 
     fig, ax = plt.subplots(figsize=(12, 8), constrained_layout=True)
     for temp in TEMPERATURES_C:
@@ -332,9 +348,9 @@ def comparison_figures(
     ax.set_xticks(WINDOWS_S)
     ax.set_ylim(bottom=0)
     ax.legend()
-    _style([ax])
-    fig.savefig(root / "compare_low_frequency_relative_strength.png", dpi=180)
-    plt.close(fig)
+    _comparison_style([ax])
+    ax.tick_params(axis="x", labelrotation=90)
+    _save_comparison(fig, root / "compare_low_frequency_relative_strength.png")
 
     fig, ax = plt.subplots(figsize=(9, 8), constrained_layout=True)
     _condition_boxplot(ax, summary, "low_to_high_amplitude_ratio_0.5s")
@@ -346,9 +362,8 @@ def comparison_figures(
         "0.5 s Low/High by temperature",
     )
     ax.set_ylim(bottom=0)
-    _style([ax])
-    fig.savefig(root / "compare_low_frequency_relative_strength_0.5s_by_temperature.png", dpi=180)
-    plt.close(fig)
+    _comparison_style([ax])
+    _save_comparison(fig, root / "compare_low_frequency_relative_strength_0.5s_by_temperature.png")
 
     fig, ax = plt.subplots(figsize=(9, 7), constrained_layout=True)
     for temp in TEMPERATURES_C:
@@ -368,9 +383,8 @@ def comparison_figures(
     )
     ax.set_ylim(bottom=0)
     ax.legend()
-    _style([ax])
-    fig.savefig(root / "compare_speed_vs_low_frequency_strength.png", dpi=180)
-    plt.close(fig)
+    _comparison_style([ax])
+    _save_comparison(fig, root / "compare_speed_vs_low_frequency_strength.png")
 
     if other_window_speed_plots:
         other_widths = tuple(width for width in WINDOWS_S if width != 0.5)
@@ -394,15 +408,17 @@ def comparison_figures(
                 )
                 current.set_ylim(bottom=0)
             ax.legend()
-            _style([ax])
-            fig.savefig(root / f"compare_speed_vs_low_frequency_strength_{width:g}s.png", dpi=180)
-            plt.close(fig)
+            _comparison_style([ax])
+            _save_comparison(fig, root / f"compare_speed_vs_low_frequency_strength_{width:g}s.png")
         overview_axes.flat[0].legend()
         overview_axes.flat[-1].axis("off")
-        _style(overview_axes)
+        _comparison_style(overview_axes, overview=True)
         overview.suptitle("Rotational speed vs low-frequency strength by window width", fontsize=30)
-        overview.savefig(root / "compare_speed_vs_low_frequency_strength_other_windows.png", dpi=180)
-        plt.close(overview)
+        for current in overview_axes.flat:
+            current.set(xlabel="", ylabel="")
+        overview.supxlabel("Mean rotational speed [rad/s]", fontsize=34)
+        overview.supylabel("Low-frequency relative strength", fontsize=34)
+        _save_comparison(overview, root / "compare_speed_vs_low_frequency_strength_other_windows.png")
 
 
 def radius_selection(radius_um: float, maximum_um: float | None) -> tuple[bool, str]:
