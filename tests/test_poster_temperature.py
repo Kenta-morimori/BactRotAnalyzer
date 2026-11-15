@@ -121,14 +121,30 @@ def test_cell_and_comparison_plots_accept_synthetic_data(tmp_path, monkeypatch):
         next(ax for ax in figure.axes if ax.get_title() == "Standardized SD / Mean").get_ylabel()
         == "Standardized SD / Mean"
     )
-    assert len(figure.axes) == 14
+    assert len(figure.axes) == 17
     assert fft_ax.lines[-1].get_color() == "black"
     assert fft_ax.lines[-1].get_alpha() == 0.45
+    legend_axes = [ax for ax in figure.axes if not ax.axison and ax.get_legend() is not None]
+    assert len(legend_axes) == 3
+    assert [text.get_text() for text in legend_axes[2].get_legend().get_texts()] == [
+        "Rotation Data",
+        "0.1 SD",
+        "0.5 SD",
+        "1.0 SD",
+    ]
+    renderer = figure.canvas.get_renderer()
+    signed_ax = next(ax for ax in figure.axes if ax.get_title() == "Signed orbit angular velocity")
+    width_ratio = fft_ax.get_window_extent(renderer).width / signed_ax.get_window_extent(renderer).width
+    assert 1.4 < width_ratio < 1.6
+    assert legend_axes[2].get_legend().get_window_extent(renderer).x0 > fft_ax.get_window_extent(renderer).x1
     angle_fft, _ = script["wrapped_angle_spectrum"](time, frame["orbit_angle_rad"].to_numpy(float))
     assert np.allclose(fft_ax.lines[-1].get_ydata(), angle_fft.amplitude_rad[angle_fft.amplitude_rad > 0])
-    for title in ("Gaussian-window fluctuation", "Standardized SD / Mean"):
+    for title, legend_ax in zip(("Gaussian-window fluctuation", "Standardized SD / Mean"), legend_axes[:2]):
         ax = next(ax for ax in figure.axes if ax.get_title() == title)
         assert np.allclose(ax.get_xlim(), (0, frame.time_sec.max()))
+        legend = legend_ax.get_legend()
+        assert [text.get_text() for text in legend.get_texts()] == ["0.1 s", "0.5 s", "1 s"]
+        assert legend.get_window_extent(renderer).y1 < ax.get_window_extent(renderer).y0
     assert all(ax.get_box_aspect() == 1.5 for ax in figure.axes[-3:])
     rows = []
     groups = []
