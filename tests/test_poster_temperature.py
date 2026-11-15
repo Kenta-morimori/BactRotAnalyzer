@@ -100,7 +100,7 @@ def test_cell_and_comparison_plots_accept_synthetic_data(tmp_path):
         rows.append(row)
         groups.append(ratios.assign(temperature_c=temp, sample_no=1))
     script["comparison_figures"](pd.DataFrame(rows), pd.concat(groups), tmp_path)
-    assert len(list(tmp_path.glob("compare_*.png"))) == 4
+    assert len(list(tmp_path.glob("compare_*.png"))) == 5
 
 
 def test_radius_subset_keeps_boundary_and_rejects_missing_radius():

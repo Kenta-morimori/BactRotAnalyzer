@@ -218,6 +218,19 @@ def comparison_figures(
     fig.savefig(root / "compare_low_frequency_relative_strength.png", dpi=180)
     plt.close(fig)
 
+    fig, ax = plt.subplots(figsize=(10, 8), constrained_layout=True)
+    _condition_points(
+        ax,
+        summary,
+        "low_to_high_amplitude_ratio_0.5s",
+        "0.5 s Low / High mean amplitude ratio",
+        "0.5 s low-frequency relative strength per cell",
+    )
+    ax.set_ylim(bottom=0)
+    _style([ax])
+    fig.savefig(root / "compare_low_frequency_relative_strength_0.5s_by_temperature.png", dpi=180)
+    plt.close(fig)
+
     fig, ax = plt.subplots(figsize=(11, 8), constrained_layout=True)
     for temp in TEMPERATURES_C:
         group = summary[summary.temperature_c == temp]
