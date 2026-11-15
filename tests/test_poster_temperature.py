@@ -105,7 +105,15 @@ def test_cell_and_comparison_plots_accept_synthetic_data(tmp_path, monkeypatch):
     assert figure.axes[2].get_box_aspect() == 1
     fft_ax = next(ax for ax in figure.axes if ax.get_title() == "FFT of standardized fluctuation")
     assert len(fft_ax.lines) == 3
+    assert fft_ax.get_xlabel() == "Frequency [Hz]"
+    assert fft_ax.get_ylabel() == "Amp"
+    assert fft_ax.lines[0].get_linewidth() >= 1.4
+    assert (
+        next(ax for ax in figure.axes if ax.get_title() == "Standardized SD / Mean").get_ylabel()
+        == "Standardized SD / Mean"
+    )
     assert figure.axes[-1].lines[0].get_color() == "black"
+    assert figure.axes[-1].lines[0].get_alpha() == 0.45
     assert all(ax.get_box_aspect() == 1.5 for ax in figure.axes[-4:-1])
     rows = []
     groups = []
@@ -116,6 +124,12 @@ def test_cell_and_comparison_plots_accept_synthetic_data(tmp_path, monkeypatch):
     script["comparison_figures"](pd.DataFrame(rows), pd.concat(groups), tmp_path)
     assert len(list(tmp_path.glob("compare_*.png"))) == 5
     assert captured["compare_low_frequency_relative_strength_0.5s_by_temperature.png"].get_figwidth() == 7
+    assert captured["compare_mean_angular_speed.png"].axes[0].get_ylabel() == "Mean rotational speed [rad/s]"
+    assert captured["compare_mean_rotation_radius.png"].axes[0].get_ylabel() == "Mean rotational radius [µm]"
+    assert (
+        captured["compare_low_frequency_relative_strength_0.5s_by_temperature.png"].axes[0].get_ylabel()
+        == "Low-frequency relative strength"
+    )
     script["comparison_figures"](pd.DataFrame(rows), pd.concat(groups), tmp_path, other_window_speed_plots=True)
     assert len(list(tmp_path.glob("compare_*.png"))) == 11
     assert (tmp_path / "compare_speed_vs_low_frequency_strength_other_windows.png").exists()

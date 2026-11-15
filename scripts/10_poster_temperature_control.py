@@ -15,6 +15,8 @@ import pandas as pd
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
+plt.rcParams["font.family"] = "Arial"
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
@@ -47,15 +49,15 @@ BAND_PANELS = (
 
 def _style(axes) -> None:
     for ax in np.ravel(axes):
-        ax.title.set_fontsize(20)
-        ax.xaxis.label.set_fontsize(18)
-        ax.yaxis.label.set_fontsize(18)
-        ax.tick_params(labelsize=16)
+        ax.title.set_fontsize(24)
+        ax.xaxis.label.set_fontsize(23)
+        ax.yaxis.label.set_fontsize(23)
+        ax.tick_params(labelsize=20)
         ax.grid(alpha=0.2)
         legend = ax.get_legend()
         if legend is not None:
             for label in legend.get_texts():
-                label.set_fontsize(15)
+                label.set_fontsize(19)
 
 
 def _with_gap_breaks(time: np.ndarray, values: np.ndarray, *, wrap: bool = False) -> tuple[np.ndarray, np.ndarray]:
@@ -105,20 +107,20 @@ def cell_figure(
     summary_ax = fig.add_subplot(grid[3, 2])
     band_axes = [fig.add_subplot(grid[4, column]) for column in range(3)]
     for ax, suffix, ylabel in (
-        (x_ax, "x", "x (µm)"),
-        (y_ax, "y", "y (µm; image down)"),
+        (x_ax, "x", "x [µm]"),
+        (y_ax, "y", "y [µm] (image down)"),
     ):
         tx, centroid = _with_gap_breaks(t, frame[f"centroid_{suffix}_um"].to_numpy(float))
         _, center = _with_gap_breaks(t, frame[f"center_{suffix}_um"].to_numpy(float))
         ax.plot(tx, centroid, lw=0.8, label="Centroid")
         ax.plot(tx, center, lw=1.0, label="Rotation center")
-        ax.set(xlabel="Time (s)", ylabel=ylabel, title=f"Centroid and center: {suffix}(t)")
+        ax.set(xlabel="Time [s]", ylabel=ylabel, title=f"Centroid and center: {suffix}(t)")
         ax.legend()
     _, xy_x = _with_gap_breaks(t, frame["centroid_x_um"].to_numpy(float))
     _, xy_y = _with_gap_breaks(t, frame["centroid_y_um"].to_numpy(float))
     xy_ax.plot(xy_x, xy_y, lw=0.7, label="Centroid")
     xy_ax.scatter(frame["center_x_um"], frame["center_y_um"], s=6, alpha=0.3, label="Center")
-    xy_ax.set(xlabel="x (µm)", ylabel="y (µm; image down)", title="Centroid trajectory and center")
+    xy_ax.set(xlabel="x [µm]", ylabel="y [µm] (image down)", title="Centroid trajectory and center")
     xy_ax.set_aspect("equal", adjustable="box")
     xy_ax.set_box_aspect(1)
     xy_ax.invert_yaxis()
@@ -126,23 +128,23 @@ def cell_figure(
 
     radius_t, radius = _with_gap_breaks(t, frame["radius_um"].to_numpy(float))
     radius_ax.plot(radius_t, radius, lw=0.7)
-    radius_ax.set(xlabel="Time (s)", ylabel="Radius (µm)", title="Center–centroid distance")
+    radius_ax.set(xlabel="Time [s]", ylabel="Radius [µm]", title="Center–centroid distance")
     _wrapped_plot(angle_ax, t, frame["orbit_angle_rad"].to_numpy(float))
-    angle_ax.set(xlabel="Time (s)", ylabel="Angle (rad; CCW +)", title="Orbit angle [−π, π)")
+    angle_ax.set(xlabel="Time [s]", ylabel="Angle [rad] (CCW +)", title="Orbit angle [−π, π)")
     signed_ax.plot(t, frame["orbit_omega_rad_s"], lw=0.7)
-    signed_ax.set(xlabel="Time (s)", ylabel="Angular velocity (rad/s)", title="Signed orbit angular velocity")
+    signed_ax.set(xlabel="Time [s]", ylabel="Angular velocity [rad/s]", title="Signed orbit angular velocity")
     absolute_ax.plot(t, frame["orbit_abs_omega_rad_s"], lw=0.7)
-    absolute_ax.set(xlabel="Time (s)", ylabel="Angular speed (rad/s)", title="Absolute orbit angular velocity")
+    absolute_ax.set(xlabel="Time [s]", ylabel="Angular speed [rad/s]", title="Absolute orbit angular velocity")
     for width in POSTER_DISPLAY_WINDOWS_S:
         key = f"sd_per_mean_{width:g}s"
         label = f"{width:g} s"
-        ratio_ax.plot(t, frame[key], lw=0.7, label=label)
-        z_ax.plot(t, frame[f"{key}_z"], lw=0.7, label=label)
+        ratio_ax.plot(t, frame[key], lw=1.8, label=label)
+        z_ax.plot(t, frame[f"{key}_z"], lw=1.8, label=label)
         part = spectra[(spectra.window_s == width) & (spectra.amplitude > 0)]
-        fft_ax.plot(part.frequency_hz, part.amplitude, lw=0.8, label=label)
-    ratio_ax.set(xlabel="Time (s)", ylabel="SD / Mean", title="Gaussian-window fluctuation")
-    z_ax.set(xlabel="Time (s)", ylabel="z-score", title="Standardized fluctuation")
-    fft_ax.set(xlabel="Frequency (Hz)", ylabel="FFT amplitude (log)", title="FFT of standardized fluctuation")
+        fft_ax.plot(part.frequency_hz, part.amplitude, lw=1.4, label=label)
+    ratio_ax.set(xlabel="Time [s]", ylabel="SD / Mean", title="Gaussian-window fluctuation")
+    z_ax.set(xlabel="Time [s]", ylabel="Standardized SD / Mean", title="Standardized SD / Mean")
+    fft_ax.set(xlabel="Frequency [Hz]", ylabel="Amp", title="FFT of standardized fluctuation")
     fft_ax.set_xlim(0, nominal_rate_hz / 2)
     fft_ax.set_yscale("log")
     for ax in (ratio_ax, z_ax, fft_ax):
@@ -154,13 +156,14 @@ def cell_figure(
             angle_fft.loc[good, "frequency_hz"],
             angle_fft.loc[good, "amplitude_rad"],
             color="black",
-            lw=0.9,
+            lw=1.2,
+            alpha=0.45,
             label="Wrapped angle",
         )
         angle_fft_ax.set_yscale("log")
-        angle_fft_ax.set_ylabel("Angle FFT amplitude (rad, log)", fontsize=18)
-        angle_fft_ax.tick_params(labelsize=16)
-        angle_fft_ax.legend(loc="lower right", fontsize=15)
+        angle_fft_ax.set_ylabel("Angle Amp [rad]", fontsize=23)
+        angle_fft_ax.tick_params(labelsize=20)
+        angle_fft_ax.legend(loc="lower right", fontsize=19)
 
     summary_ax.axis("off")
     summary_ax.text(
@@ -175,20 +178,20 @@ def cell_figure(
         f"Center-adjusted frames: {summary['corrected_center_frame_count']}",
         transform=summary_ax.transAxes,
         va="top",
-        fontsize=16,
+        fontsize=19,
         linespacing=1.5,
     )
     for ax, (column, label, ylabel, scale) in zip(band_axes, BAND_PANELS):
         values = ratios[column].to_numpy(float)
         good = np.isfinite(values) & ((values > 0) if scale == "log" else True)
         ax.plot(ratios.loc[good, "window_s"], values[good], "-o")
-        ax.set(xlabel="Gaussian window width (s)", ylabel=ylabel, title=label)
+        ax.set(xlabel="Gaussian window width [s]", ylabel=ylabel, title=label)
         ax.set_xticks(WINDOWS_S)
         ax.set_yscale(scale)
         ax.set_box_aspect(1.5)
         ax.tick_params(axis="x", labelrotation=45)
     _style(fig.axes)
-    fig.suptitle(f"SJW46 {summary['temperature_c']}°C — No.{summary['sample_no']:02d}", fontsize=25)
+    fig.suptitle(f"SJW46 {summary['temperature_c']}°C — No.{summary['sample_no']:02d}", fontsize=30)
     fig.savefig(target, dpi=160)
     plt.close(fig)
 
@@ -197,11 +200,11 @@ def _condition_points(ax, summary: pd.DataFrame, column: str, ylabel: str, title
     for temp in TEMPERATURES_C:
         group = summary[summary.temperature_c == temp]
         values = group[column].to_numpy(float)
-        ax.scatter(np.full(len(group), temp), values, s=72, color=COLORS[temp], alpha=0.72)
+        ax.scatter(np.full(len(group), temp), values, s=110, color=COLORS[temp], alpha=0.72)
         finite = values[np.isfinite(values)]
         if len(finite):
-            ax.scatter([temp], [np.mean(finite)], marker="D", s=150, edgecolor="black", color=COLORS[temp], zorder=4)
-    ax.set(xlabel="Temperature (°C)", ylabel=ylabel, title=title)
+            ax.scatter([temp], [np.mean(finite)], marker="D", s=230, edgecolor="black", color=COLORS[temp], zorder=4)
+    ax.set(xlabel="Temperature [°C]", ylabel=ylabel, title=title)
     ax.set_xticks(TEMPERATURES_C)
 
 
@@ -213,13 +216,13 @@ def comparison_figures(
     other_window_speed_plots: bool = False,
 ) -> None:
     fig, ax = plt.subplots(figsize=(7, 8), constrained_layout=True)
-    _condition_points(ax, summary, SPEED, "Mean |ω| (rad/s)", "Mean orbit angular speed per cell")
+    _condition_points(ax, summary, SPEED, "Mean rotational speed [rad/s]", "Mean rotational speed")
     _style([ax])
     fig.savefig(root / "compare_mean_angular_speed.png", dpi=180)
     plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(7, 8), constrained_layout=True)
-    _condition_points(ax, summary, RADIUS, "Mean radius (µm)", "Mean rotation radius per cell")
+    _condition_points(ax, summary, RADIUS, "Mean rotational radius [µm]", "Mean rotational radius")
     ax.set_ylim(0, radius_axis_max_um)
     _style([ax])
     fig.savefig(root / "compare_mean_rotation_radius.png", dpi=180)
@@ -243,8 +246,8 @@ def comparison_figures(
             label=f"{temp}°C (n={group.sample_no.nunique()})",
         )
     ax.set(
-        xlabel="Gaussian window width (s)",
-        ylabel="Mean FFT amplitude ratio",
+        xlabel="Gaussian window width [s]",
+        ylabel="Low-frequency relative strength",
         title="Low / High by window width (thin: cells; bold: cell mean)",
     )
     ax.set_xticks(WINDOWS_S)
@@ -259,7 +262,7 @@ def comparison_figures(
         ax,
         summary,
         "low_to_high_amplitude_ratio_0.5s",
-        "0.5 s Low / High mean amplitude ratio",
+        "Low-frequency relative strength",
         "0.5 s Low/High by temperature",
     )
     ax.set_ylim(bottom=0)
@@ -270,10 +273,12 @@ def comparison_figures(
     fig, ax = plt.subplots(figsize=(9, 7), constrained_layout=True)
     for temp in TEMPERATURES_C:
         group = summary[summary.temperature_c == temp]
-        ax.scatter(group[SPEED], group["low_to_high_amplitude_ratio_0.5s"], s=80, color=COLORS[temp], label=f"{temp}°C")
+        ax.scatter(
+            group[SPEED], group["low_to_high_amplitude_ratio_0.5s"], s=110, color=COLORS[temp], label=f"{temp}°C"
+        )
     ax.set(
-        xlabel="Mean |ω| (rad/s)",
-        ylabel="0.5 s Low / High mean amplitude ratio",
+        xlabel="Mean rotational speed [rad/s]",
+        ylabel="Low-frequency relative strength",
         title="Angular speed vs low-frequency relative strength",
     )
     ax.set_ylim(bottom=0)
@@ -295,10 +300,10 @@ def comparison_figures(
             for current in (ax, overview_axes.flat[index]):
                 for temp in TEMPERATURES_C:
                     group = joined[joined.temperature_c == temp]
-                    current.scatter(group[SPEED], group[RATIO], s=80, color=COLORS[temp], label=f"{temp}°C")
+                    current.scatter(group[SPEED], group[RATIO], s=110, color=COLORS[temp], label=f"{temp}°C")
                 current.set(
-                    xlabel="Mean |ω| (rad/s)",
-                    ylabel="Low / High mean amplitude ratio",
+                    xlabel="Mean rotational speed [rad/s]",
+                    ylabel="Low-frequency relative strength",
                     title=f"{width:g} s Gaussian window",
                 )
                 current.set_ylim(bottom=0)
@@ -309,7 +314,7 @@ def comparison_figures(
         overview_axes.flat[0].legend()
         overview_axes.flat[-1].axis("off")
         _style(overview_axes)
-        overview.suptitle("Angular speed vs low-frequency strength by window width", fontsize=25)
+        overview.suptitle("Rotational speed vs low-frequency strength by window width", fontsize=30)
         overview.savefig(root / "compare_speed_vs_low_frequency_strength_other_windows.png", dpi=180)
         plt.close(overview)
 
