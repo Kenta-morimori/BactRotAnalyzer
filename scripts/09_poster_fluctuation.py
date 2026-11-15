@@ -346,13 +346,13 @@ def normalize_candidate_ratios(ratios: pd.DataFrame) -> pd.DataFrame:
 
 def candidate_band_comparison(ratios: pd.DataFrame, target: Path) -> None:
     """Compare each candidate's window-width shape after per-series maximum normalization."""
-    fig, axes = plt.subplots(1, 3, figsize=(21, 13), constrained_layout=True)
+    fig, axes = plt.subplots(1, 3, figsize=(31.5, 13), constrained_layout=True)
     fig.get_layout_engine().set(w_pad=0.28, h_pad=0.30, wspace=0.08)
     window_positions = {width: position for position, width in enumerate(WINDOWS_S)}
     handles = []
     labels = []
     for ax, (column, title, _, _) in zip(axes, BAND_PANELS):
-        ax.set_box_aspect(1.5)
+        ax.set_box_aspect(1.0)
         for day, sample_no, label, _ in COMPARISON_CASES:
             group = ratios[(ratios.day == day) & (ratios.sample_no == sample_no)].sort_values("window_s")
             if group.empty:

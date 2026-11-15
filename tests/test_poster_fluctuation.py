@@ -349,7 +349,8 @@ def test_candidate_band_comparison_normalizes_four_representatives(tmp_path, mon
     assert len(captured[0].axes) == 3
     assert all(len(ax.lines) == 4 for ax in captured[0].axes)
     assert all(ax.get_yscale() == "linear" for ax in captured[0].axes)
-    assert all(ax.get_box_aspect() == 1.5 for ax in captured[0].axes)
+    assert captured[0].get_figwidth() == 31.5
+    assert all(ax.get_box_aspect() == 1.0 for ax in captured[0].axes)
     assert all(ax.get_legend() is None for ax in captured[0].axes)
     assert all(ax.get_xlabel() == "Window width [s]" and ax.get_ylabel() == "Amp ratio" for ax in captured[0].axes)
     for ax in captured[0].axes:
