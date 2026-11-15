@@ -242,7 +242,8 @@ def draw_fit_sensitivity(item: dict, target: Path, band_counts: tuple[int, ...] 
                 ax.set_ylabel(("Fixed α = 1" if row == 0 else "Fitted α") + "\nAmp", fontsize=19)
             ax.xaxis.label.set_fontsize(19)
             ax.title.set_fontsize(20)
-    axes[0, 0].legend(fontsize=15, loc="lower left")
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    fig.legend(handles, labels, fontsize=15, loc="outside lower center", ncol=len(labels))
     fig.suptitle(
         f"{item['case'].label}: 0.5 s SD/Mean FFT amplitude fit sensitivity\n"
         "Same FFT in every panel; Δf fixed at first positive FFT frequency; equal weight per nonempty log band",
@@ -303,7 +304,8 @@ def draw_equal_hz_sensitivity(item: dict, target: Path, widths_hz: tuple[float, 
                     fontsize=15,
                     bbox={"facecolor": "white", "alpha": 0.85, "edgecolor": "none"},
                 )
-    axes[0, 0].legend(fontsize=15, loc="lower left")
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    fig.legend(handles, labels, fontsize=15, loc="outside lower center", ncol=len(labels))
     fig.suptitle(
         f"{item['case'].label}: free-α fits to equally spaced frequency bands\n"
         "Top: full range; bottom: 0–10 Hz zoom. Same FFT and Δf in every panel; equal weight per band median",
