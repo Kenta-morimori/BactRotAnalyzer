@@ -14,6 +14,8 @@ import pandas as pd
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
+plt.rcParams["font.family"] = "Arial"
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
@@ -148,7 +150,7 @@ def draw_comparison(cases: list[dict], target: Path) -> None:
     for column, item in enumerate(cases):
         first, second, third = axes[:, column]
         first.plot(item["time_sec"], item["sd_per_mean"], linewidth=1.0)
-        first.set(title=item["case"].label, xlabel="Time (s)", ylabel="SD / Mean")
+        first.set(title=item["case"].label, xlabel="Time [s]", ylabel="SD / Mean")
         positive = np.isfinite(item["amplitude"]) & (item["amplitude"] > 0)
         second.plot(item["frequency_hz"][positive], item["amplitude"][positive], linewidth=1.0)
         second.plot(
@@ -157,7 +159,7 @@ def draw_comparison(cases: list[dict], target: Path) -> None:
             color="red",
             linewidth=2.2,
         )
-        second.set(xlabel="Frequency (Hz)", ylabel="FFT amplitude (log)", xlim=(0, item["rate_hz"] / 2))
+        second.set(xlabel="Frequency [Hz]", ylabel="Amp", xlim=(0, item["rate_hz"] / 2))
         second.set_yscale("log")
         second.text(
             0.98,
@@ -171,7 +173,7 @@ def draw_comparison(cases: list[dict], target: Path) -> None:
         )
         third.plot(item["segment_time_sec"], item["surrogate"], linewidth=1.0)
         third.axhline(0, color="gray", linewidth=0.5)
-        third.set(xlabel="Time (s)", ylabel="Inverse FFT (z units)")
+        third.set(xlabel="Time [s]", ylabel="Inverse FFT [z units]")
         for ax in (first, second, third):
             ax.tick_params(labelsize=19)
             ax.xaxis.label.set_fontsize(21)
@@ -220,7 +222,7 @@ def draw_fit_sensitivity(item: dict, target: Path, band_counts: tuple[int, ...] 
             ax.set(
                 title=f"{requested_bands} log bands ({fit.bin_count} nonempty)",
                 xlim=(0, item["rate_hz"] / 2),
-                xlabel="Frequency (Hz)",
+                xlabel="Frequency [Hz]",
             )
             ax.set_yscale("log")
             ax.text(
@@ -231,18 +233,20 @@ def draw_fit_sensitivity(item: dict, target: Path, band_counts: tuple[int, ...] 
                 transform=ax.transAxes,
                 ha="right",
                 va="top",
-                fontsize=11,
+                fontsize=15,
                 bbox={"facecolor": "white", "alpha": 0.85, "edgecolor": "none"},
             )
-            ax.tick_params(labelsize=11)
+            ax.tick_params(labelsize=17)
             ax.grid(alpha=0.2)
             if column == 0:
-                ax.set_ylabel(("Fixed α = 1" if row == 0 else "Fitted α") + "\nFFT amplitude (log)", fontsize=12)
-    axes[0, 0].legend(fontsize=10, loc="lower left")
+                ax.set_ylabel(("Fixed α = 1" if row == 0 else "Fitted α") + "\nAmp", fontsize=19)
+            ax.xaxis.label.set_fontsize(19)
+            ax.title.set_fontsize(20)
+    axes[0, 0].legend(fontsize=15, loc="lower left")
     fig.suptitle(
         f"{item['case'].label}: 0.5 s SD/Mean FFT amplitude fit sensitivity\n"
         "Same FFT in every panel; Δf fixed at first positive FFT frequency; equal weight per nonempty log band",
-        fontsize=15,
+        fontsize=23,
     )
     target.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(target, dpi=180)
@@ -280,14 +284,15 @@ def draw_equal_hz_sensitivity(item: dict, target: Path, widths_hz: tuple[float, 
                 zorder=3,
                 label="Band medians used for fit",
             )
-            ax.set(xlim=(0, maximum_hz), xlabel="Frequency (Hz)")
+            ax.set(xlim=(0, maximum_hz), xlabel="Frequency [Hz]")
             ax.set_yscale("log")
-            ax.tick_params(labelsize=11)
+            ax.tick_params(labelsize=17)
             ax.grid(alpha=0.2)
             if column == 0:
-                ax.set_ylabel("FFT amplitude (log)", fontsize=12)
+                ax.set_ylabel("Amp", fontsize=19)
+            ax.xaxis.label.set_fontsize(19)
             if row == 0:
-                ax.set_title(f"{width_hz:g} Hz bands: {fit.bin_count} reference points", fontsize=14)
+                ax.set_title(f"{width_hz:g} Hz bands: {fit.bin_count} reference points", fontsize=20)
                 ax.text(
                     0.97,
                     0.95,
@@ -295,14 +300,14 @@ def draw_equal_hz_sensitivity(item: dict, target: Path, widths_hz: tuple[float, 
                     transform=ax.transAxes,
                     ha="right",
                     va="top",
-                    fontsize=11,
+                    fontsize=15,
                     bbox={"facecolor": "white", "alpha": 0.85, "edgecolor": "none"},
                 )
-    axes[0, 0].legend(fontsize=10, loc="lower left")
+    axes[0, 0].legend(fontsize=15, loc="lower left")
     fig.suptitle(
         f"{item['case'].label}: free-α fits to equally spaced frequency bands\n"
         "Top: full range; bottom: 0–10 Hz zoom. Same FFT and Δf in every panel; equal weight per band median",
-        fontsize=16,
+        fontsize=23,
     )
     target.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(target, dpi=180)
