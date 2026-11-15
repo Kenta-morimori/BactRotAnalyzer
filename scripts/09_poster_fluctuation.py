@@ -306,6 +306,12 @@ def figure(
             angle_ax.set_yscale("log")
             angle_ax.set_ylabel("Angle Amp [rad]", fontsize=23)
             angle_ax.tick_params(labelsize=20)
+            shared_ylim = (
+                min(fft_panel.get_ylim()[0], angle_ax.get_ylim()[0]),
+                max(fft_panel.get_ylim()[1], angle_ax.get_ylim()[1]),
+            )
+            fft_panel.set_ylim(shared_ylim)
+            angle_ax.set_ylim(shared_ylim)
         legend_handles.append(angle_ax.lines[0])
         legend_labels.append("Wrapped angle")
     fig.legend(legend_handles, legend_labels, loc="outside lower center", ncol=len(legend_labels), fontsize=19)
