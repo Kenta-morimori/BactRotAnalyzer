@@ -19,5 +19,6 @@
 | [0019](0019-poster-direct-speed-control.md) | 独立速度ノイズ対照を角度なしで直接解析する |
 | [0020](0020-poster-simulation-duration-extension.md) | 合成対照に30秒系列を追加し6秒出力を保持する |
 | [0021](0021-poster-temperature-local-conic-comparison.md) | SJW46温度解析で忌避応答の局所中心法を別出力として比較 |
+| [0022](0022-poster-figure-layout-and-angle-fft.md) | ポスター図の縦横比、表示3窓幅、折り返し角度FFTの右縦軸 |
 
 各ADRには状態、背景、決定、代替、影響・限界、検証方法を記載する。後日の方針変更は新ADRで置き換え、既存の判断を黙って書き換えない。

@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT))
 
 from utils.functions.get_centroid_coordinate import contours  # noqa: E402
 from utils.functions.poster_fluctuation import (  # noqa: E402
+    POSTER_DISPLAY_WINDOWS_S,
     WINDOWS_S,
     analyze,
     axis_angular_velocity,
@@ -28,6 +29,7 @@ from utils.functions.poster_fluctuation import (  # noqa: E402
     duplicate_source_map,
     major_axis_deg,
     synthetic_control,
+    wrapped_angle_spectrum,
 )
 from utils.run_context import analysis_run  # noqa: E402
 
@@ -174,15 +176,15 @@ def wrapped_phase_plot(time: np.ndarray, phase: np.ndarray) -> tuple[np.ndarray,
 
 def style_axes(axes: np.ndarray) -> None:
     for ax in axes.flat:
-        ax.title.set_fontsize(16)
-        ax.xaxis.label.set_fontsize(14)
-        ax.yaxis.label.set_fontsize(14)
-        ax.tick_params(labelsize=12)
+        ax.title.set_fontsize(20)
+        ax.xaxis.label.set_fontsize(18)
+        ax.yaxis.label.set_fontsize(18)
+        ax.tick_params(labelsize=16)
         ax.grid(alpha=0.2)
         legend = ax.get_legend()
         if legend is not None:
             for label in legend.get_texts():
-                label.set_fontsize(11)
+                label.set_fontsize(15)
 
 
 def figure(
@@ -192,6 +194,7 @@ def figure(
     target: Path,
     rate_hz: float,
     band_ratios: pd.DataFrame,
+    angle_fft: pd.DataFrame,
     *,
     includes_stops: bool = False,
 ) -> None:
@@ -199,7 +202,14 @@ def figure(
     t = frame["time_sec"].to_numpy(float)
     measured = "x_um" in frame and "y_um" in frame
     rows = 4 if measured else 3
-    fig, axes = plt.subplots(rows, 3, figsize=(18, 20 if measured else 16), constrained_layout=True)
+    height_ratios = (3.0, 1.2, 1.2, 4.5) if measured else (1.2, 1.2, 4.5)
+    fig, axes = plt.subplots(
+        rows,
+        3,
+        figsize=(21, 25 if measured else 17),
+        gridspec_kw={"height_ratios": height_ratios},
+        constrained_layout=True,
+    )
     if measured:
         x = frame["x_um"].to_numpy(float)
         y = frame["y_um"].to_numpy(float)
@@ -210,6 +220,7 @@ def figure(
         axes[0, 2].plot(x, y, linewidth=0.7)
         axes[0, 2].set(xlabel="x (um)", ylabel="y (um, image down)", title="Centroid x-y trajectory")
         axes[0, 2].set_aspect("equal", adjustable="box")
+        axes[0, 2].set_box_aspect(1)
         axes[0, 2].invert_yaxis()
     phase_ax, signed_ax, absolute_ax = axes[1 if measured else 0]
     stats_axes = axes[2 if measured else 1]
@@ -236,7 +247,7 @@ def figure(
     absolute_ax.set(xlabel="Time (s)", ylabel="rad/s", title="Absolute angular velocity")
     signed_ax.legend()
     absolute_ax.legend()
-    for width in WINDOWS_S:
+    for width in POSTER_DISPLAY_WINDOWS_S:
         label = f"{width:g} s"
         prefix = f"long_axis_sd_per_mean_{width:g}s"
         stats_axes[0].plot(t, frame[prefix], linewidth=0.8, label=label)
@@ -252,7 +263,22 @@ def figure(
     stats_axes[2].set_yscale("log")
     for ax in stats_axes:
         ax.legend(ncol=2)
+    if not angle_fft.empty:
+        angle_ax = stats_axes[2].twinx()
+        good = np.isfinite(angle_fft.amplitude_rad) & (angle_fft.amplitude_rad > 0)
+        angle_ax.plot(
+            angle_fft.loc[good, "frequency_hz"],
+            angle_fft.loc[good, "amplitude_rad"],
+            color="black",
+            linewidth=0.9,
+            label="Wrapped angle",
+        )
+        angle_ax.set_yscale("log")
+        angle_ax.set_ylabel("Angle FFT amplitude (rad, log)", fontsize=18)
+        angle_ax.tick_params(labelsize=16)
+        angle_ax.legend(loc="lower right", fontsize=15)
     for ax, (column, label, ylabel, scale) in zip(band_axes, BAND_PANELS):
+        ax.set_box_aspect(1.5)
         values = band_ratios[column].to_numpy(float)
         good = np.isfinite(values) & ((values > 0) if scale == "log" else True)
         ax.plot(band_ratios.loc[good, "window_s"], values[good], "-o")
@@ -262,7 +288,7 @@ def figure(
         ax.tick_params(axis="x", labelrotation=45)
     band_axes[0].set_title("Low / High (full record; stops retained)" if includes_stops else "Low / High (full record)")
     style_axes(axes)
-    fig.suptitle(title, fontsize=20)
+    fig.suptitle(title, fontsize=25)
     target.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(target, dpi=180)
     plt.close(fig)
@@ -270,8 +296,9 @@ def figure(
 
 def candidate_band_comparison(ratios: pd.DataFrame, target: Path) -> None:
     """Compare the user-selected cells without averaging distinct cells."""
-    fig, axes = plt.subplots(1, 3, figsize=(20, 7), constrained_layout=True)
+    fig, axes = plt.subplots(1, 3, figsize=(21, 12), constrained_layout=True)
     for ax, (column, title, ylabel, scale) in zip(axes, BAND_PANELS):
+        ax.set_box_aspect(1.5)
         for day, sample_no in POSTER_CANDIDATES:
             group = ratios[(ratios.day == day) & (ratios.sample_no == sample_no)].sort_values("window_s")
             values = group[column].to_numpy(float)
@@ -285,7 +312,7 @@ def candidate_band_comparison(ratios: pd.DataFrame, target: Path) -> None:
         ax.set_yscale(scale)
         ax.tick_params(axis="x", labelrotation=45)
     axes[0].legend()
-    fig.suptitle("Candidate cells: Low = 0–1 Hz, High = 80–100 Hz", fontsize=18)
+    fig.suptitle("Candidate cells: Low = 0–1 Hz, High = 80–100 Hz", fontsize=25)
     style_axes(axes)
     fig.savefig(target, dpi=180)
     plt.close(fig)
@@ -302,6 +329,12 @@ def save_case(source: pd.DataFrame, destination: Path, stem: str, title: str, me
         raise ValueError("Frame rate disagrees with the input timebase")
     frame, spectra, info = analyze_frame(source)
     band_ratios = band_amplitude_ratios(spectra["long_axis"])
+    if "long_axis_phase_rad" in frame:
+        angle_fft, angle_fft_meta = wrapped_angle_spectrum(
+            frame["time_sec"].to_numpy(float), frame["long_axis_phase_rad"].to_numpy(float)
+        )
+    else:
+        angle_fft, angle_fft_meta = pd.DataFrame(columns=["frequency_hz", "amplitude_rad"]), None
     speed_label = "direct generated speed" if "direct_omega_rad_s" in source else "long-axis angular velocity"
     fluctuation_label = f"z-scored Gaussian-window SD(abs({speed_label}))/Mean(abs({speed_label}))"
     destination.mkdir(parents=True, exist_ok=True)
@@ -310,6 +343,8 @@ def save_case(source: pd.DataFrame, destination: Path, stem: str, title: str, me
     frame.to_csv(tables / f"{stem}_time_series.csv", index=False)
     for name, spectrum in spectra.items():
         spectrum.to_csv(tables / f"{stem}_{name}_fft.csv", index=False)
+    if angle_fft_meta is not None:
+        angle_fft.to_csv(tables / f"{stem}_wrapped_angle_fft.csv", index=False)
     band_ratios.to_csv(tables / f"{stem}_band_amplitude_ratio.csv", index=False)
     with (tables / f"{stem}_metadata.json").open("w", encoding="utf-8") as stream:
         json.dump(
@@ -322,6 +357,13 @@ def save_case(source: pd.DataFrame, destination: Path, stem: str, title: str, me
                 "band_ratio_definition": "mean FFT amplitude for 0 < f < 1 Hz divided by mean FFT amplitude for 80 <= f < 100 Hz",
                 "band_ratio_source": fluctuation_label,
                 "band_ratio_includes_stops": metadata["kind"] == "measured",
+                "wrapped_angle_fft_timebase": angle_fft_meta,
+                "wrapped_angle_fft_definition": (
+                    "FFT amplitude of displayed [-pi,pi) relative long-axis angle in rad; "
+                    "longest continuous valid interval; wrap discontinuities retained"
+                    if angle_fft_meta is not None
+                    else "unavailable: direct speed control has no generated angle"
+                ),
             },
             stream,
             indent=2,
@@ -334,6 +376,7 @@ def save_case(source: pd.DataFrame, destination: Path, stem: str, title: str, me
         destination / f"{stem}.png",
         rate_hz,
         band_ratios,
+        angle_fft,
         includes_stops=metadata["kind"] == "measured",
     )
     row = {
@@ -560,7 +603,8 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
             "Private local poster analysis from binary AVI, not source TIFF. "
             "Measured plots are 1_rotational_measurements/<day>/No.XX.png; simulations are in 2_simulation/. "
             "Measured PNGs contain t-x, t-y, x-y; synthetic case PNGs omit coordinates. Angle-derived cases contain inferred relative phase wrapped to [-pi, pi); the direct-speed case leaves the angle panel empty. All contain separate signed "
-            "and absolute angular velocity, all six SD/Mean windows, standardized inputs, their FFTs, "
+            "and absolute angular velocity, three displayed SD/Mean windows (0.1/0.5/1.0 s), standardized inputs, their FFTs, "
+            "and the wrapped-angle FFT on a separate rad-amplitude axis where an angle exists. All six windows remain in tables. "
             "and side-by-side Low/High, Low-only and Low-High mean FFT amplitude metrics for 0<f<1 Hz and 80<=f<100 Hz. "
             "Measured ratios include stops; the ratio is unavailable when either band has no bins or the high-band mean is zero. "
             "A full measured run also writes the three candidate-cell comparison PNG and table under 1_rotational_measurements/. "
