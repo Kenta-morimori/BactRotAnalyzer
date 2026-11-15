@@ -27,12 +27,12 @@ from utils.functions.poster_fluctuation import (  # noqa: E402
     band_amplitude_ratios,
     duplicate_source_map,
     major_axis_deg,
-    synthetic_long_axis,
+    synthetic_control,
 )
 from utils.run_context import analysis_run  # noqa: E402
 
 DATASETS = {"20231005": "MotAB overexpression", "20230607": "Fixed rotational direction", "20231107": "Brake protein"}
-POSTER_CANDIDATES = (("20230607", 6), ("20230607", 8), ("20231005", 1), ("20231107", 6))
+POSTER_CANDIDATES = (("20230607", 6), ("20231005", 1), ("20231107", 6))
 BAND_PANELS = (
     ("low_to_high_amplitude_ratio", "Low / High", "Mean FFT amplitude ratio", "log"),
     ("low_mean_amplitude", "Low only", "Mean FFT amplitude", "linear"),
@@ -92,12 +92,18 @@ def read_avi(path: Path, settings: dict) -> pd.DataFrame:
 
 def analyze_frame(source: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, pd.DataFrame], dict]:
     time = source["time_sec"].to_numpy(float)
-    axis = source["long_axis_deg"].to_numpy(float)
-    long_angle, long_omega = axis_angular_velocity(time, axis)
+    direct_speed = "direct_omega_rad_s" in source
+    if direct_speed:
+        long_omega = source["direct_omega_rad_s"].to_numpy(float)
+        axis = np.full(len(source), np.nan)
+    else:
+        axis = source["long_axis_deg"].to_numpy(float)
+        long_angle, long_omega = axis_angular_velocity(time, axis)
     long_result = analyze(time, long_omega)
     frame = source.copy()
-    frame["long_axis_unwrapped_rad"] = long_angle
-    frame["long_axis_phase_rad"] = (long_angle + np.pi) % (2 * np.pi) - np.pi
+    if not direct_speed:
+        frame["long_axis_unwrapped_rad"] = long_angle
+        frame["long_axis_phase_rad"] = (long_angle + np.pi) % (2 * np.pi) - np.pi
     frame["long_axis_omega_rad_s"] = long_omega
     frame["long_axis_abs_omega_rad_s"] = np.abs(long_omega)
     for column in long_result.frame.columns:
@@ -105,23 +111,59 @@ def analyze_frame(source: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, pd.Data
             frame[f"long_axis_{column}"] = long_result.frame[column]
     spectra = {"long_axis": long_result.spectra}
     valid_axis = int(np.isfinite(long_omega).sum())
-    ratios = source["axis_ratio"].to_numpy(float)
+    ratios = source["axis_ratio"].to_numpy(float) if "axis_ratio" in source else np.full(len(source), np.nan)
     finite_ratios = ratios[np.isfinite(ratios)]
     raw_delta = (np.diff(axis) + 90.0) % 180.0 - 90.0
     finite_delta = np.abs(raw_delta[np.isfinite(raw_delta)])
     info = {
         "frame_count": len(frame),
         "detected_count": (
-            int(np.isfinite(source["x_um"].to_numpy(float)).sum()) if "x_um" in source else int(np.isfinite(axis).sum())
+            int(np.isfinite(source["x_um"].to_numpy(float)).sum())
+            if "x_um" in source
+            else (int(np.isfinite(axis).sum()) if not direct_speed else np.nan)
         ),
         "long_axis_omega_count": valid_axis,
         "long_axis_omega_fraction": valid_axis / max(1, len(frame) - 1),
+        "mean_abs_omega_rad_s": float(np.nanmean(np.abs(long_omega))),
+        "sd_abs_omega_rad_s": float(np.nanstd(np.abs(long_omega))),
         "axis_ratio_p10": float(np.percentile(finite_ratios, 10)) if len(finite_ratios) else np.nan,
         "axis_step_abs_deg_p95": float(np.percentile(finite_delta, 95)) if len(finite_delta) else np.nan,
         "long_axis_fft": long_result.metadata,
-        "angle_warning": "The unoriented long axis has a 180-degree ambiguity; angular changes of >=90 degrees per sample are not identifiable.",
+        "angular_velocity_source": "direct_generated_speed" if direct_speed else "long_axis_angle_difference",
+        "angle_warning": (
+            "No angle is generated for this direct-speed control."
+            if direct_speed
+            else "The unoriented long axis has a 180-degree ambiguity; angular changes of >=90 degrees per sample are not identifiable."
+        ),
     }
     return frame, spectra, info
+
+
+def synthetic_calibration(measured_dir: Path) -> tuple[pd.DataFrame, float, float]:
+    """Equal-weight cell means and within-cell SDs from selected measured CSVs."""
+    rows = []
+    for day, sample_no in POSTER_CANDIDATES:
+        path = measured_dir / day / "tables" / f"No.{sample_no:02d}_time_series.csv"
+        series = pd.read_csv(path)
+        speed = pd.to_numeric(series["long_axis_abs_omega_rad_s"], errors="coerce").to_numpy(float)
+        valid = speed[np.isfinite(speed)]
+        if len(valid) < 3 or np.any(valid < 0):
+            raise ValueError(f"{day} No.{sample_no:02d}: insufficient valid absolute angular velocity")
+        rows.append(
+            {
+                "day": day,
+                "sample_no": sample_no,
+                "valid_speed_count": len(valid),
+                "mean_abs_omega_rad_s": float(np.mean(valid)),
+                "sd_abs_omega_rad_s": float(np.std(valid)),
+            }
+        )
+    table = pd.DataFrame(rows)
+    target_mean = float(table["mean_abs_omega_rad_s"].mean())
+    target_sd = float(table["sd_abs_omega_rad_s"].mean())
+    if target_mean <= 0 or target_sd <= 0:
+        raise ValueError("Selected-cell speed mean and SD must be positive")
+    return table, target_mean, target_sd
 
 
 def wrapped_phase_plot(time: np.ndarray, phase: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -172,21 +214,24 @@ def figure(
     phase_ax, signed_ax, absolute_ax = axes[1 if measured else 0]
     stats_axes = axes[2 if measured else 1]
     band_axes = axes[3 if measured else 2]
-    phase_t, phase = wrapped_phase_plot(t, frame["long_axis_phase_rad"].to_numpy(float))
-    phase_ax.plot(phase_t, phase, linewidth=0.7)
-    phase_ax.set(
-        xlabel="Time (s)",
-        ylabel="Relative phase (rad, CCW +)",
-        title="Inferred phase (180° axis ambiguity)",
-    )
-    if not measured and frame["baseline_angle_rad"].eq(0).all():
-        phase_limit = max(0.01, 1.1 * np.nanmax(np.abs(phase)))
-        phase_ax.set_ylim(-phase_limit, phase_limit)
+    direct_speed = "direct_omega_rad_s" in frame
+    if direct_speed:
+        phase_ax.set(title="Angle not generated (direct speed input)")
+        phase_ax.set_xticks([])
+        phase_ax.set_yticks([])
     else:
+        phase_t, phase = wrapped_phase_plot(t, frame["long_axis_phase_rad"].to_numpy(float))
+        phase_ax.plot(phase_t, phase, linewidth=0.7)
+        phase_ax.set(
+            xlabel="Time (s)",
+            ylabel="Relative phase (rad, CCW +)",
+            title="Inferred phase (180° axis ambiguity)",
+        )
         phase_ax.set_ylim(-np.pi, np.pi)
         phase_ax.set_yticks([-np.pi, -np.pi / 2, 0, np.pi / 2, np.pi], ["−π", "−π/2", "0", "π/2", "π"])
-    signed_ax.plot(t, frame["long_axis_omega_rad_s"], linewidth=0.7, label="long axis (CCW +)")
-    absolute_ax.plot(t, frame["long_axis_abs_omega_rad_s"], linewidth=0.7, label="|long axis|")
+    signal_label = "generated speed" if direct_speed else "long axis"
+    signed_ax.plot(t, frame["long_axis_omega_rad_s"], linewidth=0.7, label=f"{signal_label} (CCW +)")
+    absolute_ax.plot(t, frame["long_axis_abs_omega_rad_s"], linewidth=0.7, label=f"|{signal_label}|")
     signed_ax.set(xlabel="Time (s)", ylabel="rad/s", title="Signed angular velocity")
     absolute_ax.set(xlabel="Time (s)", ylabel="rad/s", title="Absolute angular velocity")
     signed_ax.legend()
@@ -257,6 +302,8 @@ def save_case(source: pd.DataFrame, destination: Path, stem: str, title: str, me
         raise ValueError("Frame rate disagrees with the input timebase")
     frame, spectra, info = analyze_frame(source)
     band_ratios = band_amplitude_ratios(spectra["long_axis"])
+    speed_label = "direct generated speed" if "direct_omega_rad_s" in source else "long-axis angular velocity"
+    fluctuation_label = f"z-scored Gaussian-window SD(abs({speed_label}))/Mean(abs({speed_label}))"
     destination.mkdir(parents=True, exist_ok=True)
     tables = destination / "tables"
     tables.mkdir(parents=True, exist_ok=True)
@@ -270,10 +317,10 @@ def save_case(source: pd.DataFrame, destination: Path, stem: str, title: str, me
                 **metadata,
                 **info,
                 "window_widths_s": WINDOWS_S,
-                "fft_input": "z-scored Gaussian-window SD(abs(long-axis angular velocity))/Mean(abs(long-axis angular velocity))",
+                "fft_input": fluctuation_label,
                 "fft_display_nyquist_hz": rate_hz / 2,
                 "band_ratio_definition": "mean FFT amplitude for 0 < f < 1 Hz divided by mean FFT amplitude for 80 <= f < 100 Hz",
-                "band_ratio_source": "z-scored Gaussian-window SD(abs(long-axis angular velocity))/Mean(abs(long-axis angular velocity))",
+                "band_ratio_source": fluctuation_label,
                 "band_ratio_includes_stops": metadata["kind"] == "measured",
             },
             stream,
@@ -304,7 +351,7 @@ def save_case(source: pd.DataFrame, destination: Path, stem: str, title: str, me
 
 
 def null_spectrum_summary(spectrum: pd.DataFrame, rate_hz: float) -> dict:
-    """Compare random-only peaks over the full positive FFT band below Nyquist."""
+    """Compare random-speed peaks over the full positive FFT band below Nyquist."""
     band = spectrum[
         np.isfinite(spectrum.frequency_hz)
         & np.isfinite(spectrum.amplitude)
@@ -372,39 +419,67 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
                 row["band_ratio_file"] = f"{day}/{row['band_ratio_file']}"
                 rows.append(row)
     if args.mode in ("all", "synthetic"):
-        for rate in args.synthetic_rates:
-            for model in ("constant_angle_step_plus_noise", "random_angle_noise"):
-                print(f"Simulating {model} at {rate:g} Hz", flush=True)
-                source = synthetic_long_axis(model, rate, args.synthetic_duration, args.seed)
-                name = f"{model}_{int(rate)}hz_seed{args.seed}"
-                rows.append(
-                    save_case(
-                        source,
-                        destination / "2_simulation",
-                        f"simulation_{name}",
-                        name,
-                        {
-                            "kind": "synthetic",
-                            "model": model,
-                            "rate_hz": rate,
-                            "duration_s": args.synthetic_duration,
-                            "seed": args.seed,
-                            "base_hz": 8.0 if model == "constant_angle_step_plus_noise" else 0.0,
-                            "angle_noise_sd_rad": 0.01,
-                            "angle_model": (
-                                "constant angular step plus independent Gaussian angle noise"
-                                if model == "constant_angle_step_plus_noise"
-                                else "independent Gaussian angle noise only"
-                            ),
-                        },
+        simulation_dir = destination / "2_simulation"
+        tables = simulation_dir / "tables"
+        calibration, target_mean, target_sd = synthetic_calibration(destination / "1_rotational_measurements")
+        tables.mkdir(parents=True, exist_ok=True)
+        calibration.to_csv(tables / "simulation_calibration_cells.csv", index=False)
+        durations = (args.synthetic_duration, *getattr(args, "additional_synthetic_durations", []))
+        for duration in durations:
+            for rate in args.synthetic_rates:
+                for model in ("constant_angle_step_plus_noise", "random_speed_noise"):
+                    print(f"Simulating {model} at {rate:g} Hz for {duration:g} s", flush=True)
+                    source = synthetic_control(
+                        model,
+                        rate,
+                        duration,
+                        args.seed,
+                        mean_angular_speed_rad_s=target_mean,
+                        angular_speed_sd_rad_s=target_sd,
                     )
-                )
+                    duration_tag = "" if duration == 6.0 else f"_{duration:g}s"
+                    name = f"{model}_{int(rate)}hz{duration_tag}_seed{args.seed}"
+                    rows.append(
+                        save_case(
+                            source,
+                            destination / "2_simulation",
+                            f"simulation_{name}",
+                            name,
+                            {
+                                "kind": "synthetic",
+                                "model": model,
+                                "rate_hz": rate,
+                                "duration_s": duration,
+                                "seed": args.seed,
+                                "target_mean_abs_omega_rad_s": target_mean,
+                                "target_sd_abs_omega_rad_s": target_sd,
+                                "baseline_angular_velocity_rad_s": target_mean,
+                                "angle_noise_sd_rad": (
+                                    target_sd / (np.sqrt(2.0) * rate)
+                                    if model == "constant_angle_step_plus_noise"
+                                    else np.nan
+                                ),
+                                "generation_model": (
+                                    "constant angular step plus independent Gaussian angle noise"
+                                    if model == "constant_angle_step_plus_noise"
+                                    else "direct independent Gaussian angular-velocity noise around measured mean"
+                                ),
+                            },
+                        )
+                    )
         null_rows = []
         for rate in args.synthetic_rates:
             for seed in range(args.seed, args.seed + args.null_replicates):
-                null_source = synthetic_long_axis("random_angle_noise", rate, args.synthetic_duration, seed)
+                null_source = synthetic_control(
+                    "random_speed_noise",
+                    rate,
+                    args.synthetic_duration,
+                    seed,
+                    mean_angular_speed_rad_s=target_mean,
+                    angular_speed_sd_rad_s=target_sd,
+                )
                 null_time = null_source.time_sec.to_numpy(float)
-                _, null_omega = axis_angular_velocity(null_time, null_source.long_axis_deg.to_numpy(float))
+                null_omega = null_source.direct_omega_rad_s.to_numpy(float)
                 null_result = analyze(null_time, null_omega, windows=(0.2,))
                 null_rows.append(
                     {
@@ -413,26 +488,22 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
                         **null_spectrum_summary(null_result.spectra, rate),
                     }
                 )
-        simulation_dir = destination / "2_simulation"
-        simulation_dir.mkdir(parents=True, exist_ok=True)
-        tables = simulation_dir / "tables"
-        tables.mkdir(parents=True, exist_ok=True)
-        pd.DataFrame(null_rows).to_csv(tables / "simulation_random_angle_noise_ensemble.csv", index=False)
+        pd.DataFrame(null_rows).to_csv(tables / "simulation_random_speed_noise_ensemble.csv", index=False)
         fig, axes = plt.subplots(1, 2, figsize=(14, 5), constrained_layout=True)
         for rate, group in pd.DataFrame(null_rows).groupby("rate_hz"):
             axes[0].hist(group.peak_frequency_hz, bins=20, alpha=0.5, label=f"{rate:g} Hz")
             axes[1].hist(group.peak_to_median_full_band, bins=20, alpha=0.5, label=f"{rate:g} Hz")
         axes[0].set(
-            xlabel="Peak frequency (Hz)", ylabel="Count", title="Random angle noise: strongest apparent FFT peak"
+            xlabel="Peak frequency (Hz)", ylabel="Count", title="Random speed noise: strongest apparent FFT peak"
         )
         axes[0].set_xlim(0, max(args.synthetic_rates) / 2)
         axes[1].set(
-            xlabel="Peak / median amplitude, full band", ylabel="Count", title="Random angle noise: peak contrast"
+            xlabel="Peak / median amplitude, full band", ylabel="Count", title="Random speed noise: peak contrast"
         )
         for ax in axes:
             ax.legend()
         style_axes(axes)
-        fig.savefig(simulation_dir / "simulation_random_angle_noise_ensemble.png", dpi=180)
+        fig.savefig(simulation_dir / "simulation_random_speed_noise_ensemble.png", dpi=180)
         plt.close(fig)
         for obsolete in (
             *simulation_dir.glob("simulation_periodic_plus_noise_*.png"),
@@ -441,6 +512,8 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
             *tables.glob("simulation_steady_rotation_plus_noise_*"),
             *simulation_dir.glob("simulation_random_only_*.png"),
             *tables.glob("simulation_random_only_*"),
+            *simulation_dir.glob("simulation_random_angle_noise_*.png"),
+            *tables.glob("simulation_random_angle_noise_*"),
         ):
             obsolete.unlink()
     destination.mkdir(parents=True, exist_ok=True)
@@ -486,15 +559,15 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
         stream.write(
             "Private local poster analysis from binary AVI, not source TIFF. "
             "Measured plots are 1_rotational_measurements/<day>/No.XX.png; simulations are in 2_simulation/. "
-            "Measured PNGs contain t-x, t-y, x-y; synthetic case PNGs omit coordinates. Both contain inferred relative phase wrapped to [-pi, pi), separate signed "
-            "and absolute long-axis angular velocity, all six SD/Mean windows, standardized inputs, their FFTs, "
+            "Measured PNGs contain t-x, t-y, x-y; synthetic case PNGs omit coordinates. Angle-derived cases contain inferred relative phase wrapped to [-pi, pi); the direct-speed case leaves the angle panel empty. All contain separate signed "
+            "and absolute angular velocity, all six SD/Mean windows, standardized inputs, their FFTs, "
             "and side-by-side Low/High, Low-only and Low-High mean FFT amplitude metrics for 0<f<1 Hz and 80<=f<100 Hz. "
             "Measured ratios include stops; the ratio is unavailable when either band has no bins or the high-band mean is zero. "
-            "A full measured run also writes the four candidate-cell comparison PNG and table under 1_rotational_measurements/. "
+            "A full measured run also writes the three candidate-cell comparison PNG and table under 1_rotational_measurements/. "
             "The FFT plot extends to half the frame rate and uses a logarithmic amplitude axis. "
             "Each case's numeric series, spectra and metadata are in its sibling tables/. "
-            "Synthetic angles use a constant 8 Hz angle step plus independent Gaussian angle noise (SD 0.01 rad per frame), or independent Gaussian angle noise only without rotation. "
-            "Both derive angular velocity from the generated 180-degree long-axis angle. Defaults are 200/250 fps, 6 s, seed 81. "
+            "Both synthetic models use the equal-cell mean of absolute angular speed and equal-cell mean of within-cell SD from 20230607 No.06, 20231005 No.01 and 20231107 No.06. "
+            "The constant-step model adds independent Gaussian angle error calibrated to that speed SD and derives velocity from the generated 180-degree long-axis angle. The random-speed model directly generates independent Gaussian speed errors about the same mean, with no angle generation or integration. Defaults are 200/250 fps, 6 and 30 s, seed 81; the 40-seed null ensemble retains the 6 s primary duration. Calibration cells are saved in 2_simulation/tables/. "
             "Each category has index.csv; "
             "1_rotational_measurements/selection_template.csv marks excluded duplicate AVIs. "
             "Long-axis angle has 180-degree ambiguity. Derived measured plots and series stay local.\n"
@@ -509,19 +582,32 @@ if __name__ == "__main__":
     parser.add_argument("--output-root", default=str(ROOT / "outputs" / "poster_fluctuation"))
     parser.add_argument("--synthetic-rates", nargs="+", type=float, default=[200.0, 250.0])
     parser.add_argument("--synthetic-duration", type=float, default=6.0)
+    parser.add_argument("--additional-synthetic-durations", nargs="*", type=float, default=[30.0])
     parser.add_argument("--seed", type=int, default=81)
     parser.add_argument("--null-replicates", type=int, default=40)
     args = parser.parse_args()
     if args.null_replicates < 1:
         parser.error("--null-replicates must be positive")
+    durations = [args.synthetic_duration, *args.additional_synthetic_durations]
+    if any(not np.isfinite(duration) or duration <= 0 for duration in durations) or len(set(durations)) != len(
+        durations
+    ):
+        parser.error("Synthetic durations must be positive, finite, and distinct")
     data_root = Path(args.data_root).resolve()
     output_root = Path(args.output_root).resolve()
     files_by_day, settings_by_day = {}, {}
     inputs = []
     if args.mode in ("all", "measured"):
+        if args.mode == "all" and set(args.days) != set(DATASETS):
+            parser.error("--mode all requires all three measured days to calibrate synthetic controls")
         for day in args.days:
             files_by_day[day], settings_by_day[day] = dataset_files(data_root, day)
             inputs.extend([data_root / day / "config.ini", *files_by_day[day]])
+    if args.mode == "synthetic":
+        inputs.extend(
+            output_root / "1_rotational_measurements" / day / "tables" / f"No.{sample_no:02d}_time_series.csv"
+            for day, sample_no in POSTER_CANDIDATES
+        )
     with analysis_run(parameters=vars(args), inputs=inputs, outputs=[output_root]) as run_root:
         main(args, files_by_day, settings_by_day, output_root)
     # Keep a private copy beside custom output roots when the source worktree is archived.

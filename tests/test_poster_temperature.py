@@ -102,7 +102,7 @@ def test_cell_and_comparison_plots_accept_synthetic_data(tmp_path):
         rows.append(row)
         groups.append(ratios.assign(temperature_c=temp, sample_no=1))
     script["comparison_figures"](pd.DataFrame(rows), pd.concat(groups), tmp_path)
-    assert len(list(tmp_path.glob("compare_*.png"))) == 4
+    assert len(list(tmp_path.glob("compare_*.png"))) == 5
 
 
 def test_local_conic_refit_preserves_raw_centroids_and_missing_frames():
@@ -170,3 +170,15 @@ def test_cell_figure_records_unavailable_center_without_fft(tmp_path):
     assert np.isnan(summary["mean_rotation_radius_um"])
     script["cell_figure"](analyzed, spectra, ratios, summary, tmp_path / "unavailable.png", 200)
     assert (tmp_path / "unavailable.png").stat().st_size > 1000
+
+
+def test_radius_subset_keeps_boundary_and_rejects_missing_radius():
+    script = runpy.run_path(
+        str(Path(__file__).resolve().parents[1] / "scripts/10_poster_temperature_control.py"),
+        run_name="temperature_test",
+    )
+    choose = script["radius_selection"]
+    assert choose(0.2, 0.2) == (True, "included")
+    assert choose(0.20001, 0.2) == (False, "above_limit")
+    assert choose(np.nan, 0.2) == (False, "invalid_radius")
+    assert choose(0.3, None) == (True, "included")

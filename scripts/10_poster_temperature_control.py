@@ -191,7 +191,9 @@ def _condition_points(ax, summary: pd.DataFrame, column: str, ylabel: str, title
     ax.set_xticks(TEMPERATURES_C)
 
 
-def comparison_figures(summary: pd.DataFrame, all_ratios: pd.DataFrame, root: Path) -> None:
+def comparison_figures(
+    summary: pd.DataFrame, all_ratios: pd.DataFrame, root: Path, radius_axis_max_um: float = 1.0
+) -> None:
     fig, ax = plt.subplots(figsize=(10, 8), constrained_layout=True)
     _condition_points(ax, summary, SPEED, "Mean |ω| (rad/s)", "Mean orbit angular speed per cell")
     _style([ax])
@@ -200,6 +202,7 @@ def comparison_figures(summary: pd.DataFrame, all_ratios: pd.DataFrame, root: Pa
 
     fig, ax = plt.subplots(figsize=(10, 8), constrained_layout=True)
     _condition_points(ax, summary, RADIUS, "Mean radius (µm)", "Mean rotation radius per cell")
+    ax.set_ylim(0, radius_axis_max_um)
     _style([ax])
     fig.savefig(root / "compare_mean_rotation_radius.png", dpi=180)
     plt.close(fig)
@@ -224,14 +227,27 @@ def comparison_figures(summary: pd.DataFrame, all_ratios: pd.DataFrame, root: Pa
         )
     ax.set(
         xlabel="Gaussian window width (s)",
-        ylabel="Mean FFT amplitude ratio (log)",
+        ylabel="Mean FFT amplitude ratio",
         title="Low / High by window width (thin: cells; bold: cell mean)",
     )
     ax.set_xticks(WINDOWS_S)
-    ax.set_yscale("log")
+    ax.set_ylim(bottom=0)
     ax.legend()
     _style([ax])
     fig.savefig(root / "compare_low_frequency_relative_strength.png", dpi=180)
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(10, 8), constrained_layout=True)
+    _condition_points(
+        ax,
+        summary,
+        "low_to_high_amplitude_ratio_0.5s",
+        "0.5 s Low / High mean amplitude ratio",
+        "0.5 s low-frequency relative strength per cell",
+    )
+    ax.set_ylim(bottom=0)
+    _style([ax])
+    fig.savefig(root / "compare_low_frequency_relative_strength_0.5s_by_temperature.png", dpi=180)
     plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(11, 8), constrained_layout=True)
@@ -240,10 +256,10 @@ def comparison_figures(summary: pd.DataFrame, all_ratios: pd.DataFrame, root: Pa
         ax.scatter(group[SPEED], group["low_to_high_amplitude_ratio_0.5s"], s=58, color=COLORS[temp], label=f"{temp}°C")
     ax.set(
         xlabel="Mean |ω| (rad/s)",
-        ylabel="0.5 s Low / High mean amplitude ratio (log)",
+        ylabel="0.5 s Low / High mean amplitude ratio",
         title="Angular speed vs low-frequency relative strength",
     )
-    ax.set_yscale("log")
+    ax.set_ylim(bottom=0)
     ax.legend()
     _style([ax])
     fig.savefig(root / "compare_speed_vs_low_frequency_strength.png", dpi=180)
@@ -291,8 +307,25 @@ def compare_center_methods(summary: pd.DataFrame, baseline_path: Path, destinati
     plt.close(fig)
 
 
+def radius_selection(radius_um: float, maximum_um: float | None) -> tuple[bool, str]:
+    if maximum_um is None:
+        return True, "included"
+    if not np.isfinite(radius_um):
+        return False, "invalid_radius"
+    if radius_um > maximum_um:
+        return False, "above_limit"
+    return True, "included"
+
+
 def run(
-    source_root: Path, config_root: Path, destination: Path, *, center_mode: str = "stored", workers: int = 4
+    source_root: Path,
+    config_root: Path,
+    destination: Path,
+    *,
+    center_mode: str = "stored",
+    workers: int = 4,
+    max_mean_radius_um: float | None = None,
+    radius_axis_max_um: float = 1.0,
 ) -> None:
     if center_mode not in {"stored", "local_conic"}:
         raise ValueError(center_mode)
@@ -301,6 +334,7 @@ def run(
     destination.mkdir(parents=True, exist_ok=True)
     summaries = []
     all_ratios = []
+    selection = []
     pool_context = ProcessPoolExecutor(max_workers=workers) if center_mode == "local_conic" else nullcontext(None)
     with pool_context as pool:
         for temp in TEMPERATURES_C:
@@ -330,6 +364,20 @@ def run(
                         frame["center_y_um"] - frame["stored_center_y_um"],
                     )
                     summary["mean_center_shift_um"] = float(shift.mean())
+                radius = float(summary[RADIUS])
+                selected, reason = radius_selection(radius, max_mean_radius_um)
+                selection.append(
+                    {
+                        "temperature_c": temp,
+                        "sample_no": no,
+                        RADIUS: radius,
+                        "selected": selected,
+                        "reason": reason,
+                    }
+                )
+                if not selected:
+                    print(f"  No.{no:02d} excluded: mean radius {radius:.6g} µm", flush=True)
+                    continue
                 summary["plot_file"] = f"{temp}C/{stem}.png"
                 summary["series_file"] = f"{temp}C/tables/{stem}_time_series.csv"
                 summary["fft_file"] = f"{temp}C/tables/{stem}_fft.csv"
@@ -366,9 +414,11 @@ def run(
                 print(f"  No.{no:02d} done", flush=True)
     summary_frame = pd.DataFrame(summaries)
     ratio_frame = pd.concat(all_ratios, ignore_index=True)
+    if max_mean_radius_um is not None:
+        pd.DataFrame(selection).to_csv(destination / "selection.csv", index=False)
     summary_frame.to_csv(destination / "cell_summary.csv", index=False)
     ratio_frame.to_csv(destination / "window_band_amplitude_ratio.csv", index=False)
-    comparison_figures(summary_frame, ratio_frame, destination)
+    comparison_figures(summary_frame, ratio_frame, destination, radius_axis_max_um)
     if center_mode == "local_conic":
         compare_center_methods(
             summary_frame,
@@ -388,7 +438,14 @@ def run(
         "amplitude over 0<f<1 Hz divided by mean amplitude over 80<=f<100 Hz. "
         "The comparison scatter uses the 0.5 s window. Group lines are cell means, with "
         "individual cells shown; these cells are not assumed to be independent experimental replicates. "
+        f"Mean-radius comparison y axis spans 0 to {radius_axis_max_um:g} µm. "
         "Previous center corrections and source timestamp gaps are counted in cell_summary.csv. "
+        + (
+            f"This subset includes only cells whose mean radius is <= {max_mean_radius_um:g} µm. "
+            "selection.csv lists all input cells and exclusion reasons. "
+            if max_mean_radius_um is not None
+            else ""
+        )
         + (
             "For local_conic, the same stored raw centroids are refit by the repellent default local_conic "
             "estimator and completion. Center failures remain missing; compare_center_methods.csv and "
@@ -409,20 +466,46 @@ def main() -> None:
     )
     parser.add_argument("--center-mode", choices=("stored", "local_conic"), default="stored")
     parser.add_argument("--workers", type=int, default=4, help="parallel local_conic cell fits")
+    parser.add_argument(
+        "--max-mean-radius-um",
+        type=float,
+        default=None,
+        help="Include only cells with mean radius at or below this threshold (µm).",
+    )
+    parser.add_argument(
+        "--radius-axis-max-um", type=float, default=1.0, help="Upper y limit of the temperature mean-radius plot (µm)."
+    )
     args = parser.parse_args()
+    if args.max_mean_radius_um is not None and (
+        not np.isfinite(args.max_mean_radius_um) or args.max_mean_radius_um <= 0
+    ):
+        parser.error("--max-mean-radius-um must be finite and positive")
+    if not np.isfinite(args.radius_axis_max_um) or args.radius_axis_max_um <= 0:
+        parser.error("--radius-axis-max-um must be finite and positive")
+    if args.center_mode == "local_conic" and args.max_mean_radius_um is not None:
+        parser.error("--max-mean-radius-um is only supported with --center-mode stored")
     source_root, config_root, output_root = (
         args.source_root.resolve(),
         args.config_root.resolve(),
         args.output_root.resolve(),
     )
-    if args.center_mode == "local_conic":
-        output_root /= "local_conic"
+    destination = output_root / "local_conic" if args.center_mode == "local_conic" else output_root
+    if args.max_mean_radius_um is not None:
+        destination /= f"mean_radius_le_{args.max_mean_radius_um:g}um"
     inputs = [path for temp in TEMPERATURES_C for path in source_paths(source_root, config_root, temp)]
     if args.center_mode == "local_conic":
         inputs.append(source_root / "poster_fluctuation" / "3_Temperature_Control" / "cell_summary.csv")
-    with analysis_run(parameters=vars(args), inputs=inputs, outputs=[output_root]) as run_root:
-        run(source_root, config_root, output_root, center_mode=args.center_mode, workers=args.workers)
-    archive = output_root / "_run_records" / run_root.parent.name / run_root.name
+    with analysis_run(parameters=vars(args), inputs=inputs, outputs=[destination]) as run_root:
+        run(
+            source_root,
+            config_root,
+            destination,
+            center_mode=args.center_mode,
+            workers=args.workers,
+            max_mean_radius_um=args.max_mean_radius_um,
+            radius_axis_max_um=args.radius_axis_max_um,
+        )
+    archive = destination / "_run_records" / run_root.parent.name / run_root.name
     archive.mkdir(parents=True, exist_ok=False)
     shutil.copy2(run_root / "manifest.json", archive / "manifest.json")
     shutil.copy2(run_root / "run.log", archive / "run.log")

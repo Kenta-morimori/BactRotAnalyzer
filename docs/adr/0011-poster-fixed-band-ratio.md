@@ -2,7 +2,7 @@
 
 ## 状態
 
-2026-11-13 採用。Issue #82。ADR 0010のFFT全帯域表示は維持し、実測の比較指標を追加する。LowとLow−Highの追加表示は [ADR 0012](0012-poster-band-components-and-steady-simulation.md) で更新。
+2026-11-13 採用。Issue #82。ADR 0010のFFT全帯域表示は維持し、実測の比較指標を追加する。LowとLow−Highの追加表示は [ADR 0012](0012-poster-band-components-and-steady-simulation.md) で更新。候補No.08の除外は2026-11-14に [ADR 0017](0017-poster-empirical-speed-controls.md) で更新。
 
 ## 判断
 
