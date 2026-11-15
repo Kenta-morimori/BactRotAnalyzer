@@ -219,6 +219,8 @@ def test_one_poster_png_contains_absolute_velocity_and_log_fft(tmp_path, monkeyp
     assert all(ax.get_yscale() == "log" for ax in captured[0].axes[-2:])
     assert all(ax.lines[0].get_color() == "black" for ax in captured[0].axes[-2:])
     assert all(ax.lines[0].get_alpha() == 0.45 for ax in captured[0].axes[-2:])
+    assert np.allclose(captured[0].axes[5].get_ylim(), captured[0].axes[12].get_ylim())
+    assert np.allclose(captured[0].axes[8].get_ylim(), captured[0].axes[13].get_ylim())
     assert captured[0].axes[5].get_xlim()[1] == 100
     assert captured[0].axes[5].get_xticks()[-1] == 100
     assert captured[0].axes[5].xaxis.label.get_fontsize() >= 23
@@ -286,6 +288,7 @@ def test_main_routes_measured_plot_to_day_and_preserves_manual_selection(tmp_pat
     assert captured[0].axes[2].get_box_aspect() == 1
     assert all(len(captured[0].axes[i].lines) == 3 for i in (6, 7, 8))
     assert captured[0].axes[-1].lines[0].get_color() == "black"
+    assert np.allclose(captured[0].axes[8].get_ylim(), captured[0].axes[-1].get_ylim())
     assert (measured / "20230607/tables/No.01_wrapped_angle_fft.csv").is_file()
     assert captured[0].axes[9].get_yscale() == "log"
     assert len(captured[0].axes[9].lines[0].get_xdata()) == 6

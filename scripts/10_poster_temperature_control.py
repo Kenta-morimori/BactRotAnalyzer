@@ -171,6 +171,12 @@ def cell_figure(
         angle_fft_ax.set_yscale("log")
         angle_fft_ax.set_ylabel("Angle Amp [rad]", fontsize=23)
         angle_fft_ax.tick_params(labelsize=20)
+        shared_ylim = (
+            min(fft_ax.get_ylim()[0], angle_fft_ax.get_ylim()[0]),
+            max(fft_ax.get_ylim()[1], angle_fft_ax.get_ylim()[1]),
+        )
+        fft_ax.set_ylim(shared_ylim)
+        angle_fft_ax.set_ylim(shared_ylim)
         angle_fft_ax.legend(loc="lower right", fontsize=19)
 
     center_detail = (

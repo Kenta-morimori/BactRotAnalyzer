@@ -116,6 +116,7 @@ def test_cell_and_comparison_plots_accept_synthetic_data(tmp_path, monkeypatch):
     )
     assert figure.axes[-1].lines[0].get_color() == "black"
     assert figure.axes[-1].lines[0].get_alpha() == 0.45
+    assert np.allclose(fft_ax.get_ylim(), figure.axes[-1].get_ylim())
     assert all(ax.get_box_aspect() == 1.5 for ax in figure.axes[-4:-1])
     rows = []
     groups = []
