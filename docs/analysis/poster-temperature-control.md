@@ -12,6 +12,8 @@ python scripts/10_poster_temperature_control.py
 
 保存済み中心で算出した細胞ごとの平均回転半径が0.2 µm以下の細胞だけを比較する場合は、同じCLIに `--max-mean-radius-um 0.2 --radius-axis-max-um 0.5` を付ける。既定の全細胞出力は維持し、選択結果を `3_Temperature_Control/mean_radius_le_0.2um/` に分ける。このディレクトリには採用細胞の個別図・表と5比較図を出し、全入力細胞の採否と理由を `selection.csv` に記録する。閾値ちょうどの細胞は含め、平均半径が欠測の細胞は除く。これは任意の感度解析であり、撮影品質や生物学的採否の判定を意味しない。
 
+同じ半径制限版で `--other-window-speed-plots` を追加すると、0.5秒以外の0.1・0.2・1.0・1.5・2.0秒窓について、細胞平均絶対角速度と各窓のLow/High比の散布図を5枚、5幅をまとめた一覧図を1枚追加する。窓幅ごとに線形の縦軸範囲を設定する。既存の `compare_speed_vs_low_frequency_strength.png` は0.5秒窓の図として残る。
+
 出力先は既定で `outputs/poster_fluctuation/3_Temperature_Control/`。`10C/23C/30C/No.XX.png` に各細胞の重心と回転中心のt-x、t-y、x-y、半径、周回角、符号付き・絶対値角速度、6窓幅の揺らぎと標準化系列、FFT、Low/High比を載せる。対応する `tables/` に元フレーム番号付き時系列、FFT、窓幅ごとの帯域値、メタデータを保存する。ルートの `cell_summary.csv` は細胞単位の平均速さ、平均半径、0.5秒窓比、gap・中心補正の件数と出力相対パスをまとめる。`window_band_amplitude_ratio.csv` は全細胞・全窓幅の低域、高域、差、比、FFT点数を保持する。
 
 比較図は `compare_mean_angular_speed.png`、`compare_mean_rotation_radius.png`、6窓幅の `compare_low_frequency_relative_strength.png`、0.5秒窓だけを温度軸で比較する `compare_low_frequency_relative_strength_0.5s_by_temperature.png`、`compare_speed_vs_low_frequency_strength.png` の5枚。条件別の個々の細胞と細胞平均を区別する。平均半径の縦軸は既定で0–1.0 µmとし、0.2 µm以下の感度解析では上記オプションで0–0.5 µmにする。Low/High比の縦軸は比較図で線形表示にする。速さ対強度は0.5秒窓比を使う。細胞間の記述的比較であり、実験反復としての有意差検定は行わない。

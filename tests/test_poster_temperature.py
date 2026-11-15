@@ -103,6 +103,9 @@ def test_cell_and_comparison_plots_accept_synthetic_data(tmp_path):
         groups.append(ratios.assign(temperature_c=temp, sample_no=1))
     script["comparison_figures"](pd.DataFrame(rows), pd.concat(groups), tmp_path)
     assert len(list(tmp_path.glob("compare_*.png"))) == 5
+    script["comparison_figures"](pd.DataFrame(rows), pd.concat(groups), tmp_path, other_window_speed_plots=True)
+    assert len(list(tmp_path.glob("compare_*.png"))) == 11
+    assert (tmp_path / "compare_speed_vs_low_frequency_strength_other_windows.png").exists()
 
 
 def test_local_conic_refit_preserves_raw_centroids_and_missing_frames():

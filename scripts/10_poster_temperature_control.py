@@ -192,7 +192,11 @@ def _condition_points(ax, summary: pd.DataFrame, column: str, ylabel: str, title
 
 
 def comparison_figures(
-    summary: pd.DataFrame, all_ratios: pd.DataFrame, root: Path, radius_axis_max_um: float = 1.0
+    summary: pd.DataFrame,
+    all_ratios: pd.DataFrame,
+    root: Path,
+    radius_axis_max_um: float = 1.0,
+    other_window_speed_plots: bool = False,
 ) -> None:
     fig, ax = plt.subplots(figsize=(10, 8), constrained_layout=True)
     _condition_points(ax, summary, SPEED, "Mean |ω| (rad/s)", "Mean orbit angular speed per cell")
@@ -265,6 +269,37 @@ def comparison_figures(
     fig.savefig(root / "compare_speed_vs_low_frequency_strength.png", dpi=180)
     plt.close(fig)
 
+    if other_window_speed_plots:
+        other_widths = tuple(width for width in WINDOWS_S if width != 0.5)
+        overview, overview_axes = plt.subplots(2, 3, figsize=(18, 12), constrained_layout=True)
+        for index, width in enumerate(other_widths):
+            keys = ["temperature_c", "sample_no"]
+            selected = all_ratios.loc[all_ratios.window_s == width, keys + [RATIO]]
+            joined = summary[keys + [SPEED]].merge(selected, on=keys, how="left", validate="one_to_one", indicator=True)
+            if not (joined._merge == "both").all():
+                raise ValueError(f"missing {width:g} s band ratio for a selected cell")
+            fig, ax = plt.subplots(figsize=(11, 8), constrained_layout=True)
+            for current in (ax, overview_axes.flat[index]):
+                for temp in TEMPERATURES_C:
+                    group = joined[joined.temperature_c == temp]
+                    current.scatter(group[SPEED], group[RATIO], s=58, color=COLORS[temp], label=f"{temp}°C")
+                current.set(
+                    xlabel="Mean |ω| (rad/s)",
+                    ylabel="Low / High mean amplitude ratio",
+                    title=f"{width:g} s Gaussian window",
+                )
+                current.set_ylim(bottom=0)
+            ax.legend()
+            _style([ax])
+            fig.savefig(root / f"compare_speed_vs_low_frequency_strength_{width:g}s.png", dpi=180)
+            plt.close(fig)
+        overview_axes.flat[0].legend()
+        overview_axes.flat[-1].axis("off")
+        _style(overview_axes)
+        overview.suptitle("Angular speed vs low-frequency strength by window width", fontsize=20)
+        overview.savefig(root / "compare_speed_vs_low_frequency_strength_other_windows.png", dpi=180)
+        plt.close(overview)
+
 
 def compare_center_methods(summary: pd.DataFrame, baseline_path: Path, destination: Path) -> None:
     baseline = pd.read_csv(baseline_path)
@@ -326,6 +361,7 @@ def run(
     workers: int = 4,
     max_mean_radius_um: float | None = None,
     radius_axis_max_um: float = 1.0,
+    other_window_speed_plots: bool = False,
 ) -> None:
     if center_mode not in {"stored", "local_conic"}:
         raise ValueError(center_mode)
@@ -418,7 +454,7 @@ def run(
         pd.DataFrame(selection).to_csv(destination / "selection.csv", index=False)
     summary_frame.to_csv(destination / "cell_summary.csv", index=False)
     ratio_frame.to_csv(destination / "window_band_amplitude_ratio.csv", index=False)
-    comparison_figures(summary_frame, ratio_frame, destination, radius_axis_max_um)
+    comparison_figures(summary_frame, ratio_frame, destination, radius_axis_max_um, other_window_speed_plots)
     if center_mode == "local_conic":
         compare_center_methods(
             summary_frame,
@@ -439,7 +475,12 @@ def run(
         "The comparison scatter uses the 0.5 s window. Group lines are cell means, with "
         "individual cells shown; these cells are not assumed to be independent experimental replicates. "
         f"Mean-radius comparison y axis spans 0 to {radius_axis_max_um:g} µm. "
-        "Previous center corrections and source timestamp gaps are counted in cell_summary.csv. "
+        + (
+            "Five additional speed-versus-Low/High plots and one overview cover windows other than 0.5 s. "
+            if other_window_speed_plots
+            else ""
+        )
+        + "Previous center corrections and source timestamp gaps are counted in cell_summary.csv. "
         + (
             f"This subset includes only cells whose mean radius is <= {max_mean_radius_um:g} µm. "
             "selection.csv lists all input cells and exclusion reasons. "
@@ -475,6 +516,11 @@ def main() -> None:
     parser.add_argument(
         "--radius-axis-max-um", type=float, default=1.0, help="Upper y limit of the temperature mean-radius plot (µm)."
     )
+    parser.add_argument(
+        "--other-window-speed-plots",
+        action="store_true",
+        help="Plot speed against Low/High for every window except 0.5 s.",
+    )
     args = parser.parse_args()
     if args.max_mean_radius_um is not None and (
         not np.isfinite(args.max_mean_radius_um) or args.max_mean_radius_um <= 0
@@ -504,6 +550,7 @@ def main() -> None:
             workers=args.workers,
             max_mean_radius_um=args.max_mean_radius_um,
             radius_axis_max_um=args.radius_axis_max_um,
+            other_window_speed_plots=args.other_window_speed_plots,
         )
     archive = destination / "_run_records" / run_root.parent.name / run_root.name
     archive.mkdir(parents=True, exist_ok=False)
