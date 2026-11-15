@@ -154,9 +154,23 @@ def test_cell_and_comparison_plots_accept_synthetic_data(tmp_path, monkeypatch):
         groups.append(ratios.assign(temperature_c=temp, sample_no=1))
     script["comparison_figures"](pd.DataFrame(rows), pd.concat(groups), tmp_path)
     assert len(list(tmp_path.glob("compare_*.png"))) == 5
-    assert captured["compare_low_frequency_relative_strength_0.5s_by_temperature.png"].get_figwidth() == 7
+    assert all(
+        captured[name].get_size_inches().tolist() == [9, 8]
+        for name in (
+            "compare_mean_angular_speed.png",
+            "compare_mean_rotation_radius.png",
+            "compare_low_frequency_relative_strength_0.5s_by_temperature.png",
+        )
+    )
     assert captured["compare_mean_angular_speed.png"].axes[0].get_ylabel() == "Mean rotational speed [rad/s]"
-    assert len(captured["compare_mean_angular_speed.png"].axes[0].patches) == 3
+    assert all(
+        len(captured[name].axes[0].patches) == 3
+        for name in (
+            "compare_mean_angular_speed.png",
+            "compare_mean_rotation_radius.png",
+            "compare_low_frequency_relative_strength_0.5s_by_temperature.png",
+        )
+    )
     speed_strength_ax = captured["compare_speed_vs_low_frequency_strength.png"].axes[0]
     assert all(collection.get_alpha() == 0.55 for collection in speed_strength_ax.collections)
     assert captured["compare_mean_rotation_radius.png"].axes[0].get_ylabel() == "Mean rotational radius [µm]"

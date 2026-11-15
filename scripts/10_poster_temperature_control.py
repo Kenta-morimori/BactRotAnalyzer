@@ -255,12 +255,34 @@ def _condition_points(ax, summary: pd.DataFrame, column: str, ylabel: str, title
     for temp in TEMPERATURES_C:
         group = summary[summary.temperature_c == temp]
         values = group[column].to_numpy(float)
-        ax.scatter(np.full(len(group), temp), values, s=110, color=COLORS[temp], alpha=0.72)
+        offsets = np.linspace(-0.8, 0.8, len(values)) if len(values) > 1 else np.zeros(len(values))
+        ax.scatter(
+            temp + offsets,
+            values,
+            s=150,
+            color=COLORS[temp],
+            alpha=0.78,
+            edgecolor="white",
+            linewidth=0.8,
+            zorder=3,
+        )
         finite = values[np.isfinite(values)]
         if len(finite):
-            ax.scatter([temp], [np.mean(finite)], marker="D", s=230, edgecolor="black", color=COLORS[temp], zorder=4)
+            ax.scatter([temp], [np.mean(finite)], marker="D", s=270, edgecolor="black", color=COLORS[temp], zorder=4)
     ax.set(xlabel="Temperature [°C]", ylabel=ylabel, title=title)
     ax.set_xticks(TEMPERATURES_C)
+
+
+def _condition_boxplot(ax, summary: pd.DataFrame, column: str) -> None:
+    box_values = []
+    for temp in TEMPERATURES_C:
+        values = summary.loc[summary.temperature_c == temp, column].to_numpy(float)
+        box_values.append(values[np.isfinite(values)])
+    boxplot = ax.boxplot(box_values, positions=TEMPERATURES_C, widths=3, patch_artist=True, showfliers=False)
+    for box, temp in zip(boxplot["boxes"], TEMPERATURES_C):
+        box.set(facecolor=COLORS[temp], alpha=0.18, edgecolor=COLORS[temp], linewidth=2)
+    for median in boxplot["medians"]:
+        median.set(color="black", linewidth=2)
 
 
 def comparison_figures(
@@ -270,22 +292,15 @@ def comparison_figures(
     radius_axis_max_um: float = 1.0,
     other_window_speed_plots: bool = False,
 ) -> None:
-    fig, ax = plt.subplots(figsize=(7, 8), constrained_layout=True)
-    box_values = []
-    for temp in TEMPERATURES_C:
-        values = summary.loc[summary.temperature_c == temp, SPEED].to_numpy(float)
-        box_values.append(values[np.isfinite(values)])
-    boxplot = ax.boxplot(box_values, positions=TEMPERATURES_C, widths=3, patch_artist=True, showfliers=False)
-    for box, temp in zip(boxplot["boxes"], TEMPERATURES_C):
-        box.set(facecolor=COLORS[temp], alpha=0.18, edgecolor=COLORS[temp], linewidth=2)
-    for median in boxplot["medians"]:
-        median.set(color="black", linewidth=2)
+    fig, ax = plt.subplots(figsize=(9, 8), constrained_layout=True)
+    _condition_boxplot(ax, summary, SPEED)
     _condition_points(ax, summary, SPEED, "Mean rotational speed [rad/s]", "Mean rotational speed")
     _style([ax])
     fig.savefig(root / "compare_mean_angular_speed.png", dpi=180)
     plt.close(fig)
 
-    fig, ax = plt.subplots(figsize=(7, 8), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=(9, 8), constrained_layout=True)
+    _condition_boxplot(ax, summary, RADIUS)
     _condition_points(ax, summary, RADIUS, "Mean rotational radius [µm]", "Mean rotational radius")
     ax.set_ylim(0, radius_axis_max_um)
     _style([ax])
@@ -321,7 +336,8 @@ def comparison_figures(
     fig.savefig(root / "compare_low_frequency_relative_strength.png", dpi=180)
     plt.close(fig)
 
-    fig, ax = plt.subplots(figsize=(7, 8), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=(9, 8), constrained_layout=True)
+    _condition_boxplot(ax, summary, "low_to_high_amplitude_ratio_0.5s")
     _condition_points(
         ax,
         summary,
@@ -500,7 +516,7 @@ def run(
         "The six Gaussian windows slide by one source frame; the cell PNG shows 0.1/0.5/1.0 s, while tables keep all six. The standardized SD/Mean FFT "
         "uses the longest continuous valid interval. Relative low-frequency strength is mean "
         "amplitude over 0<f<1 Hz divided by mean amplitude over 80<=f<100 Hz. "
-        "The temperature speed comparison overlays cell points and boxplots; the speed-versus-strength scatter uses translucent markers and the 0.5 s window. Group lines are cell means, with "
+        "The three temperature summary comparisons overlay cell points and boxplots; the speed-versus-strength scatter uses translucent markers and the 0.5 s window. Group lines are cell means, with "
         "individual cells shown; these cells are not assumed to be independent experimental replicates. "
         "The black angle FFT uses the displayed wrapped orbit angle on the longest continuous valid interval, "
         "on the same logarithmic Amp axis without rescaling; the raw amplitudes have different units, and wrap harmonics are retained. "
