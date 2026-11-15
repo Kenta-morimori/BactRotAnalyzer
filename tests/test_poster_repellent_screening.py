@@ -81,3 +81,12 @@ def test_inventory_separates_alternate_exports_from_independent_cells(tmp_path):
     assert inventory.loc["20260312", "status"] == "screened"
     assert inventory.loc["20260312_mode=1", "status"] == "alternate_export_not_independent"
     assert inventory.loc["raw_only", "status"] == "incomplete_export"
+
+
+def test_export_method_metadata_reads_legacy_analysis_method_record(tmp_path):
+    script = _script()
+    (tmp_path / "analysis_method.json").write_text('{"center_estimator": "v2", "sign_convention": "CW +"}')
+    method, source = script.export_method_metadata(tmp_path)
+    assert source == "analysis_method.json"
+    assert method["center_estimator"] == "v2"
+    assert method["sign_convention"] == "CW +"

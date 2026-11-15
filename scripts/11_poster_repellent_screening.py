@@ -58,6 +58,14 @@ def complete_bundle(folder: Path) -> bool:
     return all((folder / name).is_file() for name in REQUIRED)
 
 
+def export_method_metadata(folder: Path) -> tuple[dict, str]:
+    for name in ("settings.json", "analysis_method.json"):
+        path = folder / name
+        if path.is_file():
+            return json.loads(path.read_text(encoding="utf-8")), name
+    return {}, "unrecorded"
+
+
 def source_inventory(source_root: Path, raw_root: Path) -> pd.DataFrame:
     names = {p.name for p in source_root.iterdir() if p.is_dir()}
     raw_names = {p.name for p in raw_root.iterdir() if p.is_dir()} if raw_root.is_dir() else set()
@@ -334,9 +342,9 @@ def screen_dataset(dataset: str, exported: Path, target: Path) -> list[dict]:
     omega = files[REQUIRED[5]]
     background = files[REQUIRED[6]]
     rises = files[REQUIRED[7]]
-    settings_path = exported / "settings.json"
-    settings = json.loads(settings_path.read_text()) if settings_path.is_file() else {}
+    settings, metadata_file = export_method_metadata(exported)
     method = settings.get("center_estimator", settings.get("primary_method", "legacy_export_unknown"))
+    sign_convention = settings.get("sign_convention", "unrecorded")
     target.mkdir(parents=True, exist_ok=True)
     results = []
     for row in mapping.itertuples(index=False):
@@ -388,6 +396,8 @@ def screen_dataset(dataset: str, exported: Path, target: Path) -> list[dict]:
                 "segment_no": segment_no,
                 "source_export": str(exported),
                 "center_method": method,
+                "center_method_metadata_file": metadata_file,
+                "exported_sign_convention": sign_convention,
                 "velocity_time_alignment": velocity_alignment,
                 "plot_file": plot_file,
                 "review_status": "unreviewed",
@@ -439,7 +449,8 @@ def run(source_root: Path, raw_root: Path, output_root: Path, selected: set[str]
         "review_first.csv is a conservative visual-review queue: post/pre brightness median at least 1.5, maximum adjacent "
         "center step at most 0.1 times median orbit radius, and over half of recorded duration above 0.2 times the pre-rise "
         "median speed. It is not an acceptance list. All other screened cells remain in index.csv. "
-        "Older exports without settings.json have an unknown center method; unmatched raw folders require provenance review. "
+        "Center method and sign convention are read from settings.json or analysis_method.json when present; otherwise "
+        "they remain unrecorded. Unmatched raw folders require provenance review. "
         "selection_template.csv is regenerated; any hand-edited selection.csv is preserved. Pre-rise fluctuation and post-rise switching "
         "are reserved for the next analysis step. Measured figures and tables must remain local.\n",
         encoding="utf-8",
@@ -465,9 +476,10 @@ def main() -> None:
         source_root / dataset / "repellent_response" / name for dataset in (selected or available) for name in REQUIRED
     ]
     inputs += [
-        source_root / dataset / "repellent_response" / "settings.json"
+        path
         for dataset in (selected or available)
-        if (source_root / dataset / "repellent_response" / "settings.json").is_file()
+        for name in ("settings.json", "analysis_method.json")
+        if (path := source_root / dataset / "repellent_response" / name).is_file()
     ]
     with analysis_run(parameters=vars(args), inputs=inputs, outputs=[output_root]) as run_root:
         run(source_root, raw_root, output_root, selected)
