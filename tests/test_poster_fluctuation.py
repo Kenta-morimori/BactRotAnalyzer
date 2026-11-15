@@ -351,8 +351,10 @@ def test_candidate_band_comparison_normalizes_four_representatives(tmp_path, mon
     assert all(ax.get_yscale() == "linear" for ax in captured[0].axes)
     assert all(ax.get_box_aspect() == 1.5 for ax in captured[0].axes)
     assert all(ax.get_legend() is None for ax in captured[0].axes)
+    assert all(ax.get_xlabel() == "Window width [s]" and ax.get_ylabel() == "Amp ratio" for ax in captured[0].axes)
     labels = [item.get_text() for item in captured[0].legends[0].get_texts()]
-    assert labels == [case[2] for case in script["COMPARISON_CASES"]]
+    assert labels == ["SJW46", "SJW46/MotAB", "YSC2123/MotAB", "YcgR-tet"]
+    assert captured[0].legends[0]._ncols == 1
     assert "No.08" not in " ".join(labels)
     assert "centroid orbit angle" in captured[0]._suptitle.get_text()
 
