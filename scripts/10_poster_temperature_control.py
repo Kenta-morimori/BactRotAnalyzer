@@ -173,7 +173,9 @@ def _condition_points(ax, summary: pd.DataFrame, column: str, ylabel: str, title
     ax.set_xticks(TEMPERATURES_C)
 
 
-def comparison_figures(summary: pd.DataFrame, all_ratios: pd.DataFrame, root: Path) -> None:
+def comparison_figures(
+    summary: pd.DataFrame, all_ratios: pd.DataFrame, root: Path, radius_axis_max_um: float = 1.0
+) -> None:
     fig, ax = plt.subplots(figsize=(10, 8), constrained_layout=True)
     _condition_points(ax, summary, SPEED, "Mean |ω| (rad/s)", "Mean orbit angular speed per cell")
     _style([ax])
@@ -182,7 +184,7 @@ def comparison_figures(summary: pd.DataFrame, all_ratios: pd.DataFrame, root: Pa
 
     fig, ax = plt.subplots(figsize=(10, 8), constrained_layout=True)
     _condition_points(ax, summary, RADIUS, "Mean radius (µm)", "Mean rotation radius per cell")
-    ax.set_ylim(0, 1.0)
+    ax.set_ylim(0, radius_axis_max_um)
     _style([ax])
     fig.savefig(root / "compare_mean_rotation_radius.png", dpi=180)
     plt.close(fig)
@@ -242,7 +244,13 @@ def radius_selection(radius_um: float, maximum_um: float | None) -> tuple[bool, 
     return True, "included"
 
 
-def run(source_root: Path, config_root: Path, destination: Path, max_mean_radius_um: float | None = None) -> None:
+def run(
+    source_root: Path,
+    config_root: Path,
+    destination: Path,
+    max_mean_radius_um: float | None = None,
+    radius_axis_max_um: float = 1.0,
+) -> None:
     destination.mkdir(parents=True, exist_ok=True)
     summaries = []
     all_ratios = []
@@ -310,7 +318,7 @@ def run(source_root: Path, config_root: Path, destination: Path, max_mean_radius
         pd.DataFrame(selection).to_csv(destination / "selection.csv", index=False)
     summary_frame.to_csv(destination / "cell_summary.csv", index=False)
     ratio_frame.to_csv(destination / "window_band_amplitude_ratio.csv", index=False)
-    comparison_figures(summary_frame, ratio_frame, destination)
+    comparison_figures(summary_frame, ratio_frame, destination, radius_axis_max_um)
     (destination / "README.txt").write_text(
         "Private local SJW46 temperature-control analysis. The source tables are the existing "
         "SJW46_temp=10/23/30 outputs; they contain corrected-center-relative centroids in µm, "
@@ -324,6 +332,7 @@ def run(source_root: Path, config_root: Path, destination: Path, max_mean_radius
         "amplitude over 0<f<1 Hz divided by mean amplitude over 80<=f<100 Hz. "
         "The comparison scatter uses the 0.5 s window. Group lines are cell means, with "
         "individual cells shown; these cells are not assumed to be independent experimental replicates. "
+        f"Mean-radius comparison y axis spans 0 to {radius_axis_max_um:g} µm. "
         "Previous center corrections and source timestamp gaps are counted in cell_summary.csv. "
         + (
             f"This subset includes only cells whose stored-center mean radius is <= {max_mean_radius_um:g} µm. "
@@ -348,11 +357,16 @@ def main() -> None:
         default=None,
         help="Include only cells with stored-center mean radius at or below this threshold (µm).",
     )
+    parser.add_argument(
+        "--radius-axis-max-um", type=float, default=1.0, help="Upper y limit of the temperature mean-radius plot (µm)."
+    )
     args = parser.parse_args()
     if args.max_mean_radius_um is not None and (
         not np.isfinite(args.max_mean_radius_um) or args.max_mean_radius_um <= 0
     ):
         parser.error("--max-mean-radius-um must be finite and positive")
+    if not np.isfinite(args.radius_axis_max_um) or args.radius_axis_max_um <= 0:
+        parser.error("--radius-axis-max-um must be finite and positive")
     source_root, config_root, output_root = (
         args.source_root.resolve(),
         args.config_root.resolve(),
@@ -365,7 +379,7 @@ def main() -> None:
     )
     inputs = [path for temp in TEMPERATURES_C for path in source_paths(source_root, config_root, temp)]
     with analysis_run(parameters=vars(args), inputs=inputs, outputs=[destination]) as run_root:
-        run(source_root, config_root, destination, args.max_mean_radius_um)
+        run(source_root, config_root, destination, args.max_mean_radius_um, args.radius_axis_max_um)
     archive = destination / "_run_records" / run_root.parent.name / run_root.name
     archive.mkdir(parents=True, exist_ok=False)
     shutil.copy2(run_root / "manifest.json", archive / "manifest.json")
