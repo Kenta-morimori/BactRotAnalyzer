@@ -352,6 +352,9 @@ def test_candidate_band_comparison_normalizes_four_representatives(tmp_path, mon
     assert all(ax.get_box_aspect() == 1.5 for ax in captured[0].axes)
     assert all(ax.get_legend() is None for ax in captured[0].axes)
     assert all(ax.get_xlabel() == "Window width [s]" and ax.get_ylabel() == "Amp ratio" for ax in captured[0].axes)
+    for ax in captured[0].axes:
+        assert [tick.get_text() for tick in ax.get_xticklabels()] == ["0.1", "0.2", "0.5", "1.0", "1.5", "2.0"]
+        assert all(np.array_equal(line.get_xdata(), np.arange(6)) for line in ax.lines)
     labels = [item.get_text() for item in captured[0].legends[0].get_texts()]
     assert labels == ["SJW46", "SJW46/MotAB", "YSC2123/MotAB", "YcgR-tet"]
     assert captured[0].legends[0]._ncols == 1

@@ -348,6 +348,7 @@ def candidate_band_comparison(ratios: pd.DataFrame, target: Path) -> None:
     """Compare each candidate's window-width shape after per-series maximum normalization."""
     fig, axes = plt.subplots(1, 3, figsize=(21, 13), constrained_layout=True)
     fig.get_layout_engine().set(w_pad=0.28, h_pad=0.30, wspace=0.08)
+    window_positions = {width: position for position, width in enumerate(WINDOWS_S)}
     handles = []
     labels = []
     for ax, (column, title, _, _) in zip(axes, BAND_PANELS):
@@ -358,14 +359,16 @@ def candidate_band_comparison(ratios: pd.DataFrame, target: Path) -> None:
                 continue
             values = group[f"{column}_normalized"].to_numpy(float)
             good = np.isfinite(values)
-            (line,) = ax.plot(group.loc[good, "window_s"], values[good], "-o", linewidth=2.4, markersize=8)
+            positions = group.loc[good, "window_s"].map(window_positions)
+            (line,) = ax.plot(positions, values[good], "-o", linewidth=2.4, markersize=8)
             if ax is axes[0]:
                 handles.append(line)
                 labels.append("SJW46" if day == "SJW46_23C" else label)
         ax.set(xlabel="Window width [s]", ylabel="Amp ratio", title=title)
-        ax.set_xticks(WINDOWS_S)
+        ax.set_xticks(list(window_positions.values()), [f"{width:.1f}" for width in WINDOWS_S])
+        ax.set_xlim(-0.25, len(WINDOWS_S) - 0.75)
         ax.set_ylim(top=1.05)
-        ax.tick_params(axis="x", labelrotation=45)
+        ax.tick_params(axis="x", labelrotation=0)
     fig.legend(handles, labels, loc="outside right center", ncol=1, fontsize=19)
     fig.suptitle(
         "Representative cells: normalized band metrics\n"
