@@ -48,7 +48,7 @@ def review_priority(metrics: dict) -> str:
     if (
         metrics["background_median_post_over_pre"] >= 1.5
         and metrics["center_step_over_radius_max"] <= 0.1
-        and metrics["speed_above_0.2x_pre_median_fraction_of_record"] > 0.5
+        and metrics["speed_above_0.2x_pre_median_time_fraction_of_record"] > 0.5
     ):
         return "review_first"
     return "review_remaining"
@@ -136,6 +136,8 @@ def summarize_cell(
     center_y: np.ndarray,
     velocity_time: np.ndarray,
     omega: np.ndarray,
+    velocity_interval_end: np.ndarray,
+    velocity_alignment: str,
     background_time: np.ndarray,
     background: np.ndarray,
     rise_time: float,
@@ -158,6 +160,20 @@ def summarize_cell(
 
     time_slots = np.isfinite(velocity_time)
     valid_velocity = time_slots & np.isfinite(omega)
+    interval_dt = velocity_interval_end - velocity_time
+    positive_dt = interval_dt[np.isfinite(interval_dt) & (interval_dt > 0)]
+    nominal_dt = float(np.median(positive_dt)) if len(positive_dt) else np.nan
+    valid_interval = valid_velocity & np.isfinite(interval_dt) & (interval_dt > 0) & (interval_dt <= 1.5 * nominal_dt)
+    if velocity_alignment == "point":
+        valid_interval[:-1] &= np.isfinite(omega[1:])
+    elif velocity_alignment != "interval_start":
+        raise ValueError(f"Unsupported velocity alignment: {velocity_alignment}")
+    record_duration = (
+        float(np.max(velocity_interval_end[np.isfinite(velocity_interval_end)]) - np.min(velocity_time[time_slots]))
+        if np.any(np.isfinite(velocity_interval_end)) and np.any(time_slots)
+        else np.nan
+    )
+    valid_interval_duration = float(np.sum(interval_dt[valid_interval]))
     baseline_speed = valid_velocity & (velocity_time < rise_time)
     reference_speed = float(np.median(np.abs(omega[baseline_speed]))) if np.any(baseline_speed) else np.nan
     active = np.full(len(omega), np.nan)
@@ -185,6 +201,11 @@ def summarize_cell(
         "velocity_valid_fraction": (
             float(np.count_nonzero(valid_velocity) / np.count_nonzero(time_slots)) if np.any(time_slots) else np.nan
         ),
+        "velocity_valid_time_fraction_of_record": (
+            valid_interval_duration / record_duration
+            if np.isfinite(record_duration) and record_duration > 0
+            else np.nan
+        ),
         "median_pre_rise_abs_omega_rad_s": reference_speed,
     }
     for ratio in PROXY_RATIOS:
@@ -193,11 +214,20 @@ def summarize_cell(
             moving = valid_velocity & (np.abs(omega) >= ratio * reference_speed)
             metrics[key + "_of_record"] = float(np.count_nonzero(moving) / np.count_nonzero(time_slots))
             metrics[key + "_of_valid"] = float(np.count_nonzero(moving) / np.count_nonzero(valid_velocity))
+            moving_duration = float(np.sum(interval_dt[valid_interval & moving]))
+            metrics[f"speed_above_{ratio:g}x_pre_median_time_fraction_of_record"] = (
+                moving_duration / record_duration if np.isfinite(record_duration) and record_duration > 0 else np.nan
+            )
+            metrics[f"speed_above_{ratio:g}x_pre_median_time_fraction_of_valid"] = (
+                moving_duration / valid_interval_duration if valid_interval_duration > 0 else np.nan
+            )
             if ratio == 0.2:
                 active[valid_velocity] = moving[valid_velocity].astype(float)
         else:
             metrics[key + "_of_record"] = np.nan
             metrics[key + "_of_valid"] = np.nan
+            metrics[f"speed_above_{ratio:g}x_pre_median_time_fraction_of_record"] = np.nan
+            metrics[f"speed_above_{ratio:g}x_pre_median_time_fraction_of_valid"] = np.nan
     return metrics, step_time, step_ratio, active
 
 
@@ -324,9 +354,12 @@ def screen_dataset(dataset: str, exported: Path, target: Path) -> list[dict]:
         if not (len(pt) == len(rx) == len(ry) == len(cx) == len(cy)):
             raise ValueError(f"{dataset} No.{original_no}: position table rows differ")
         wt, velocity_alignment = velocity_time_from_export(vt, theta, w)
+        velocity_interval_end = vt[1:] if velocity_alignment == "interval_start" else np.append(vt[1:], np.nan)
         if len(bt) != len(bv):
             raise ValueError(f"{dataset} No.{original_no}: background table rows differ")
-        metrics, step_time, step_ratio, active = summarize_cell(pt, rx, ry, cx, cy, wt, w, bt, bv, rise)
+        metrics, step_time, step_ratio, active = summarize_cell(
+            pt, rx, ry, cx, cy, wt, w, velocity_interval_end, velocity_alignment, bt, bv, rise
+        )
         plot_file = f"{dataset}/No.{original_no:02d}.png"
         plot_cell(
             target / f"No.{original_no:02d}.png",
@@ -400,10 +433,11 @@ def run(source_root: Path, raw_root: Path, output_root: Path, selected: set[str]
         "No gaps are interpolated or filled. A dashed line marks the exported brightness-rise time, not proven stimulus arrival. "
         "Center-step/radius is the displacement between adjacent finite center evaluations divided by the median finite orbit radius; "
         "pairs spanning a time gap are excluded. The provisional speed-activity fractions compare absolute exported angular velocity "
-        "with 0.1, 0.2 and 0.3 times the pre-rise median. The 'of_record' denominator includes missing speed slots as unproven, "
-        "while 'of_valid' uses only valid speed values. These are screening proxies, not a physical stop classification. "
+        "with 0.1, 0.2 and 0.3 times the pre-rise median. Point fractions are retained as diagnostics. Time fractions sum "
+        "adjacent valid intervals, never bridge timestamp gaps, and count missing duration as unproven in the full-record denominator. "
+        "These are screening proxies, not a physical stop classification. "
         "review_first.csv is a conservative visual-review queue: post/pre brightness median at least 1.5, maximum adjacent "
-        "center step at most 0.1 times median orbit radius, and over half of speed time slots above 0.2 times the pre-rise "
+        "center step at most 0.1 times median orbit radius, and over half of recorded duration above 0.2 times the pre-rise "
         "median speed. It is not an acceptance list. All other screened cells remain in index.csv. "
         "Older exports without settings.json have an unknown center method; unmatched raw folders require provenance review. "
         "selection_template.csv is regenerated; any hand-edited selection.csv is preserved. Pre-rise fluctuation and post-rise switching "

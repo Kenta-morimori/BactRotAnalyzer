@@ -27,6 +27,8 @@ def test_screening_keeps_missing_center_gap_and_counts_unproven_speed():
         np.zeros(10),
         time,
         omega,
+        np.append(time[1:], np.nan),
+        "point",
         time,
         background,
         5.0,
@@ -37,10 +39,32 @@ def test_screening_keeps_missing_center_gap_and_counts_unproven_speed():
     assert np.all(step_ratio == 0)
     assert metrics["velocity_valid_fraction"] == 0.9
     assert metrics["speed_above_0.2x_pre_median_fraction_of_record"] == 0.7
+    assert metrics["speed_above_0.2x_pre_median_time_fraction_of_record"] == 6 / 9
     assert np.isnan(active[-1])
     assert np.array_equal(script.velocity_time_from_export(time, time, omega[:-1])[0], time[:-1])
     assert script.velocity_time_from_export(time, time, omega[:-1])[1] == "interval_start"
     assert script.velocity_time_from_export(time, time, omega)[1] == "point"
+
+
+def test_time_fraction_does_not_credit_a_timestamp_gap():
+    script = _script()
+    time = np.array([0.0, 1.0, 2.0, 10.0, 11.0])
+    omega = np.full(4, 10.0)
+    metrics, _, _, _ = script.summarize_cell(
+        time,
+        np.ones(5),
+        np.zeros(5),
+        np.zeros(5),
+        np.zeros(5),
+        time[:-1],
+        omega,
+        time[1:],
+        "interval_start",
+        time,
+        np.ones(5),
+        2.0,
+    )
+    assert metrics["speed_above_0.2x_pre_median_time_fraction_of_record"] == 3 / 11
 
 
 def test_inventory_separates_alternate_exports_from_independent_cells(tmp_path):
