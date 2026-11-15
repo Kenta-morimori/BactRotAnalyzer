@@ -31,3 +31,5 @@ python scripts/10_poster_temperature_control.py --center-mode local_conic
 ```
 
 入力を別チェックアウトに置くときは上記と同じ `--source-root`・`--config-root` を指定する。`--output-root` は旧温度出力のルートを指し、新結果は必ずその下の `local_conic/` に入る。33細胞の図・表と5種類の温度比較図に加え、`compare_center_methods.csv` と `compare_center_method_effect.png` に旧法との差を出す。`cell_summary.csv` の中心有効数・直接推定数・短区間補間数と、細胞別時系列の中心状態を確認する。推定不能な中心は旧中心で埋めない。旧温度出力は変更しない。
+
+保存済み中心版とlocal_conic版の各温度・細胞で、中心相対x-y軌跡を `10C/center_relative_xy/No.XX.png` などへ保存し、`cell_summary.csv` の `center_relative_xy_plot_file` から参照する。各フレームの重心から同フレームの採用中心を引き、中心(0, 0)を十字で示す。x-yは同尺度で、画像のy軸は下向き。欠測と時刻gapを跨いで線を結ばない。平均角速度の温度比較には散布点と箱ひげ図を重ね、角速度対0.5秒窓低周波相対強度の散布点は半透明にする。箱ひげは細胞単位の分布を示す記述図である。

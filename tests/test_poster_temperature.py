@@ -102,7 +102,16 @@ def test_cell_and_comparison_plots_accept_synthetic_data(tmp_path, monkeypatch):
 
     monkeypatch.setattr(script["plt"].Figure, "savefig", capture)
     script["cell_figure"](frame, spectra, ratios, summary, tmp_path / "cell.png", 200)
+    script["center_relative_xy_figure"](frame, tmp_path / "center_relative.png", 23, 1)
     assert (tmp_path / "cell.png").stat().st_size > 1000
+    assert (tmp_path / "center_relative.png").stat().st_size > 1000
+    centered_ax = captured["center_relative.png"].axes[0]
+    assert np.allclose(centered_ax.lines[0].get_xdata(), frame.centroid_x_um - frame.center_x_um)
+    assert np.allclose(centered_ax.lines[0].get_ydata(), frame.centroid_y_um - frame.center_y_um)
+    assert np.allclose(centered_ax.collections[0].get_offsets(), [[0, 0]])
+    assert centered_ax.get_box_aspect() == 1
+    assert np.isclose(centered_ax.get_xlim()[0], -centered_ax.get_xlim()[1])
+    assert np.isclose(centered_ax.get_ylim()[0], -centered_ax.get_ylim()[1])
     figure = captured["cell.png"]
     assert figure.axes[2].get_box_aspect() == 1
     fft_ax = next(ax for ax in figure.axes if ax.get_title() == "FFT of standardized fluctuation")
@@ -133,6 +142,9 @@ def test_cell_and_comparison_plots_accept_synthetic_data(tmp_path, monkeypatch):
     assert len(list(tmp_path.glob("compare_*.png"))) == 5
     assert captured["compare_low_frequency_relative_strength_0.5s_by_temperature.png"].get_figwidth() == 7
     assert captured["compare_mean_angular_speed.png"].axes[0].get_ylabel() == "Mean rotational speed [rad/s]"
+    assert len(captured["compare_mean_angular_speed.png"].axes[0].patches) == 3
+    speed_strength_ax = captured["compare_speed_vs_low_frequency_strength.png"].axes[0]
+    assert all(collection.get_alpha() == 0.55 for collection in speed_strength_ax.collections)
     assert captured["compare_mean_rotation_radius.png"].axes[0].get_ylabel() == "Mean rotational radius [µm]"
     assert (
         captured["compare_low_frequency_relative_strength_0.5s_by_temperature.png"].axes[0].get_ylabel()

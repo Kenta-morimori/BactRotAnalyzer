@@ -215,6 +215,38 @@ def cell_figure(
     plt.close(fig)
 
 
+def center_relative_xy_figure(frame: pd.DataFrame, target: Path, temperature_c: int, sample_no: int) -> None:
+    """Show the observed centroid relative to its frame-matched rotation center."""
+    time = frame["time_sec"].to_numpy(float)
+    dx = frame["centroid_x_um"].to_numpy(float) - frame["center_x_um"].to_numpy(float)
+    dy = frame["centroid_y_um"].to_numpy(float) - frame["center_y_um"].to_numpy(float)
+    _, plot_x = _with_gap_breaks(time, dx)
+    _, plot_y = _with_gap_breaks(time, dy)
+    fig, ax = plt.subplots(figsize=(9, 9), constrained_layout=True)
+    ax.plot(plot_x, plot_y, lw=0.8, color="tab:blue")
+    ax.scatter([0], [0], marker="+", s=180, linewidths=2, color="black", label="Rotation center")
+    finite = np.isfinite(dx) & np.isfinite(dy)
+    if finite.any():
+        extent = max(float(np.max(np.abs(dx[finite]))), float(np.max(np.abs(dy[finite]))))
+        limit = max(extent * 1.05, 0.01)
+    else:
+        limit = 0.1
+        ax.text(0.5, 0.5, "No valid center-relative coordinates", transform=ax.transAxes, ha="center")
+    ax.set_xlim(-limit, limit)
+    ax.set_ylim(limit, -limit)
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_box_aspect(1)
+    ax.set(
+        xlabel="Centroid − center x [µm]",
+        ylabel="Centroid − center y [µm] (image down)",
+        title=f"SJW46 {temperature_c}°C — No.{sample_no:02d}: center-relative trajectory",
+    )
+    ax.legend()
+    _style([ax])
+    fig.savefig(target, dpi=180)
+    plt.close(fig)
+
+
 def _condition_points(ax, summary: pd.DataFrame, column: str, ylabel: str, title: str) -> None:
     for temp in TEMPERATURES_C:
         group = summary[summary.temperature_c == temp]
@@ -235,6 +267,15 @@ def comparison_figures(
     other_window_speed_plots: bool = False,
 ) -> None:
     fig, ax = plt.subplots(figsize=(7, 8), constrained_layout=True)
+    box_values = []
+    for temp in TEMPERATURES_C:
+        values = summary.loc[summary.temperature_c == temp, SPEED].to_numpy(float)
+        box_values.append(values[np.isfinite(values)])
+    boxplot = ax.boxplot(box_values, positions=TEMPERATURES_C, widths=3, patch_artist=True, showfliers=False)
+    for box, temp in zip(boxplot["boxes"], TEMPERATURES_C):
+        box.set(facecolor=COLORS[temp], alpha=0.18, edgecolor=COLORS[temp], linewidth=2)
+    for median in boxplot["medians"]:
+        median.set(color="black", linewidth=2)
     _condition_points(ax, summary, SPEED, "Mean rotational speed [rad/s]", "Mean rotational speed")
     _style([ax])
     fig.savefig(root / "compare_mean_angular_speed.png", dpi=180)
@@ -294,7 +335,12 @@ def comparison_figures(
     for temp in TEMPERATURES_C:
         group = summary[summary.temperature_c == temp]
         ax.scatter(
-            group[SPEED], group["low_to_high_amplitude_ratio_0.5s"], s=110, color=COLORS[temp], label=f"{temp}°C"
+            group[SPEED],
+            group["low_to_high_amplitude_ratio_0.5s"],
+            s=110,
+            color=COLORS[temp],
+            alpha=0.55,
+            label=f"{temp}°C",
         )
     ax.set(
         xlabel="Mean rotational speed [rad/s]",
@@ -457,6 +503,7 @@ def run(
                     print(f"  No.{no:02d} excluded: mean radius {radius:.6g} µm", flush=True)
                     continue
                 summary["plot_file"] = f"{temp}C/{stem}.png"
+                summary["center_relative_xy_plot_file"] = f"{temp}C/center_relative_xy/{stem}.png"
                 summary["series_file"] = f"{temp}C/tables/{stem}_time_series.csv"
                 summary["fft_file"] = f"{temp}C/tables/{stem}_fft.csv"
                 summary["ratio_file"] = f"{temp}C/tables/{stem}_band_amplitude_ratio.csv"
@@ -496,6 +543,9 @@ def run(
                     encoding="utf-8",
                 )
                 cell_figure(frame, spectra, ratios, summary, folder / f"{stem}.png", sources.frame_rate_hz, angle_fft)
+                centered_folder = folder / "center_relative_xy"
+                centered_folder.mkdir(exist_ok=True)
+                center_relative_xy_figure(frame, centered_folder / f"{stem}.png", temp, no)
                 print(f"  No.{no:02d} done", flush=True)
 
     summary_frame = pd.DataFrame(summaries)
@@ -515,14 +565,14 @@ def run(
         "Private local SJW46 temperature-control analysis. The source tables are the existing "
         "SJW46_temp=10/23/30 outputs; they contain corrected-center-relative centroids in µm, "
         "corrected absolute centers, and source timestamps. Each 10C/23C/30C folder contains "
-        "one PNG per cell and matching time-series, fluctuation FFT, wrapped-angle FFT, fixed-band ratios, and metadata in tables/. "
+        "one main PNG and one center-relative x-y PNG per cell, plus matching time-series, fluctuation FFT, wrapped-angle FFT, fixed-band ratios, and metadata in tables/. "
         "The orbit angle is atan2(-centered y, centered x), CCW-positive and wrapped to [-pi,pi). "
         "Signed velocity uses adjacent valid frames and actual dt; gaps are not bridged. "
         "Speed is abs(velocity); mean speed and radius average valid within-cell frames. "
         "The six Gaussian windows slide by one source frame; the cell PNG shows 0.1/0.5/1.0 s, while tables keep all six. The standardized SD/Mean FFT "
         "uses the longest continuous valid interval. Relative low-frequency strength is mean "
         "amplitude over 0<f<1 Hz divided by mean amplitude over 80<=f<100 Hz. "
-        "The comparison scatter uses the 0.5 s window. Group lines are cell means, with "
+        "The temperature speed comparison overlays cell points and boxplots; the speed-versus-strength scatter uses translucent markers and the 0.5 s window. Group lines are cell means, with "
         "individual cells shown; these cells are not assumed to be independent experimental replicates. "
         "The black angle FFT uses the displayed wrapped orbit angle on the longest continuous valid interval, "
         "on the same logarithmic Amp axis without rescaling; the raw amplitudes have different units, and wrap harmonics are retained. "
