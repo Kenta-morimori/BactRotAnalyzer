@@ -144,7 +144,7 @@ def load_case(source_root: Path, case: CaseSpec) -> dict:
 
 
 def draw_comparison(cases: list[dict], target: Path) -> None:
-    fig, axes = plt.subplots(3, len(cases), figsize=(38, 17), constrained_layout=True)
+    fig, axes = plt.subplots(3, len(cases), figsize=(38, 15), constrained_layout=True)
     for column, item in enumerate(cases):
         first, second, third = axes[:, column]
         first.plot(item["time_sec"], item["sd_per_mean"], linewidth=1.0)
@@ -166,19 +166,19 @@ def draw_comparison(cases: list[dict], target: Path) -> None:
             f"Δf = {item['fit'].offset_hz:.3g} Hz, log R² = {item['fit'].log_bin_r_squared:.2f}",
             transform=second.transAxes,
             ha="right",
-            fontsize=14,
+            fontsize=18,
             bbox={"facecolor": "white", "alpha": 0.85, "edgecolor": "none"},
         )
         third.plot(item["segment_time_sec"], item["surrogate"], linewidth=1.0)
         third.axhline(0, color="gray", linewidth=0.5)
         third.set(xlabel="Time (s)", ylabel="Inverse FFT (z units)")
         for ax in (first, second, third):
-            ax.tick_params(labelsize=14)
-            ax.xaxis.label.set_fontsize(16)
-            ax.yaxis.label.set_fontsize(16)
-            ax.title.set_fontsize(17)
+            ax.tick_params(labelsize=19)
+            ax.xaxis.label.set_fontsize(21)
+            ax.yaxis.label.set_fontsize(21)
+            ax.title.set_fontsize(22)
             ax.grid(alpha=0.2)
-    fig.suptitle("0.5 s Gaussian window: SD/Mean, FFT-amplitude fit, random-phase inverse FFT", fontsize=22)
+    fig.suptitle("0.5 s Gaussian window: SD/Mean, FFT-amplitude fit, random-phase inverse FFT", fontsize=29)
     target.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(target, dpi=170)
     plt.close(fig)
