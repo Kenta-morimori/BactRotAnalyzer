@@ -216,14 +216,15 @@ def figure(
     t = frame["time_sec"].to_numpy(float)
     measured = "x_um" in frame and "y_um" in frame
     rows = 4
-    height_ratios = (3.0, 1.2, 1.2, 4.5) if measured else (1.2, 1.2, 1.2, 4.5)
+    height_ratios = (3.0, 1.2, 1.4, 4.5) if measured else (1.2, 1.4, 1.4, 4.5)
     fig, axes = plt.subplots(
         rows,
         3,
-        figsize=(21, 25 if measured else 22),
+        figsize=(21, 26 if measured else 23),
         gridspec_kw={"height_ratios": height_ratios},
         constrained_layout=True,
     )
+    fig.get_layout_engine().set(w_pad=0.28, h_pad=0.30, wspace=0.08, hspace=0.10)
     if measured:
         x = frame["x_um"].to_numpy(float)
         y = frame["y_um"].to_numpy(float)
@@ -345,6 +346,7 @@ def normalize_candidate_ratios(ratios: pd.DataFrame) -> pd.DataFrame:
 def candidate_band_comparison(ratios: pd.DataFrame, target: Path) -> None:
     """Compare each candidate's window-width shape after per-series maximum normalization."""
     fig, axes = plt.subplots(1, 3, figsize=(21, 13), constrained_layout=True)
+    fig.get_layout_engine().set(w_pad=0.28, h_pad=0.30, wspace=0.08)
     handles = []
     labels = []
     for ax, (column, title, _, _) in zip(axes, BAND_PANELS):
@@ -605,6 +607,7 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
                 )
         pd.DataFrame(null_rows).to_csv(tables / "simulation_random_speed_noise_ensemble.csv", index=False)
         fig, axes = plt.subplots(1, 2, figsize=(14, 5), constrained_layout=True)
+        fig.get_layout_engine().set(w_pad=0.28, h_pad=0.30, wspace=0.08)
         for rate, group in pd.DataFrame(null_rows).groupby("rate_hz"):
             axes[0].hist(group.peak_frequency_hz, bins=20, alpha=0.5, label=f"{rate:g} Hz")
             axes[1].hist(group.peak_to_median_full_band, bins=20, alpha=0.5, label=f"{rate:g} Hz")
