@@ -21,3 +21,5 @@ python scripts/10_poster_temperature_control.py
 比較図は `compare_mean_angular_speed.png`、`compare_mean_rotation_radius.png`、6窓幅の `compare_low_frequency_relative_strength.png`、0.5秒窓だけを温度軸で比較する `compare_low_frequency_relative_strength_0.5s_by_temperature.png`、`compare_speed_vs_low_frequency_strength.png` の5枚。条件別の個々の細胞と細胞平均を区別する。平均半径の縦軸は既定で0–1.0 µmとし、0.2 µm以下の感度解析では上記オプションで0–0.5 µmにする。Low/High比の縦軸は比較図で線形表示にする。速さ対強度は0.5秒窓比を使う。細胞間の記述的比較であり、実験反復としての有意差検定は行わない。
 
 `centroid_coordinate.csv` の座標はすでに補正後中心を引いた値（µm）である。図の絶対重心はそれに補正後中心を足して表示する。半径と角度は中心相対座標から算出する。画像y軸は下向きなので角度は `atan2(-y,x)` とし、反時計回りを正とする。実時刻のgapをまたぐ角速度と揺らぎ窓は欠測にし、図の線もgapで切る。平均速さは有効な絶対値角速度、平均半径は有効な距離のフレーム平均。固定帯域は `0<f<1 Hz` と `80<=f<100 Hz` の平均FFT振幅で、窓幅ごとの比を出す。元の中心補正の影響や追跡品質は別途確認が必要。実測由来の図・時系列・実行ログはGit管理外に保つ。
+
+各温度・細胞の中心相対x-y軌跡を `10C/center_relative_xy/No.XX.png` などへ保存し、`cell_summary.csv` の `center_relative_xy_plot_file` から参照する。各フレームの重心から同フレームの補正後中心を引き、中心(0, 0)を十字で示す。x-yは同尺度で、画像のy軸は下向き。欠測と時刻gapを跨いで線を結ばない。平均角速度の温度比較には散布点と箱ひげ図を重ね、角速度対0.5秒窓低周波相対強度の散布点は半透明にする。箱ひげは細胞単位の分布を示す記述図である。
