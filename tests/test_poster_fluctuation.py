@@ -207,20 +207,29 @@ def test_one_poster_png_contains_absolute_velocity_and_log_fft(tmp_path, monkeyp
     assert np.allclose(saved["long_axis_abs_omega_rad_s"], np.abs(saved["long_axis_omega_rad_s"]), equal_nan=True)
     assert saved["long_axis_phase_rad"].dropna().between(-np.pi, np.pi, inclusive="left").all()
     assert not any(column.endswith("_um") or column.startswith("orbit_") for column in saved)
-    assert len(captured[0].axes) == 14
+    assert len(captured[0].axes) == 12
     assert len(captured[0].axes[1].lines) == 1
     assert len(captured[0].axes[2].lines) == 1
     assert captured[0].axes[5].get_yscale() == "log"
-    assert len(captured[0].axes[5].lines) == 3
+    assert len(captured[0].axes[5].lines) == 4
     assert len(captured[0].axes[6].lines) == 1
     assert len(captured[0].axes[7].lines) == 1
     assert captured[0].axes[8].get_yscale() == "log"
-    assert len(captured[0].axes[8].lines) == 1
-    assert all(ax.get_yscale() == "log" for ax in captured[0].axes[-2:])
-    assert all(ax.lines[0].get_color() == "black" for ax in captured[0].axes[-2:])
-    assert all(ax.lines[0].get_alpha() == 0.45 for ax in captured[0].axes[-2:])
-    assert np.allclose(captured[0].axes[5].get_ylim(), captured[0].axes[12].get_ylim())
-    assert np.allclose(captured[0].axes[8].get_ylim(), captured[0].axes[13].get_ylim())
+    assert len(captured[0].axes[8].lines) == 2
+    assert all(ax.lines[-1].get_color() == "black" for ax in (captured[0].axes[5], captured[0].axes[8]))
+    assert all(ax.lines[-1].get_alpha() == 0.45 for ax in (captured[0].axes[5], captured[0].axes[8]))
+    assert all(
+        ax.get_xlim()[0] == 0
+        for ax in (captured[0].axes[3], captured[0].axes[4], captured[0].axes[6], captured[0].axes[7])
+    )
+    assert all(
+        np.isclose(ax.get_xlim()[1], saved.time_sec.max())
+        for ax in (captured[0].axes[3], captured[0].axes[4], captured[0].axes[6], captured[0].axes[7])
+    )
+    angle_spectrum = script["pd"].read_csv(tmp_path / "tables/synthetic_No.01_wrapped_angle_fft.csv")
+    assert np.allclose(
+        captured[0].axes[5].lines[-1].get_ydata(), angle_spectrum.amplitude_rad[angle_spectrum.amplitude_rad > 0]
+    )
     assert captured[0].axes[5].get_xlim()[1] == 100
     assert captured[0].axes[5].get_xticks()[-1] == 100
     assert captured[0].axes[5].xaxis.label.get_fontsize() >= 23
@@ -284,11 +293,13 @@ def test_main_routes_measured_plot_to_day_and_preserves_manual_selection(tmp_pat
     index = script["pd"].read_csv(measured / "index.csv")
     assert index.loc[0, "plot_file"] == "20230607/No.01.png"
     assert index.loc[0, "band_ratio_file"] == "20230607/tables/No.01_band_amplitude_ratio.csv"
-    assert len(captured[0].axes) == 13
+    assert len(captured[0].axes) == 12
     assert captured[0].axes[2].get_box_aspect() == 1
-    assert all(len(captured[0].axes[i].lines) == 3 for i in (6, 7, 8))
-    assert captured[0].axes[-1].lines[0].get_color() == "black"
-    assert np.allclose(captured[0].axes[8].get_ylim(), captured[0].axes[-1].get_ylim())
+    assert all(len(captured[0].axes[i].lines) == 3 for i in (6, 7))
+    assert len(captured[0].axes[8].lines) == 4
+    assert captured[0].axes[8].lines[-1].get_color() == "black"
+    assert all(captured[0].axes[i].get_xlim()[0] == 0 for i in (6, 7))
+    assert all(np.isclose(captured[0].axes[i].get_xlim()[1], source.time_sec.max()) for i in (6, 7))
     assert (measured / "20230607/tables/No.01_wrapped_angle_fft.csv").is_file()
     assert captured[0].axes[9].get_yscale() == "log"
     assert len(captured[0].axes[9].lines[0].get_xdata()) == 6
@@ -370,7 +381,7 @@ def test_main_routes_synthetic_plots_and_index(tmp_path, monkeypatch):
     original_savefig = script["plt"].Figure.savefig
 
     def capture(figure, *args, **kwargs):
-        if len(figure.axes) in (12, 14):
+        if len(figure.axes) == 12:
             limits.append(figure.axes[5].get_xlim()[1])
             assert figure.axes[5].get_xticks()[-1] == limits[-1]
             assert figure.axes[8].get_yscale() == "log"
@@ -383,8 +394,7 @@ def test_main_routes_synthetic_plots_and_index(tmp_path, monkeypatch):
                 assert not figure.axes[0].get_xticks().size
                 assert not figure.axes[0].get_yticks().size
             else:
-                assert len(figure.axes) == 14
-                assert all(ax.lines[0].get_color() == "black" for ax in figure.axes[-2:])
+                assert all(ax.lines[-1].get_color() == "black" for ax in (figure.axes[5], figure.axes[8]))
         return original_savefig(figure, *args, **kwargs)
 
     monkeypatch.setattr(script["plt"].Figure, "savefig", capture)
