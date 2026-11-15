@@ -26,24 +26,30 @@ else:  # pragma: no cover
 
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
-from utils import param
-
 DATA_KEYS = [
     "SJW46_10",
     "SJW46_23",
     "SJW46_30",
 ]
 DEFAULT_HIST_BINS = 40
-AV_DIR_DICT = {  # Angular velocity
-    "SJW46_10": "outputs/SJW46_temp=10/angular_velocity/angular-velocity_time-series.csv",
-    "SJW46_23": "outputs/SJW46_temp=23/angular_velocity/angular-velocity_time-series.csv",  # SJW46 23°C
-    "SJW46_30": "outputs/SJW46_temp=30/angular_velocity/angular-velocity_time-series.csv",  # SJW46 30°C
-}
-TIME_DIR_DICT = {
-    "SJW46_10": "outputs/SJW46_temp=10/time_list.csv",
-    "SJW46_23": "outputs/SJW46_temp=23/time_list.csv",
-    "SJW46_30": "outputs/SJW46_temp=30/time_list.csv",
-}
+DATASET_NAMES = {"SJW46_10": "SJW46_temp=10", "SJW46_23": "SJW46_temp=23", "SJW46_30": "SJW46_temp=30"}
+
+
+def input_paths(output_root: Path) -> tuple[dict[str, Path], dict[str, Path]]:
+    """Prefer configured standard outputs, retaining read-only access to older runs."""
+    angular_velocity = {}
+    time = {}
+    for key, day in DATASET_NAMES.items():
+        current = output_root / day
+        legacy = Path("outputs") / day
+        has_angular_velocity = (current / "angular_velocity/angular-velocity_time-series.csv").exists()
+        has_time = (current / "time_list.csv").exists()
+        if has_angular_velocity != has_time:
+            raise ValueError(f"Incomplete standard rotation output for {day}: {current}")
+        selected = current if has_angular_velocity else legacy
+        angular_velocity[key] = selected / "angular_velocity/angular-velocity_time-series.csv"
+        time[key] = selected / "time_list.csv"
+    return angular_velocity, time
 
 
 def plot_distribution(df: pd.DataFrame, out_dir: Path) -> None:
@@ -601,14 +607,15 @@ def plot_skew_kurtosis(df: pd.DataFrame, out_dir: Path) -> None:
         df_sk.to_csv(out_dir / "skew_kurtosis.csv", index=False)
 
 
-def main():
+def main(output_root: Path = Path("outputs/rotation_analysis")):
     ############
     # Load Data
     ############
     df_dict = defaultdict(list)
+    av_paths, time_paths = input_paths(output_root)
     for data_key in DATA_KEYS:
-        df_av = pd.read_csv(AV_DIR_DICT[data_key])
-        df_time = pd.read_csv(TIME_DIR_DICT[data_key])
+        df_av = pd.read_csv(av_paths[data_key])
+        df_time = pd.read_csv(time_paths[data_key])
 
         # obtain data number
         cols = df_av.columns.tolist()
@@ -628,7 +635,7 @@ def main():
     ############
     # Data analysis
     ############
-    out_dir = Path(param.save_dir_bef) / "03_av_analysis"
+    out_dir = output_root / "03_av_analysis"
 
     # 1. Angular Velocity Distribution
     plot_distribution(df, out_dir)
@@ -637,7 +644,7 @@ def main():
     stats_dict: defaultdict[str, list[Union[str, float]]] = defaultdict(list)
     df["av_abs"] = np.abs(df["av"])
     for data_key in DATA_KEYS:
-        cols = pd.read_csv(AV_DIR_DICT[data_key]).columns.tolist()
+        cols = pd.read_csv(av_paths[data_key]).columns.tolist()
         for col in cols:  # No
             df_selected = df[(df["label"] == data_key) & (df["No"] == col)]
             stats_dict["label"].append(data_key)
@@ -661,10 +668,14 @@ def main():
 if __name__ == "__main__":
     from utils.run_context import analysis_run
 
-    argparse.ArgumentParser(description="Analyze the configured angular velocity datasets.").parse_args()
+    parser = argparse.ArgumentParser(description="Analyze the configured angular velocity datasets.")
+    parser.add_argument("--output-root", type=Path, default=Path("outputs/rotation_analysis"))
+    args = parser.parse_args()
+    output_root = args.output_root.resolve()
+    av_paths, time_paths = input_paths(output_root)
     with analysis_run(
-        parameters={"data_keys": DATA_KEYS},
-        inputs=[*AV_DIR_DICT.values(), *TIME_DIR_DICT.values()],
-        outputs=[Path(param.save_dir_bef) / "03_av_analysis"],
+        parameters={"data_keys": DATA_KEYS, "output_root": output_root},
+        inputs=[*av_paths.values(), *time_paths.values()],
+        outputs=[output_root / "03_av_analysis"],
     ):
-        main()
+        main(output_root)

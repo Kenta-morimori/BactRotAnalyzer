@@ -6,11 +6,11 @@ from pathlib import Path
 from utils.run_context import REPOSITORY
 
 
-def dataset_inputs(day, repository=REPOSITORY):
+def dataset_inputs(day, repository=REPOSITORY, output_root=None):
     """Raw dataset plus existing shared caches that may supply observations."""
     root = Path(repository)
     yield root / "data" / day
-    cache = root / "outputs" / day
+    cache = (Path(output_root) if output_root is not None else root / "outputs") / day
     for name in (
         "raw_centroid",
         "time_list.csv",

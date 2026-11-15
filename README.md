@@ -40,7 +40,7 @@ For rotation analysis, run `rotation_analysis_main.py`, and for fluctuation anal
 For more details, see the README in `/scripts`.
 
 ### 3.3. Reviewing Analysis Results
-The analysis results are saved in the `outputs/` directory. Centroid coordinates are in `centroid_coordinate`, time-series angles and angular velocities are in `angular_velocity`, and fluctuation analysis results are in `fluctuation_analysis`.<br>
+Standard rotation results are saved under `outputs/rotation_analysis/<day>/` by default; use `--output-root` to choose their parent directory. Repellent-response results remain under `outputs/repellent-response/<day>/repellent_response/`. Centroid coordinates are in `centroid_coordinate`, time-series angles and angular velocities are in `angular_velocity`, and fluctuation analysis results are in `fluctuation_analysis`.<br>
 For more details on the output results, see the README in `/outputs`.
 
 ## License
@@ -93,7 +93,7 @@ source .venv/bin/activate
 詳細は`/scripts`のREADMEに記載．
 
 ### 3.3. 解析結果の確認
-解析結果は`outputs/`に保存されている．重心座標は`centroid_coordinate`，時系列角度・角速度は`angular_velocity`，揺らぎ解析は`fluctuation_analysis`に保存されている，<br>
+標準回転解析の結果は既定で`outputs/rotation_analysis/<day>/`へ保存され、`--output-root`で親ディレクトリを指定できる．忌避応答解析は`outputs/repellent-response/<day>/repellent_response/`へ保存される．重心座標は`centroid_coordinate`，時系列角度・角速度は`angular_velocity`，揺らぎ解析は`fluctuation_analysis`に保存されている．<br>
 出力結果の詳細は，`/outputs`のREADMEに記載．
 
 ### 3.4. 重心座標の定義と既存結果の再解析

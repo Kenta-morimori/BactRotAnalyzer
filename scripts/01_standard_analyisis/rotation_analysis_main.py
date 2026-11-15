@@ -1,8 +1,10 @@
 import argparse
 import os
 import sys
+from pathlib import Path
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
+from utils import param
 from utils.functions import (  # noqa
     fluctuation_analysis,
     get_angular_velocity,
@@ -46,13 +48,24 @@ if __name__ == "__main__":
 
     parser.add_argument("--day", type=str, default="test_data")
     parser.add_argument("--fluc", action="store_true", help="fluctuation analysis")
+    parser.add_argument(
+        "--output-root",
+        type=Path,
+        default=Path("outputs/rotation_analysis"),
+        help="Directory containing one standard-rotation result folder per dataset",
+    )
 
     args = parser.parse_args()
     day = args.day
     flag_fluctuation_analysis = args.fluc
+    output_root = args.output_root.resolve()
+    param.raw_centroid_root = str(Path.cwd() / "outputs")
+    param.save_dir_bef = str(output_root)
 
     with analysis_run(
-        parameters=vars(args), inputs=dataset_inputs(day, os.getcwd()), outputs=[f"{os.getcwd()}/outputs/{day}"]
+        parameters=vars(args),
+        inputs=[*dataset_inputs(day, os.getcwd(), output_root), Path.cwd() / "outputs" / day / "raw_centroid"],
+        outputs=[output_root / day, Path.cwd() / "outputs" / day / "raw_centroid"],
     ):
         main(
             day=day,

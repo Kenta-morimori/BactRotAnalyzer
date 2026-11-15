@@ -26,7 +26,8 @@ def source_path(day: str, sample_no: int) -> Path:
 
 
 def coordinate_path(day: str, sample_no: int) -> Path:
-    return Path(param.save_dir_bef) / day / "raw_centroid" / METHOD / f"{source_path(day, sample_no).stem}.csv"
+    root = param.raw_centroid_root or param.save_dir_bef
+    return Path(root) / day / "raw_centroid" / METHOD / f"{source_path(day, sample_no).stem}.csv"
 
 
 def _provenance(day: str, sample_no: int, frame_count: int) -> dict:
