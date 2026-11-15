@@ -7,6 +7,7 @@ import numpy as np
 def _script():
     path = Path(__file__).resolve().parents[1] / "scripts/11_poster_repellent_screening.py"
     spec = importlib.util.spec_from_file_location("poster_repellent_screening", path)
+    assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
