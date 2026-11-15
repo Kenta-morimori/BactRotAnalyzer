@@ -102,8 +102,9 @@ def cell_figure(
     t = frame["time_sec"].to_numpy(float)
     if angle_fft is None:
         angle_fft, _ = wrapped_angle_spectrum(t, frame["orbit_angle_rad"].to_numpy(float))
-    fig = plt.figure(figsize=(21, 28), constrained_layout=True)
-    grid = fig.add_gridspec(5, 3, height_ratios=(3.0, 1.2, 1.2, 1.4, 4.5))
+    fig = plt.figure(figsize=(21, 30), constrained_layout=True)
+    fig.get_layout_engine().set(w_pad=0.28, h_pad=0.30, wspace=0.08, hspace=0.10)
+    grid = fig.add_gridspec(5, 3, height_ratios=(3.0, 1.2, 1.4, 1.7, 4.5))
     x_ax, y_ax, xy_ax = (fig.add_subplot(grid[0, column]) for column in range(3))
     radius_ax, angle_ax, signed_ax = (fig.add_subplot(grid[1, column]) for column in range(3))
     absolute_ax, ratio_ax, z_ax = (fig.add_subplot(grid[2, column]) for column in range(3))
@@ -309,7 +310,8 @@ def comparison_figures(
 
     if other_window_speed_plots:
         other_widths = tuple(width for width in WINDOWS_S if width != 0.5)
-        overview, overview_axes = plt.subplots(2, 3, figsize=(19, 13), constrained_layout=True)
+        overview, overview_axes = plt.subplots(2, 3, figsize=(19, 14), constrained_layout=True)
+        overview.get_layout_engine().set(w_pad=0.28, h_pad=0.30, wspace=0.08, hspace=0.10)
         for index, width in enumerate(other_widths):
             keys = ["temperature_c", "sample_no"]
             selected = all_ratios.loc[all_ratios.window_s == width, keys + [RATIO]]
