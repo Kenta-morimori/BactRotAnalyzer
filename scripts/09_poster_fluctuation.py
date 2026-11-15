@@ -369,13 +369,18 @@ def candidate_band_comparison(ratios: pd.DataFrame, target: Path) -> None:
         ax.set_xlim(-0.25, len(WINDOWS_S) - 0.75)
         ax.set_ylim(top=1.05)
         ax.tick_params(axis="x", labelrotation=0)
-    fig.legend(handles, labels, loc="outside right center", ncol=1, fontsize=19)
+    fig.legend(handles, labels, loc="outside right center", ncol=1, fontsize=29)
     fig.suptitle(
         "Representative cells: normalized band metrics\n"
         "SJW46 23°C uses centroid orbit angle; other cells use long-axis angle",
-        fontsize=28,
+        fontsize=40,
     )
     style_axes(axes)
+    for ax in axes:
+        ax.title.set_fontsize(36)
+        ax.xaxis.label.set_fontsize(35)
+        ax.yaxis.label.set_fontsize(35)
+        ax.tick_params(labelsize=30)
     fig.savefig(target, dpi=180)
     plt.close(fig)
 
