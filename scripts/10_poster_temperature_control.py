@@ -149,18 +149,20 @@ def cell_figure(
         fft_ax.plot(part.frequency_hz, part.amplitude, lw=1.4, label=label)
     ratio_ax.set(xlabel="Time [s]", ylabel="SD / Mean", title="Gaussian-window fluctuation")
     z_ax.set(xlabel="Time [s]", ylabel="Standardized SD / Mean", title="Standardized SD / Mean")
+    time_max = float(np.nanmax(t))
+    ratio_ax.set_xlim(0, time_max)
+    z_ax.set_xlim(0, time_max)
     fft_ax.set(xlabel="Frequency [Hz]", ylabel="Amp", title="FFT of standardized fluctuation")
     fft_ax.set_xlim(0, nominal_rate_hz / 2)
-    if (spectra.amplitude > 0).any():
+    if (spectra.amplitude > 0).any() or (angle_fft.amplitude_rad > 0).any():
         fft_ax.set_yscale("log")
     else:
         fft_ax.text(0.5, 0.5, "No valid FFT", transform=fft_ax.transAxes, ha="center")
-    for ax in (ratio_ax, z_ax, fft_ax):
+    for ax in (ratio_ax, z_ax):
         ax.legend(ncol=2)
     if not angle_fft.empty:
-        angle_fft_ax = fft_ax.twinx()
         good = np.isfinite(angle_fft.amplitude_rad) & (angle_fft.amplitude_rad > 0)
-        angle_fft_ax.plot(
+        fft_ax.plot(
             angle_fft.loc[good, "frequency_hz"],
             angle_fft.loc[good, "amplitude_rad"],
             color="black",
@@ -168,16 +170,7 @@ def cell_figure(
             alpha=0.45,
             label="Wrapped angle",
         )
-        angle_fft_ax.set_yscale("log")
-        angle_fft_ax.set_ylabel("Angle Amp [rad]", fontsize=23)
-        angle_fft_ax.tick_params(labelsize=20)
-        shared_ylim = (
-            min(fft_ax.get_ylim()[0], angle_fft_ax.get_ylim()[0]),
-            max(fft_ax.get_ylim()[1], angle_fft_ax.get_ylim()[1]),
-        )
-        fft_ax.set_ylim(shared_ylim)
-        angle_fft_ax.set_ylim(shared_ylim)
-        angle_fft_ax.legend(loc="lower right", fontsize=19)
+    fft_ax.legend(ncol=2)
 
     center_detail = (
         f"Center-adjusted frames: {summary['corrected_center_frame_count']}"
@@ -532,7 +525,7 @@ def run(
         "The comparison scatter uses the 0.5 s window. Group lines are cell means, with "
         "individual cells shown; these cells are not assumed to be independent experimental replicates. "
         "The black angle FFT uses the displayed wrapped orbit angle on the longest continuous valid interval, "
-        "with a separate logarithmic rad-amplitude axis; wrap harmonics are retained. "
+        "on the same logarithmic Amp axis without rescaling; the raw amplitudes have different units, and wrap harmonics are retained. "
         f"Mean-radius comparison y axis spans 0 to {radius_axis_max_um:g} µm. "
         + (
             "Five additional speed-versus-Low/High plots and one overview cover windows other than 0.5 s. "
