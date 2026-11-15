@@ -14,6 +14,7 @@
 | [0011](0011-poster-fixed-band-ratio.md) | ポスター解析の共通周波数帯による強度比と候補細胞比較 |
 | [0012](0012-poster-band-components-and-steady-simulation.md) | Low・Low−Highの追加と非周期角速度の合成条件 |
 | [0013](0013-poster-angle-noise-controls.md) | 合成対照を長軸角の直接生成に統一し、座標・周回角を除く |
+| [0014](0014-poster-temperature-orbit.md) | SJW46温度条件の周回角・中心・揺らぎと温度別比較 |
 | [0017](0017-poster-empirical-speed-controls.md) | 3候補の速度平均・SDに校正した角度誤差と独立速度ノイズの比較 |
 | [0019](0019-poster-direct-speed-control.md) | 独立速度ノイズ対照を角度なしで直接解析する |
 | [0020](0020-poster-simulation-duration-extension.md) | 合成対照に30秒系列を追加し6秒出力を保持する |

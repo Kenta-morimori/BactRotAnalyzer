@@ -1,0 +1,195 @@
+"""Synthetic checks for the local temperature-control measurement path."""
+
+import runpy
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+from utils.functions.poster_temperature import (
+    TemperatureSources,
+    analyze_cell,
+    cell_coordinates,
+    cell_summary,
+    orbit_kinematics,
+)
+
+
+def _source(time, centered_x, centered_y, center_x=None, center_y=None, before_x=None):
+    n = len(time)
+    center_x = np.full(n, 5.0) if center_x is None else np.asarray(center_x, dtype=float)
+    center_y = np.full(n, 7.0) if center_y is None else np.asarray(center_y, dtype=float)
+    before_x = center_x if before_x is None else np.asarray(before_x, dtype=float)
+    return TemperatureSources(
+        temperature_c=23,
+        frame_rate_hz=200,
+        sample_count=1,
+        time=pd.DataFrame({"No.1": time}),
+        centered_centroid=pd.DataFrame({"x_1": centered_x, "y_1": centered_y}),
+        corrected_center=pd.DataFrame({"No.1_x": center_x, "No.1_y": center_y}),
+        original_center=pd.DataFrame({"No.1_x": before_x, "No.1_y": center_y}),
+    )
+
+
+def test_reconstructs_absolute_centroid_and_tracks_center_adjustment():
+    source = _source([0, 0.005, 0.01], [1, 0, -1], [0, -1, 0], before_x=[5, 4, 5])
+    frame = cell_coordinates(source, 1)
+    assert frame.source_frame_1based.tolist() == [1, 2, 3]
+    assert frame.centroid_x_um.tolist() == [6, 5, 4]
+    assert frame.centroid_y_um.tolist() == [7, 6, 7]
+    assert frame.radius_um.tolist() == [1, 1, 1]
+    assert frame.source_center_adjusted.tolist() == [False, True, False]
+
+
+def test_orbit_velocity_is_ccw_positive_and_never_crosses_timestamp_gap():
+    time = np.array([0, 0.005, 0.01, 0.1, 0.105, 0.11])
+    angle = np.array([0, 0.2, 0.4, 0.6, 0.8, 1.0])
+    source = _source(time, np.cos(angle), -np.sin(angle))
+    frame = orbit_kinematics(cell_coordinates(source, 1))
+    assert np.isnan(frame.orbit_omega_rad_s.iloc[0])
+    assert np.allclose(frame.orbit_omega_rad_s.iloc[[1, 2, 4, 5]], 40)
+    assert np.isnan(frame.orbit_omega_rad_s.iloc[3])
+    assert np.allclose(frame.orbit_abs_omega_rad_s.iloc[[1, 2, 4, 5]], 40)
+    assert frame.orbit_angle_rad.iloc[5] == np.arctan2(-(-np.sin(1.0)), np.cos(1.0))
+
+
+def test_missing_coordinate_blocks_two_adjacent_velocity_rows():
+    time = np.arange(6) / 200
+    x = np.ones(6)
+    x[2] = np.nan
+    frame = orbit_kinematics(cell_coordinates(_source(time, x, np.zeros(6)), 1))
+    assert np.isnan(frame.orbit_omega_rad_s.iloc[[0, 2, 3]]).all()
+    assert np.isfinite(frame.orbit_omega_rad_s.iloc[[1, 4, 5]]).all()
+
+
+def test_full_cell_analysis_preserves_frames_and_sliding_window():
+    rate = 200
+    time = np.arange(6 * rate) / rate
+    angle = 2 * np.pi * 7 * time + 0.003 * np.sin(2 * np.pi * 3 * time)
+    source = _source(time, np.cos(angle), -np.sin(angle))
+    frame, spectrum, ratios, metadata = analyze_cell(cell_coordinates(source, 1))
+    assert len(frame) == len(time)
+    assert frame.loc[(time >= 2) & (time < 3), "sd_per_mean_0.1s"].notna().sum() == rate
+    assert len(metadata) == 6
+    assert ratios.window_s.tolist() == [0.1, 0.2, 0.5, 1.0, 1.5, 2.0]
+    assert spectrum.frequency_hz.max() < rate / 2
+    summary = cell_summary(frame, ratios, 23, 1)
+    assert abs(summary["mean_rotation_radius_um"] - 1) < 1e-10
+    assert abs(summary["mean_absolute_angular_velocity_rad_s"] - 2 * np.pi * 7) < 0.5
+
+
+def test_cell_and_comparison_plots_accept_synthetic_data(tmp_path, monkeypatch):
+    script = runpy.run_path(
+        str(Path(__file__).resolve().parents[1] / "scripts/10_poster_temperature_control.py"),
+        run_name="temperature_test",
+    )
+    plot_t, plot_y = script["_with_gap_breaks"](np.array([0, 0.005, 0.01, 0.1, 0.105]), np.arange(5, dtype=float))
+    assert len(plot_t) == 6
+    assert np.isnan(plot_t[3]) and np.isnan(plot_y[3])
+    assert plot_y[4] == 3
+    time = np.arange(6 * 200) / 200
+    angle = 2 * np.pi * 7 * time + 0.003 * np.sin(2 * np.pi * 3 * time)
+    frame, spectra, ratios, _ = analyze_cell(cell_coordinates(_source(time, np.cos(angle), -np.sin(angle)), 1))
+    summary = cell_summary(frame, ratios, 23, 1)
+    captured = {}
+    original_savefig = script["plt"].Figure.savefig
+
+    def capture(figure, target, *args, **kwargs):
+        captured[Path(target).name] = figure
+        return original_savefig(figure, target, *args, **kwargs)
+
+    monkeypatch.setattr(script["plt"].Figure, "savefig", capture)
+    script["cell_figure"](frame, spectra, ratios, summary, tmp_path / "cell.png", 200)
+    script["center_relative_xy_figure"](frame, tmp_path / "center_relative.png", 23, 1)
+    assert (tmp_path / "cell.png").stat().st_size > 1000
+    assert (tmp_path / "center_relative.png").stat().st_size > 1000
+    centered_ax = captured["center_relative.png"].axes[0]
+    assert np.allclose(centered_ax.lines[0].get_xdata(), frame.centroid_x_um - frame.center_x_um)
+    assert np.allclose(centered_ax.lines[0].get_ydata(), frame.centroid_y_um - frame.center_y_um)
+    assert np.allclose(centered_ax.collections[0].get_offsets(), [[0, 0]])
+    assert centered_ax.get_box_aspect() == 1
+    assert np.isclose(centered_ax.get_xlim()[0], -centered_ax.get_xlim()[1])
+    assert np.isclose(centered_ax.get_ylim()[0], -centered_ax.get_ylim()[1])
+    figure = captured["cell.png"]
+    assert figure.axes[2].get_box_aspect() == 1
+    fft_ax = next(ax for ax in figure.axes if ax.get_title() == "FFT of standardized fluctuation")
+    assert len(fft_ax.lines) == 4
+    assert fft_ax.get_xlabel() == "Frequency [Hz]"
+    assert fft_ax.get_ylabel() == "Amp"
+    assert fft_ax.lines[0].get_linewidth() >= 1.4
+    assert (
+        next(ax for ax in figure.axes if ax.get_title() == "Standardized SD / Mean").get_ylabel()
+        == "Standardized SD / Mean"
+    )
+    assert len(figure.axes) == 17
+    assert fft_ax.lines[-1].get_color() == "black"
+    assert fft_ax.lines[-1].get_alpha() == 0.45
+    legend_axes = [ax for ax in figure.axes if not ax.axison and ax.get_legend() is not None]
+    assert len(legend_axes) == 3
+    assert [text.get_text() for text in legend_axes[2].get_legend().get_texts()] == [
+        "Rotation Data",
+        "0.1 SD",
+        "0.5 SD",
+        "1.0 SD",
+    ]
+    renderer = figure.canvas.get_renderer()
+    signed_ax = next(ax for ax in figure.axes if ax.get_title() == "Signed orbit angular velocity")
+    width_ratio = fft_ax.get_window_extent(renderer).width / signed_ax.get_window_extent(renderer).width
+    assert 1.4 < width_ratio < 1.6
+    assert legend_axes[2].get_legend().get_window_extent(renderer).x0 > fft_ax.get_window_extent(renderer).x1
+    angle_fft, _ = script["wrapped_angle_spectrum"](time, frame["orbit_angle_rad"].to_numpy(float))
+    assert np.allclose(fft_ax.lines[-1].get_ydata(), angle_fft.amplitude_rad[angle_fft.amplitude_rad > 0])
+    for title, legend_ax in zip(("Gaussian-window fluctuation", "Standardized SD / Mean"), legend_axes[:2]):
+        ax = next(ax for ax in figure.axes if ax.get_title() == title)
+        assert np.allclose(ax.get_xlim(), (0, frame.time_sec.max()))
+        legend = legend_ax.get_legend()
+        assert [text.get_text() for text in legend.get_texts()] == ["0.1 s", "0.5 s", "1 s"]
+        assert legend.get_window_extent(renderer).y1 < ax.get_window_extent(renderer).y0
+    assert all(ax.get_box_aspect() == 1.5 for ax in figure.axes[-3:])
+    rows = []
+    groups = []
+    for temp in (10, 23, 30):
+        row = {**summary, "temperature_c": temp}
+        rows.append(row)
+        groups.append(ratios.assign(temperature_c=temp, sample_no=1))
+    script["comparison_figures"](pd.DataFrame(rows), pd.concat(groups), tmp_path)
+    assert len(list(tmp_path.glob("compare_*.png"))) == 5
+    assert all(
+        captured[name].get_size_inches().tolist() == [9, 8]
+        for name in (
+            "compare_mean_angular_speed.png",
+            "compare_mean_rotation_radius.png",
+            "compare_low_frequency_relative_strength_0.5s_by_temperature.png",
+        )
+    )
+    assert captured["compare_mean_angular_speed.png"].axes[0].get_ylabel() == "Mean rotational speed [rad/s]"
+    assert all(
+        len(captured[name].axes[0].patches) == 3
+        for name in (
+            "compare_mean_angular_speed.png",
+            "compare_mean_rotation_radius.png",
+            "compare_low_frequency_relative_strength_0.5s_by_temperature.png",
+        )
+    )
+    speed_strength_ax = captured["compare_speed_vs_low_frequency_strength.png"].axes[0]
+    assert all(collection.get_alpha() == 0.55 for collection in speed_strength_ax.collections)
+    assert captured["compare_mean_rotation_radius.png"].axes[0].get_ylabel() == "Mean rotational radius [µm]"
+    assert (
+        captured["compare_low_frequency_relative_strength_0.5s_by_temperature.png"].axes[0].get_ylabel()
+        == "Low-frequency relative strength"
+    )
+    script["comparison_figures"](pd.DataFrame(rows), pd.concat(groups), tmp_path, other_window_speed_plots=True)
+    assert len(list(tmp_path.glob("compare_*.png"))) == 11
+    assert (tmp_path / "compare_speed_vs_low_frequency_strength_other_windows.png").exists()
+
+
+def test_radius_subset_keeps_boundary_and_rejects_missing_radius():
+    script = runpy.run_path(
+        str(Path(__file__).resolve().parents[1] / "scripts/10_poster_temperature_control.py"),
+        run_name="temperature_test",
+    )
+    choose = script["radius_selection"]
+    assert choose(0.2, 0.2) == (True, "included")
+    assert choose(0.20001, 0.2) == (False, "above_limit")
+    assert choose(np.nan, 0.2) == (False, "invalid_radius")
+    assert choose(0.3, None) == (True, "included")
