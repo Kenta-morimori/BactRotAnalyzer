@@ -207,26 +207,35 @@ def test_one_poster_png_contains_absolute_velocity_and_log_fft(tmp_path, monkeyp
     assert np.allclose(saved["long_axis_abs_omega_rad_s"], np.abs(saved["long_axis_omega_rad_s"]), equal_nan=True)
     assert saved["long_axis_phase_rad"].dropna().between(-np.pi, np.pi, inclusive="left").all()
     assert not any(column.endswith("_um") or column.startswith("orbit_") for column in saved)
-    assert len(captured[0].axes) == 10
+    assert len(captured[0].axes) == 14
     assert len(captured[0].axes[1].lines) == 1
     assert len(captured[0].axes[2].lines) == 1
     assert captured[0].axes[5].get_yscale() == "log"
     assert len(captured[0].axes[5].lines) == 3
-    assert captured[0].axes[-1].get_yscale() == "log"
-    assert captured[0].axes[-1].lines[0].get_color() == "black"
+    assert len(captured[0].axes[6].lines) == 1
+    assert len(captured[0].axes[7].lines) == 1
+    assert captured[0].axes[8].get_yscale() == "log"
+    assert len(captured[0].axes[8].lines) == 1
+    assert all(ax.get_yscale() == "log" for ax in captured[0].axes[-2:])
+    assert all(ax.lines[0].get_color() == "black" for ax in captured[0].axes[-2:])
+    assert all(ax.lines[0].get_alpha() == 0.45 for ax in captured[0].axes[-2:])
     assert captured[0].axes[5].get_xlim()[1] == 100
     assert captured[0].axes[5].get_xticks()[-1] == 100
-    assert captured[0].axes[5].xaxis.label.get_fontsize() >= 18
-    assert captured[0].axes[5].get_xticklabels()[0].get_fontsize() >= 16
+    assert captured[0].axes[5].xaxis.label.get_fontsize() >= 23
+    assert captured[0].axes[5].get_xticklabels()[0].get_fontsize() >= 20
+    assert captured[0].axes[4].get_ylabel() == "Standardized SD / Mean"
+    assert captured[0].axes[5].get_ylabel() == "Amp"
+    assert captured[0].axes[3].lines[0].get_linewidth() >= 1.8
+    assert captured[0].axes[5].get_xlabel() == "Frequency [Hz]"
     ratios = script["pd"].read_csv(tmp_path / "tables/synthetic_No.01_band_amplitude_ratio.csv")
     assert len(ratios) == 6
     assert np.allclose(ratios.low_minus_high_amplitude, ratios.low_mean_amplitude - ratios.high_mean_amplitude)
-    assert captured[0].axes[6].get_yscale() == "log"
-    assert captured[0].axes[7].get_yscale() == "linear"
-    assert captured[0].axes[8].get_yscale() == "linear"
-    assert len(captured[0].axes[6].lines[0].get_xdata()) == 6
-    assert "stops retained" not in captured[0].axes[6].get_title()
-    assert all(ax.get_box_aspect() == 1.5 for ax in captured[0].axes[6:9])
+    assert captured[0].axes[9].get_yscale() == "log"
+    assert captured[0].axes[10].get_yscale() == "linear"
+    assert captured[0].axes[11].get_yscale() == "linear"
+    assert len(captured[0].axes[9].lines[0].get_xdata()) == 6
+    assert "stops retained" not in captured[0].axes[9].get_title()
+    assert all(ax.get_box_aspect() == 1.5 for ax in captured[0].axes[9:12])
     assert (tmp_path / "tables/synthetic_No.01_wrapped_angle_fft.csv").is_file()
     assert np.isnan(captured[0].axes[0].lines[0].get_ydata()).sum() > saved.long_axis_phase_rad.isna().sum()
     for width in (0.1, 0.2, 0.5, 1.0, 1.5, 2.0):
@@ -288,21 +297,23 @@ def test_main_routes_measured_plot_to_day_and_preserves_manual_selection(tmp_pat
     assert not (tmp_path / "index.csv").exists()
 
 
-def test_candidate_band_comparison_excludes_no08(tmp_path, monkeypatch):
+def test_candidate_band_comparison_normalizes_four_representatives(tmp_path, monkeypatch):
     script = runpy.run_path(
         str(Path(__file__).resolve().parents[1] / "scripts/09_poster_fluctuation.py"), run_name="poster_test"
     )
     rows = []
-    for day, sample_no in script["POSTER_CANDIDATES"]:
+    for day, sample_no, label, angle_definition in script["COMPARISON_CASES"]:
         for width in (0.1, 0.2, 0.5, 1.0, 1.5, 2.0):
             rows.append(
                 {
                     "day": day,
                     "sample_no": sample_no,
+                    "label": label,
+                    "angle_definition": angle_definition,
                     "window_s": width,
-                    "low_to_high_amplitude_ratio": 10 * width,
-                    "low_mean_amplitude": width,
-                    "low_minus_high_amplitude": width / 2,
+                    "low_to_high_amplitude_ratio": (sample_no + 1) * width,
+                    "low_mean_amplitude": (sample_no + 2) * width,
+                    "low_minus_high_amplitude": (sample_no + 3) * width,
                 }
             )
     captured = []
@@ -314,16 +325,22 @@ def test_candidate_band_comparison_excludes_no08(tmp_path, monkeypatch):
 
     monkeypatch.setattr(script["plt"].Figure, "savefig", capture)
     target = tmp_path / "candidate_band_amplitude_ratio.png"
-    script["candidate_band_comparison"](pd.DataFrame(rows), target)
+    raw = pd.DataFrame(rows)
+    normalized = script["normalize_candidate_ratios"](raw)
+    assert raw.equals(normalized[raw.columns])
+    for column, _, _, _ in script["BAND_PANELS"]:
+        assert normalized.groupby(["day", "sample_no"])[f"{column}_normalized"].max().eq(1).all()
+    script["candidate_band_comparison"](normalized, target)
     assert target.is_file()
     assert len(captured[0].axes) == 3
-    assert all(len(ax.lines) == 3 for ax in captured[0].axes)
-    assert captured[0].axes[0].get_yscale() == "log"
-    assert all(ax.get_yscale() == "linear" for ax in captured[0].axes[1:])
+    assert all(len(ax.lines) == 4 for ax in captured[0].axes)
+    assert all(ax.get_yscale() == "linear" for ax in captured[0].axes)
     assert all(ax.get_box_aspect() == 1.5 for ax in captured[0].axes)
-    labels = [item.get_text() for item in captured[0].axes[0].get_legend().get_texts()]
-    assert all("No.08" not in label for label in labels)
-    assert "stops included" in labels[1]
+    assert all(ax.get_legend() is None for ax in captured[0].axes)
+    labels = [item.get_text() for item in captured[0].legends[0].get_texts()]
+    assert labels == [case[2] for case in script["COMPARISON_CASES"]]
+    assert "No.08" not in " ".join(labels)
+    assert "centroid orbit angle" in captured[0]._suptitle.get_text()
 
 
 def test_synthetic_calibration_uses_equal_cell_weights(tmp_path):
@@ -350,20 +367,21 @@ def test_main_routes_synthetic_plots_and_index(tmp_path, monkeypatch):
     original_savefig = script["plt"].Figure.savefig
 
     def capture(figure, *args, **kwargs):
-        if len(figure.axes) in (9, 10):
+        if len(figure.axes) in (12, 14):
             limits.append(figure.axes[5].get_xlim()[1])
             assert figure.axes[5].get_xticks()[-1] == limits[-1]
-            assert figure.axes[6].get_yscale() == "log"
-            assert all(ax.get_yscale() == "linear" for ax in figure.axes[7:9])
+            assert figure.axes[8].get_yscale() == "log"
+            assert figure.axes[9].get_yscale() == "log"
+            assert all(ax.get_yscale() == "linear" for ax in figure.axes[10:12])
             if "random_speed_noise" in figure._suptitle.get_text():
-                assert len(figure.axes) == 9
+                assert len(figure.axes) == 12
                 assert not figure.axes[0].lines
                 assert not figure.axes[0].collections
                 assert not figure.axes[0].get_xticks().size
                 assert not figure.axes[0].get_yticks().size
             else:
-                assert len(figure.axes) == 10
-                assert figure.axes[-1].lines[0].get_color() == "black"
+                assert len(figure.axes) == 14
+                assert all(ax.lines[0].get_color() == "black" for ax in figure.axes[-2:])
         return original_savefig(figure, *args, **kwargs)
 
     monkeypatch.setattr(script["plt"].Figure, "savefig", capture)
