@@ -6,7 +6,7 @@ from runpy import run_path
 import pytest
 
 from utils import param
-from utils.functions import raw_centroid
+from utils.functions import get_centroid_coordinate, raw_centroid
 from utils.run_inputs import dataset_inputs
 
 
@@ -45,3 +45,12 @@ def test_grouped_av_reader_prefers_new_results_and_falls_back_to_legacy(tmp_path
     (current / "angular-velocity_time-series.csv").unlink()
     with pytest.raises(ValueError, match="Incomplete standard rotation output"):
         input_paths(root)
+
+
+def test_rotation_center_csv_uses_requested_day_and_result_root(tmp_path, monkeypatch):
+    monkeypatch.setattr(param, "get_config", lambda day: (1, [200.0], [1.0]) if day == "day" else None)
+    result = tmp_path / "rotation_analysis" / "day"
+    get_centroid_coordinate.save_center_of_rotation(result, "day", [[1.0, 2.0]], [[3.0, 4.0]])
+    assert (result / "center_coordinate/center_coordinate.csv").exists()
+    get_centroid_coordinate.save_center_of_rotation(result, "day", [[1.0, 2.0]], [[3.0, 4.0]], flag_bef_correct=True)
+    assert (result / "center_coordinate/bef_correction/center_coordinate_bef_correct.csv").exists()

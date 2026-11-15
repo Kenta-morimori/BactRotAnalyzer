@@ -74,10 +74,11 @@ def save_centorid_cordinate(save_dir, x_list, y_list):
             csvwriter.writerow(row)
 
 
-def save_center_of_rotation(save_dir, center_x_list, center_y_list, flag_bef_correct=False):
+def save_center_of_rotation(save_dir, day, center_x_list, center_y_list, flag_bef_correct=False):
     sample_num, _, _ = param.get_config(day)
-    save_dir = f"{param.save_dir_bef}/{day}/center_coordinate/bef_correction"
+    save_dir = f"{save_dir}/center_coordinate"
     if flag_bef_correct:
+        save_dir = f"{save_dir}/bef_correction"
         csv_save_dir = f"{save_dir}/center_coordinate_bef_correct.csv"
     else:
         csv_save_dir = f"{save_dir}/center_coordinate.csv"
@@ -504,7 +505,7 @@ def main(day):
         center_y_arr_bef = np.array(center_y_list_bef, dtype=object)
         make_graph.plot_center_colleration(center_x_arr_bef, center_y_arr_bef, complement_index_list, day)
         make_graph.dev_plot_centroid_and_center(x_arr_bef, y_arr_bef, center_x_list_bef, center_y_list_bef, day)
-        save_center_of_rotation(save_dir, center_x_arr_bef, center_y_arr_bef, flag_bef_correct=True)
+        save_center_of_rotation(save_dir, day, center_x_arr_bef, center_y_arr_bef, flag_bef_correct=True)
 
     # rotaion center analysis
     if param.flag_evaluate_rotaion_center_movement:
@@ -526,7 +527,7 @@ def main(day):
     y_list_aft = y_arr_bef - center_y_arr
 
     # save
-    save_center_of_rotation(save_dir, center_x_arr, center_y_arr)
+    save_center_of_rotation(save_dir, day, center_x_arr, center_y_arr)
     make_graph.plot_coordinate(center_x_arr, center_y_arr, day, "center")
     make_graph.plot_coordinate_with_center(x_arr_bef, y_arr_bef, center_x_arr, center_y_arr, day)
     save_centorid_cordinate(save_dir, x_list_aft, y_list_aft)
