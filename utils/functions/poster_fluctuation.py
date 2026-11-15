@@ -19,8 +19,17 @@ from utils.functions.frequency_analysis import (
 )
 
 WINDOWS_S = (0.1, 0.2, 0.5, 1.0, 1.5, 2.0)
+POSTER_DISPLAY_WINDOWS_S = (0.1, 0.5, 1.0)
 LOW_BAND_HZ = (0.0, 1.0)
 HIGH_BAND_HZ = (80.0, 100.0)
+
+
+def wrapped_angle_spectrum(time: np.ndarray, angle: np.ndarray) -> tuple[pd.DataFrame, dict]:
+    """FFT amplitude (rad) of the longest valid wrapped-angle interval."""
+    (segment_time, segment_angle), metadata = longest_continuous_segment(time, angle)
+    dt = float(np.median(np.diff(segment_time))) if len(segment_time) > 1 else np.nan
+    frequency, amplitude = fft(segment_angle, dt) if np.isfinite(dt) else (np.array([]), np.array([]))
+    return pd.DataFrame({"frequency_hz": frequency, "amplitude_rad": amplitude}), metadata
 
 
 def duplicate_source_map(files_by_day: dict[str, list[Path]]) -> dict[tuple[str, int], str | None]:
