@@ -364,15 +364,15 @@ def compare_center_methods(summary: pd.DataFrame, baseline_path: Path, destinati
     joined.to_csv(destination / "compare_center_methods.csv", index=False)
     fig, axes = plt.subplots(1, 3, figsize=(19, 6), constrained_layout=True)
     for ax, column, label in (
-        (axes[0], f"delta_{SPEED}", "Δ mean |ω| (rad/s)"),
-        (axes[1], f"delta_{RADIUS}", "Δ mean radius (µm)"),
+        (axes[0], f"delta_{SPEED}", "Δ mean rotational speed [rad/s]"),
+        (axes[1], f"delta_{RADIUS}", "Δ mean rotational radius [µm]"),
         (axes[2], "log10_low_high_fold_change", "log10(Low/High fold change)"),
     ):
         for temp in TEMPERATURES_C:
             group = joined[joined.temperature_c == temp]
             ax.scatter(np.full(len(group), temp), group[column], color=COLORS[temp], alpha=0.7)
         ax.axhline(0, color="black", lw=0.8)
-        ax.set(xlabel="Temperature (°C)", ylabel=label)
+        ax.set(xlabel="Temperature [°C]", ylabel=label)
         ax.set_xticks(TEMPERATURES_C)
     _style(axes)
     fig.suptitle("Local conic minus stored-center analysis: cell-level changes", fontsize=19)
