@@ -101,3 +101,15 @@ def test_cell_and_comparison_plots_accept_synthetic_data(tmp_path):
         groups.append(ratios.assign(temperature_c=temp, sample_no=1))
     script["comparison_figures"](pd.DataFrame(rows), pd.concat(groups), tmp_path)
     assert len(list(tmp_path.glob("compare_*.png"))) == 4
+
+
+def test_radius_subset_keeps_boundary_and_rejects_missing_radius():
+    script = runpy.run_path(
+        str(Path(__file__).resolve().parents[1] / "scripts/10_poster_temperature_control.py"),
+        run_name="temperature_test",
+    )
+    choose = script["radius_selection"]
+    assert choose(0.2, 0.2) == (True, "included")
+    assert choose(0.20001, 0.2) == (False, "above_limit")
+    assert choose(np.nan, 0.2) == (False, "invalid_radius")
+    assert choose(0.3, None) == (True, "included")

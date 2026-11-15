@@ -231,10 +231,21 @@ def comparison_figures(summary: pd.DataFrame, all_ratios: pd.DataFrame, root: Pa
     plt.close(fig)
 
 
-def run(source_root: Path, config_root: Path, destination: Path) -> None:
+def radius_selection(radius_um: float, maximum_um: float | None) -> tuple[bool, str]:
+    if maximum_um is None:
+        return True, "included"
+    if not np.isfinite(radius_um):
+        return False, "invalid_radius"
+    if radius_um > maximum_um:
+        return False, "above_limit"
+    return True, "included"
+
+
+def run(source_root: Path, config_root: Path, destination: Path, max_mean_radius_um: float | None = None) -> None:
     destination.mkdir(parents=True, exist_ok=True)
     summaries = []
     all_ratios = []
+    selection = []
     for temp in TEMPERATURES_C:
         sources = read_sources(source_root, config_root, temp)
         folder = destination / f"{temp}C"
@@ -246,6 +257,20 @@ def run(source_root: Path, config_root: Path, destination: Path) -> None:
             raw = cell_coordinates(sources, no)
             frame, spectra, ratios, fft_metadata = analyze_cell(raw)
             summary = cell_summary(frame, ratios, temp, no)
+            radius = float(summary[RADIUS])
+            selected, reason = radius_selection(radius, max_mean_radius_um)
+            selection.append(
+                {
+                    "temperature_c": temp,
+                    "sample_no": no,
+                    RADIUS: radius,
+                    "selected": selected,
+                    "reason": reason,
+                }
+            )
+            if not selected:
+                print(f"  No.{no:02d} excluded: mean radius {radius:.6g} µm", flush=True)
+                continue
             summary["plot_file"] = f"{temp}C/{stem}.png"
             summary["series_file"] = f"{temp}C/tables/{stem}_time_series.csv"
             summary["fft_file"] = f"{temp}C/tables/{stem}_fft.csv"
@@ -280,6 +305,8 @@ def run(source_root: Path, config_root: Path, destination: Path) -> None:
             print(f"  No.{no:02d} done", flush=True)
     summary_frame = pd.DataFrame(summaries)
     ratio_frame = pd.concat(all_ratios, ignore_index=True)
+    if max_mean_radius_um is not None:
+        pd.DataFrame(selection).to_csv(destination / "selection.csv", index=False)
     summary_frame.to_csv(destination / "cell_summary.csv", index=False)
     ratio_frame.to_csv(destination / "window_band_amplitude_ratio.csv", index=False)
     comparison_figures(summary_frame, ratio_frame, destination)
@@ -296,7 +323,13 @@ def run(source_root: Path, config_root: Path, destination: Path) -> None:
         "amplitude over 0<f<1 Hz divided by mean amplitude over 80<=f<100 Hz. "
         "The comparison scatter uses the 0.5 s window. Group lines are cell means, with "
         "individual cells shown; these cells are not assumed to be independent experimental replicates. "
-        "Previous center corrections and source timestamp gaps are counted in cell_summary.csv.\n",
+        "Previous center corrections and source timestamp gaps are counted in cell_summary.csv. "
+        + (
+            f"This subset includes only cells whose stored-center mean radius is <= {max_mean_radius_um:g} µm. "
+            "selection.csv lists all input cells and exclusion reasons.\n"
+            if max_mean_radius_um is not None
+            else "\n"
+        ),
         encoding="utf-8",
     )
 
@@ -308,16 +341,31 @@ def main() -> None:
     parser.add_argument(
         "--output-root", type=Path, default=ROOT / "outputs" / "poster_fluctuation" / "3_Temperature_Control"
     )
+    parser.add_argument(
+        "--max-mean-radius-um",
+        type=float,
+        default=None,
+        help="Include only cells with stored-center mean radius at or below this threshold (µm).",
+    )
     args = parser.parse_args()
+    if args.max_mean_radius_um is not None and (
+        not np.isfinite(args.max_mean_radius_um) or args.max_mean_radius_um <= 0
+    ):
+        parser.error("--max-mean-radius-um must be finite and positive")
     source_root, config_root, output_root = (
         args.source_root.resolve(),
         args.config_root.resolve(),
         args.output_root.resolve(),
     )
+    destination = (
+        output_root / f"mean_radius_le_{args.max_mean_radius_um:g}um"
+        if args.max_mean_radius_um is not None
+        else output_root
+    )
     inputs = [path for temp in TEMPERATURES_C for path in source_paths(source_root, config_root, temp)]
-    with analysis_run(parameters=vars(args), inputs=inputs, outputs=[output_root]) as run_root:
-        run(source_root, config_root, output_root)
-    archive = output_root / "_run_records" / run_root.parent.name / run_root.name
+    with analysis_run(parameters=vars(args), inputs=inputs, outputs=[destination]) as run_root:
+        run(source_root, config_root, destination, args.max_mean_radius_um)
+    archive = destination / "_run_records" / run_root.parent.name / run_root.name
     archive.mkdir(parents=True, exist_ok=False)
     shutil.copy2(run_root / "manifest.json", archive / "manifest.json")
     shutil.copy2(run_root / "run.log", archive / "run.log")
