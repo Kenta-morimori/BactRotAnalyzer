@@ -2,7 +2,7 @@
 
 候補3細胞と合成対照2条件の追加比較は[0.5秒窓FFT振幅の包絡フィット](poster-one-over-f.md)を参照する。
 
-ポスター図の配置と角度FFTは [ADR 0022](../adr/0022-poster-figure-layout-and-angle-fft.md)、候補比較は [ADR 0023](../adr/0023-poster-candidate-comparison.md) に従う。個別PNGではx-y軌跡を物理尺度・枠とも正方形にし、角速度と揺らぎ・FFTを横長、帯域指標3種を各2:3の縦長で表示する。SD/Meanと揺らぎFFTの図中の線は0.1・0.5・1.0秒の3窓幅に絞るが、計算・CSV・帯域指標の6窓幅は保持する。折り返し角度のFFTを黒線で右側のrad単位の対数縦軸に描き、`tables/*_wrapped_angle_fft.csv` に保存する。直接速度ノイズ対照には角度がないため黒線は表示しない。折り返しの鋸歯状波と高調波を含み、黒線と揺らぎFFTの振幅値は異なる単位なので直接比較しない。
+ポスター図の配置と角度FFTは [ADR 0022](../adr/0022-poster-figure-layout-and-angle-fft.md)、候補比較は [ADR 0023](../adr/0023-poster-candidate-comparison.md) に従う。個別PNGではx-y軌跡を物理尺度・枠とも正方形にし、角速度と揺らぎ・FFTを横長、帯域指標3種を各2:3の縦長で表示する。SD/Meanと揺らぎFFTの図中の線は0.1・0.5・1.0秒の3窓幅に絞るが、計算・CSV・帯域指標の6窓幅は保持する。折り返し角度のFFTを黒線で右側のrad単位の対数縦軸に描き、`tables/*_wrapped_angle_fft.csv` に保存する。直接速度ノイズ対照には角度がないため黒線は表示しない。左右の対数縦軸は同じ数値範囲と目盛位置にそろえる。折り返しの鋸歯状波と高調波を含み、黒線と揺らぎFFTの振幅値は異なる単位なので生物学的には直接比較しない。
 
 [基本測定](../adr/0009-poster-long-axis-fluctuation.md)、[表示・評価帯域の更新](../adr/0010-poster-phase-and-nyquist-band.md)、[固定帯域強度比](../adr/0011-poster-fixed-band-ratio.md)、[成分表示](../adr/0012-poster-band-components-and-steady-simulation.md)、[長軸角の合成対照](../adr/0013-poster-angle-noise-controls.md)、[実測速度による合成校正](../adr/0017-poster-empirical-speed-controls.md)、[独立速度対照の直接評価](../adr/0019-poster-direct-speed-control.md)、[30秒系列の追加](../adr/0020-poster-simulation-duration-extension.md)に従う。入力は現時点ではTIFFでなく二値AVI。対象は `data/20231005` のNo.1–7、`data/20230607` のNo.1–10、`data/20231107` のNo.1–7の計24細胞。両端の日付のNo.8–10は当時の解析用にNo.7を複製したAVIで、入力一覧に記録するが解析から除外する。各日付は同一条件の別細胞であり、実験反復と自動的にみなさない。
 
