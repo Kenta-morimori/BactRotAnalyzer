@@ -16,6 +16,8 @@ import pandas as pd
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
+plt.rcParams["font.family"] = "Arial"
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
@@ -35,6 +37,18 @@ from utils.run_context import analysis_run  # noqa: E402
 
 DATASETS = {"20231005": "MotAB overexpression", "20230607": "Fixed rotational direction", "20231107": "Brake protein"}
 POSTER_CANDIDATES = (("20230607", 6), ("20231005", 1), ("20231107", 6))
+SJW46_23C_RATIO_RELATIVE = Path("3_Temperature_Control/23C/tables/No.06_band_amplitude_ratio.csv")
+COMPARISON_CASES = (
+    ("SJW46_23C", 6, "SJW46: 23°C", "centroid orbit angle"),
+    ("20231005", 1, "SJW46/MotAB", "long-axis angle"),
+    ("20230607", 6, "YSC2123/MotAB", "long-axis angle"),
+    ("20231107", 6, "YcgR-tet", "long-axis angle"),
+)
+REPRESENTATIVE_PLOT_SUFFIXES = {
+    ("20231005", 1): "SJW46_MotAB_representative",
+    ("20230607", 6): "YSC2123_MotAB_representative",
+    ("20231107", 6): "YcgR_tet_representative",
+}
 BAND_PANELS = (
     ("low_to_high_amplitude_ratio", "Low / High", "Mean FFT amplitude ratio", "log"),
     ("low_mean_amplitude", "Low only", "Mean FFT amplitude", "linear"),
@@ -176,15 +190,15 @@ def wrapped_phase_plot(time: np.ndarray, phase: np.ndarray) -> tuple[np.ndarray,
 
 def style_axes(axes: np.ndarray) -> None:
     for ax in axes.flat:
-        ax.title.set_fontsize(20)
-        ax.xaxis.label.set_fontsize(18)
-        ax.yaxis.label.set_fontsize(18)
-        ax.tick_params(labelsize=16)
+        ax.title.set_fontsize(24)
+        ax.xaxis.label.set_fontsize(23)
+        ax.yaxis.label.set_fontsize(23)
+        ax.tick_params(labelsize=20)
         ax.grid(alpha=0.2)
         legend = ax.get_legend()
         if legend is not None:
             for label in legend.get_texts():
-                label.set_fontsize(15)
+                label.set_fontsize(19)
 
 
 def figure(
@@ -201,12 +215,12 @@ def figure(
     """One complete long-axis poster sheet per observed cell or synthetic case."""
     t = frame["time_sec"].to_numpy(float)
     measured = "x_um" in frame and "y_um" in frame
-    rows = 4 if measured else 3
-    height_ratios = (3.0, 1.2, 1.2, 4.5) if measured else (1.2, 1.2, 4.5)
+    rows = 4
+    height_ratios = (3.0, 1.2, 1.2, 4.5) if measured else (1.2, 1.2, 1.2, 4.5)
     fig, axes = plt.subplots(
         rows,
         3,
-        figsize=(21, 25 if measured else 17),
+        figsize=(21, 25 if measured else 22),
         gridspec_kw={"height_ratios": height_ratios},
         constrained_layout=True,
     )
@@ -214,17 +228,17 @@ def figure(
         x = frame["x_um"].to_numpy(float)
         y = frame["y_um"].to_numpy(float)
         axes[0, 0].plot(t, x, linewidth=0.7)
-        axes[0, 0].set(xlabel="Time (s)", ylabel="x (um)", title="Centroid x vs time")
+        axes[0, 0].set(xlabel="Time [s]", ylabel="x [µm]", title="Centroid x vs time")
         axes[0, 1].plot(t, y, linewidth=0.7)
-        axes[0, 1].set(xlabel="Time (s)", ylabel="y (um, image down)", title="Centroid y vs time")
+        axes[0, 1].set(xlabel="Time [s]", ylabel="y [µm] (image down)", title="Centroid y vs time")
         axes[0, 2].plot(x, y, linewidth=0.7)
-        axes[0, 2].set(xlabel="x (um)", ylabel="y (um, image down)", title="Centroid x-y trajectory")
+        axes[0, 2].set(xlabel="x [µm]", ylabel="y [µm] (image down)", title="Centroid x-y trajectory")
         axes[0, 2].set_aspect("equal", adjustable="box")
         axes[0, 2].set_box_aspect(1)
         axes[0, 2].invert_yaxis()
     phase_ax, signed_ax, absolute_ax = axes[1 if measured else 0]
     stats_axes = axes[2 if measured else 1]
-    band_axes = axes[3 if measured else 2]
+    band_axes = axes[3]
     direct_speed = "direct_omega_rad_s" in frame
     if direct_speed:
         phase_ax.set(title="Angle not generated (direct speed input)")
@@ -234,91 +248,141 @@ def figure(
         phase_t, phase = wrapped_phase_plot(t, frame["long_axis_phase_rad"].to_numpy(float))
         phase_ax.plot(phase_t, phase, linewidth=0.7)
         phase_ax.set(
-            xlabel="Time (s)",
-            ylabel="Relative phase (rad, CCW +)",
+            xlabel="Time [s]",
+            ylabel="Relative phase [rad] (CCW +)",
             title="Inferred phase (180° axis ambiguity)",
         )
         phase_ax.set_ylim(-np.pi, np.pi)
         phase_ax.set_yticks([-np.pi, -np.pi / 2, 0, np.pi / 2, np.pi], ["−π", "−π/2", "0", "π/2", "π"])
-    signal_label = "generated speed" if direct_speed else "long axis"
-    signed_ax.plot(t, frame["long_axis_omega_rad_s"], linewidth=0.7, label=f"{signal_label} (CCW +)")
-    absolute_ax.plot(t, frame["long_axis_abs_omega_rad_s"], linewidth=0.7, label=f"|{signal_label}|")
-    signed_ax.set(xlabel="Time (s)", ylabel="rad/s", title="Signed angular velocity")
-    absolute_ax.set(xlabel="Time (s)", ylabel="rad/s", title="Absolute angular velocity")
-    signed_ax.legend()
-    absolute_ax.legend()
+    signed_ax.plot(t, frame["long_axis_omega_rad_s"], linewidth=0.7)
+    absolute_ax.plot(t, frame["long_axis_abs_omega_rad_s"], linewidth=0.7)
+    signed_ax.set(xlabel="Time [s]", ylabel="Angular velocity [rad/s]", title="Signed angular velocity")
+    absolute_ax.set(xlabel="Time [s]", ylabel="Angular speed [rad/s]", title="Absolute angular velocity")
     for width in POSTER_DISPLAY_WINDOWS_S:
         label = f"{width:g} s"
         prefix = f"long_axis_sd_per_mean_{width:g}s"
-        stats_axes[0].plot(t, frame[prefix], linewidth=0.8, label=label)
-        stats_axes[1].plot(t, frame[f"{prefix}_z"], linewidth=0.8, label=label)
+        stats_axes[0].plot(t, frame[prefix], linewidth=1.8, label=label)
+        stats_axes[1].plot(t, frame[f"{prefix}_z"], linewidth=1.8, label=label)
         spectrum = spectra["long_axis"]
         part = spectrum[(spectrum.window_s == width) & np.isfinite(spectrum.amplitude) & (spectrum.amplitude > 0)]
-        stats_axes[2].plot(part.frequency_hz, part.amplitude, linewidth=0.8, label=label)
-    stats_axes[0].set(xlabel="Time (s)", ylabel="SD / Mean", title="Gaussian-window SD / Mean")
-    stats_axes[1].set(xlabel="Time (s)", ylabel="z-score", title="Standardized SD / Mean")
-    stats_axes[2].set(xlabel="Frequency (Hz)", ylabel="FFT amplitude (log)", title="FFT of standardized SD / Mean")
+        stats_axes[2].plot(part.frequency_hz, part.amplitude, linewidth=1.4, label=label)
+    stats_axes[0].set(xlabel="Time [s]", ylabel="SD / Mean", title="Gaussian-window SD / Mean")
+    stats_axes[1].set(xlabel="Time [s]", ylabel="Standardized SD / Mean", title="Standardized SD / Mean")
+    stats_axes[2].set(xlabel="Frequency [Hz]", ylabel="Amp", title="FFT of standardized SD / Mean")
     stats_axes[2].set_xlim(0, rate_hz / 2)
     stats_axes[2].set_xticks(np.linspace(0, rate_hz / 2, 6))
     stats_axes[2].set_yscale("log")
-    for ax in stats_axes:
-        ax.legend(ncol=2)
+    legend_handles = list(stats_axes[0].lines)
+    legend_labels = [f"{width:g} s" for width in POSTER_DISPLAY_WINDOWS_S]
+    if not measured:
+        single_axes = axes[2]
+        prefix = "long_axis_sd_per_mean_0.5s"
+        single_axes[0].plot(t, frame[prefix], linewidth=1.8, color="tab:orange")
+        single_axes[1].plot(t, frame[f"{prefix}_z"], linewidth=1.8, color="tab:orange")
+        single_spectrum = spectra["long_axis"]
+        single_part = single_spectrum[
+            (single_spectrum.window_s == 0.5) & np.isfinite(single_spectrum.amplitude) & (single_spectrum.amplitude > 0)
+        ]
+        single_axes[2].plot(single_part.frequency_hz, single_part.amplitude, linewidth=1.4, color="tab:orange")
+        single_axes[0].set(xlabel="Time [s]", ylabel="SD / Mean", title="0.5 s SD / Mean")
+        single_axes[1].set(xlabel="Time [s]", ylabel="Standardized SD / Mean", title="0.5 s standardized SD / Mean")
+        single_axes[2].set(xlabel="Frequency [Hz]", ylabel="Amp", title="0.5 s FFT")
+        single_axes[2].set_xlim(0, rate_hz / 2)
+        single_axes[2].set_yscale("log")
     if not angle_fft.empty:
-        angle_ax = stats_axes[2].twinx()
         good = np.isfinite(angle_fft.amplitude_rad) & (angle_fft.amplitude_rad > 0)
-        angle_ax.plot(
-            angle_fft.loc[good, "frequency_hz"],
-            angle_fft.loc[good, "amplitude_rad"],
-            color="black",
-            linewidth=0.9,
-            label="Wrapped angle",
-        )
-        angle_ax.set_yscale("log")
-        angle_ax.set_ylabel("Angle FFT amplitude (rad, log)", fontsize=18)
-        angle_ax.tick_params(labelsize=16)
-        angle_ax.legend(loc="lower right", fontsize=15)
+        fft_axes = (stats_axes[2], single_axes[2]) if not measured else (stats_axes[2],)
+        for fft_panel in fft_axes:
+            angle_ax = fft_panel.twinx()
+            angle_ax.plot(
+                angle_fft.loc[good, "frequency_hz"],
+                angle_fft.loc[good, "amplitude_rad"],
+                color="black",
+                linewidth=1.2,
+                alpha=0.45,
+                label="Wrapped angle",
+            )
+            angle_ax.set_yscale("log")
+            angle_ax.set_ylabel("Angle Amp [rad]", fontsize=23)
+            angle_ax.tick_params(labelsize=20)
+        legend_handles.append(angle_ax.lines[0])
+        legend_labels.append("Wrapped angle")
+    fig.legend(legend_handles, legend_labels, loc="outside lower center", ncol=len(legend_labels), fontsize=19)
     for ax, (column, label, ylabel, scale) in zip(band_axes, BAND_PANELS):
         ax.set_box_aspect(1.5)
         values = band_ratios[column].to_numpy(float)
         good = np.isfinite(values) & ((values > 0) if scale == "log" else True)
         ax.plot(band_ratios.loc[good, "window_s"], values[good], "-o")
-        ax.set(xlabel="Gaussian window width (s)", ylabel=ylabel, title=label)
+        ax.set(xlabel="Gaussian window width [s]", ylabel=ylabel, title=label)
         ax.set_xticks(WINDOWS_S)
         ax.set_yscale(scale)
         ax.tick_params(axis="x", labelrotation=45)
     band_axes[0].set_title("Low / High (full record; stops retained)" if includes_stops else "Low / High (full record)")
     style_axes(axes)
-    fig.suptitle(title, fontsize=25)
+    fig.suptitle(title, fontsize=30)
     target.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(target, dpi=180)
     plt.close(fig)
 
 
-def candidate_band_comparison(ratios: pd.DataFrame, target: Path) -> None:
-    """Compare the user-selected cells without averaging distinct cells."""
-    fig, axes = plt.subplots(1, 3, figsize=(21, 12), constrained_layout=True)
-    for ax, (column, title, ylabel, scale) in zip(axes, BAND_PANELS):
-        ax.set_box_aspect(1.5)
-        for day, sample_no in POSTER_CANDIDATES:
-            group = ratios[(ratios.day == day) & (ratios.sample_no == sample_no)].sort_values("window_s")
+def normalize_candidate_ratios(ratios: pd.DataFrame) -> pd.DataFrame:
+    """Preserve raw band metrics and scale each cell's six-window series to its own maximum."""
+    normalized = ratios.copy()
+    for column, _, _, _ in BAND_PANELS:
+        result = f"{column}_normalized"
+        normalized[result] = np.nan
+        for _, group in normalized.groupby(["day", "sample_no"], sort=False):
+            if set(group.window_s) != set(WINDOWS_S):
+                raise ValueError(f"{column}: candidate series must contain all six windows")
             values = group[column].to_numpy(float)
-            good = np.isfinite(values) & ((values > 0) if scale == "log" else True)
-            label = f"{day} No.{sample_no:02d}"
-            if (day, sample_no) == ("20231005", 1):
-                label += " (stops included)"
-            ax.plot(group.loc[good, "window_s"], values[good], "-o", label=label)
-        ax.set(xlabel="Gaussian window width (s)", ylabel=ylabel, title=title)
+            finite = values[np.isfinite(values)]
+            if not len(finite) or float(np.max(finite)) <= 0:
+                raise ValueError(f"{column}: candidate series has no positive maximum")
+            normalized.loc[group.index, result] = values / float(np.max(finite))
+    return normalized
+
+
+def candidate_band_comparison(ratios: pd.DataFrame, target: Path) -> None:
+    """Compare each candidate's window-width shape after per-series maximum normalization."""
+    fig, axes = plt.subplots(1, 3, figsize=(21, 13), constrained_layout=True)
+    handles = []
+    labels = []
+    for ax, (column, title, _, _) in zip(axes, BAND_PANELS):
+        ax.set_box_aspect(1.5)
+        for day, sample_no, label, _ in COMPARISON_CASES:
+            group = ratios[(ratios.day == day) & (ratios.sample_no == sample_no)].sort_values("window_s")
+            if group.empty:
+                continue
+            values = group[f"{column}_normalized"].to_numpy(float)
+            good = np.isfinite(values)
+            (line,) = ax.plot(group.loc[good, "window_s"], values[good], "-o", linewidth=2.4, markersize=8)
+            if ax is axes[0]:
+                handles.append(line)
+                labels.append(label)
+        ax.set(xlabel="Gaussian window width [s]", ylabel="Normalized value (max = 1)", title=title)
         ax.set_xticks(WINDOWS_S)
-        ax.set_yscale(scale)
+        ax.set_ylim(top=1.05)
         ax.tick_params(axis="x", labelrotation=45)
-    axes[0].legend()
-    fig.suptitle("Candidate cells: Low = 0–1 Hz, High = 80–100 Hz", fontsize=25)
+    fig.legend(handles, labels, loc="outside lower center", ncol=len(labels), fontsize=19)
+    fig.suptitle(
+        "Representative cells: normalized band metrics\n"
+        "SJW46 23°C uses centroid orbit angle; other cells use long-axis angle",
+        fontsize=28,
+    )
     style_axes(axes)
     fig.savefig(target, dpi=180)
     plt.close(fig)
 
 
-def save_case(source: pd.DataFrame, destination: Path, stem: str, title: str, metadata: dict) -> dict:
+def save_case(
+    source: pd.DataFrame,
+    destination: Path,
+    stem: str,
+    title: str,
+    metadata: dict,
+    *,
+    plot_name: str | None = None,
+) -> dict:
     rate_hz = float(metadata["rate_hz"])
     time = source["time_sec"].to_numpy(float)
     dt = np.diff(time)
@@ -369,19 +433,22 @@ def save_case(source: pd.DataFrame, destination: Path, stem: str, title: str, me
             indent=2,
             allow_nan=True,
         )
+    plot_name = plot_name or f"{stem}.png"
     figure(
         frame,
         spectra,
         title,
-        destination / f"{stem}.png",
+        destination / plot_name,
         rate_hz,
         band_ratios,
         angle_fft,
         includes_stops=metadata["kind"] == "measured",
     )
+    if plot_name != f"{stem}.png":
+        (destination / f"{stem}.png").unlink(missing_ok=True)
     row = {
         **metadata,
-        "plot_file": f"{stem}.png",
+        "plot_file": plot_name,
         "frame_count": info["frame_count"],
         "detected_fraction": info["detected_count"] / info["frame_count"],
         "long_axis_omega_fraction": info["long_axis_omega_fraction"],
@@ -457,6 +524,11 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
                         "rate_hz": settings_by_day[day]["rate_hz"],
                         "duration_s": settings_by_day[day]["duration_s"],
                     },
+                    plot_name=(
+                        f"No.{sample_no:02d}_{REPRESENTATIVE_PLOT_SUFFIXES[(day, sample_no)]}.png"
+                        if (day, sample_no) in REPRESENTATIVE_PLOT_SUFFIXES
+                        else None
+                    ),
                 )
                 row["plot_file"] = f"{day}/{row['plot_file']}"
                 row["band_ratio_file"] = f"{day}/{row['band_ratio_file']}"
@@ -537,14 +609,14 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
             axes[0].hist(group.peak_frequency_hz, bins=20, alpha=0.5, label=f"{rate:g} Hz")
             axes[1].hist(group.peak_to_median_full_band, bins=20, alpha=0.5, label=f"{rate:g} Hz")
         axes[0].set(
-            xlabel="Peak frequency (Hz)", ylabel="Count", title="Random speed noise: strongest apparent FFT peak"
+            xlabel="Peak frequency [Hz]", ylabel="Count", title="Random speed noise: strongest apparent FFT peak"
         )
         axes[0].set_xlim(0, max(args.synthetic_rates) / 2)
         axes[1].set(
             xlabel="Peak / median amplitude, full band", ylabel="Count", title="Random speed noise: peak contrast"
         )
-        for ax in axes:
-            ax.legend()
+        handles, labels = axes[0].get_legend_handles_labels()
+        fig.legend(handles, labels, loc="outside lower center", ncol=len(labels), fontsize=19)
         style_axes(axes)
         fig.savefig(simulation_dir / "simulation_random_speed_noise_ensemble.png", dpi=180)
         plt.close(fig)
@@ -569,12 +641,26 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
         by_cell = {(row["day"], row["sample_no"]): row for row in measured_rows if row.get("band_ratio_file")}
         if all(candidate in by_cell for candidate in POSTER_CANDIDATES):
             candidate_tables = []
-            for day, sample_no in POSTER_CANDIDATES:
-                table = pd.read_csv(measured_dir / by_cell[(day, sample_no)]["band_ratio_file"])
+            for day, sample_no, label, angle_definition in COMPARISON_CASES:
+                if day == "SJW46_23C":
+                    source = destination / SJW46_23C_RATIO_RELATIVE
+                    if not source.is_file():
+                        continue
+                else:
+                    source = measured_dir / by_cell[(day, sample_no)]["band_ratio_file"]
+                table = pd.read_csv(source)
+                if "sample_no" in table:
+                    if not (table["sample_no"] == sample_no).all():
+                        raise ValueError(f"{source}: sample number disagrees with representative selection")
+                    table = table.drop(columns="sample_no")
+                if day == "SJW46_23C" and not (table["temperature_c"] == 23).all():
+                    raise ValueError(f"{source}: expected 23°C reference")
+                table.insert(0, "angle_definition", angle_definition)
+                table.insert(0, "label", label)
                 table.insert(0, "sample_no", sample_no)
                 table.insert(0, "day", day)
                 candidate_tables.append(table)
-            comparison = pd.concat(candidate_tables, ignore_index=True)
+            comparison = normalize_candidate_ratios(pd.concat(candidate_tables, ignore_index=True))
             comparison_tables = measured_dir / "tables"
             comparison_tables.mkdir(parents=True, exist_ok=True)
             comparison.to_csv(comparison_tables / "candidate_band_amplitude_ratio.csv", index=False)
@@ -601,14 +687,14 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
     with (destination / "README.txt").open("w", encoding="utf-8") as stream:
         stream.write(
             "Private local poster analysis from binary AVI, not source TIFF. "
-            "Measured plots are 1_rotational_measurements/<day>/No.XX.png; simulations are in 2_simulation/. "
+            "Measured plots are 1_rotational_measurements/<day>/No.XX*.png (representatives have a condition suffix); simulations are in 2_simulation/. "
             "Measured PNGs contain t-x, t-y, x-y; synthetic case PNGs omit coordinates. Angle-derived cases contain inferred relative phase wrapped to [-pi, pi); the direct-speed case leaves the angle panel empty. All contain separate signed "
             "and absolute angular velocity, three displayed SD/Mean windows (0.1/0.5/1.0 s), standardized inputs, their FFTs, "
-            "and the wrapped-angle FFT on a separate rad-amplitude axis where an angle exists. All six windows remain in tables. "
-            "and side-by-side Low/High, Low-only and Low-High mean FFT amplitude metrics for 0<f<1 Hz and 80<=f<100 Hz. "
+            "and the wrapped-angle FFT on a separate rad-amplitude axis where an angle exists. Synthetic case sheets also show a dedicated 0.5 s SD/Mean, standardized SD/Mean and FFT row. All six windows remain in tables. "
+            "Side-by-side Low/High, Low-only and Low-High mean FFT amplitude metrics for 0<f<1 Hz and 80<=f<100 Hz. "
             "Measured ratios include stops; the ratio is unavailable when either band has no bins or the high-band mean is zero. "
-            "A full measured run also writes the three candidate-cell comparison PNG and table under 1_rotational_measurements/. "
-            "The FFT plot extends to half the frame rate and uses a logarithmic amplitude axis. "
+            "A full measured run also writes the candidate-cell comparison PNG and table (four cases when the SJW46 23C temperature ratio is available; otherwise three) under 1_rotational_measurements/. "
+            "Each candidate metric is normalized by its own six-window maximum for display; the CSV retains raw values and angle definitions. The SJW46 23C reference uses a centroid orbit angle, whereas the other three use long-axis angles. The FFT plot extends to half the frame rate and uses a logarithmic amplitude axis. "
             "Each case's numeric series, spectra and metadata are in its sibling tables/. "
             "Both synthetic models use the equal-cell mean of absolute angular speed and equal-cell mean of within-cell SD from 20230607 No.06, 20231005 No.01 and 20231107 No.06. "
             "The constant-step model adds independent Gaussian angle error calibrated to that speed SD and derives velocity from the generated 180-degree long-axis angle. The random-speed model directly generates independent Gaussian speed errors about the same mean, with no angle generation or integration. Defaults are 200/250 fps, 6 and 30 s, seed 81; the 40-seed null ensemble retains the 6 s primary duration. Calibration cells are saved in 2_simulation/tables/. "
@@ -647,6 +733,9 @@ if __name__ == "__main__":
         for day in args.days:
             files_by_day[day], settings_by_day[day] = dataset_files(data_root, day)
             inputs.extend([data_root / day / "config.ini", *files_by_day[day]])
+        sjw46_ratio_file = output_root / SJW46_23C_RATIO_RELATIVE
+        if sjw46_ratio_file.is_file():
+            inputs.append(sjw46_ratio_file)
     if args.mode == "synthetic":
         inputs.extend(
             output_root / "1_rotational_measurements" / day / "tables" / f"No.{sample_no:02d}_time_series.csv"
