@@ -102,15 +102,29 @@ def cell_figure(
     t = frame["time_sec"].to_numpy(float)
     if angle_fft is None:
         angle_fft, _ = wrapped_angle_spectrum(t, frame["orbit_angle_rad"].to_numpy(float))
-    fig = plt.figure(figsize=(21, 30), constrained_layout=True)
-    fig.get_layout_engine().set(w_pad=0.28, h_pad=0.30, wspace=0.08, hspace=0.10)
-    grid = fig.add_gridspec(5, 3, height_ratios=(3.0, 1.2, 1.4, 1.7, 4.5))
-    x_ax, y_ax, xy_ax = (fig.add_subplot(grid[0, column]) for column in range(3))
-    radius_ax, angle_ax, signed_ax = (fig.add_subplot(grid[1, column]) for column in range(3))
-    absolute_ax, ratio_ax, z_ax = (fig.add_subplot(grid[2, column]) for column in range(3))
-    fft_ax = fig.add_subplot(grid[3, :2])
-    summary_ax = fig.add_subplot(grid[3, 2])
-    band_axes = [fig.add_subplot(grid[4, column]) for column in range(3)]
+    fig = plt.figure(figsize=(21, 30))
+    grid = fig.add_gridspec(
+        6,
+        6,
+        height_ratios=(3.0, 1.2, 1.4, 0.65, 1.7, 4.5),
+        left=0.10,
+        right=0.97,
+        bottom=0.05,
+        top=0.95,
+        wspace=0.8,
+        hspace=0.45,
+    )
+    x_ax, y_ax, xy_ax = (fig.add_subplot(grid[0, column : column + 2]) for column in (0, 2, 4))
+    radius_ax, angle_ax, signed_ax = (fig.add_subplot(grid[1, column : column + 2]) for column in (0, 2, 4))
+    absolute_ax, ratio_ax, z_ax = (fig.add_subplot(grid[2, column : column + 2]) for column in (0, 2, 4))
+    ratio_legend_ax = fig.add_subplot(grid[3, 2:4])
+    z_legend_ax = fig.add_subplot(grid[3, 4:])
+    fft_ax = fig.add_subplot(grid[4, :3])
+    fft_legend_ax = fig.add_subplot(grid[4, 3])
+    summary_ax = fig.add_subplot(grid[4, 4:])
+    band_axes = [fig.add_subplot(grid[5, column : column + 2]) for column in (0, 2, 4)]
+    fft_position = fft_ax.get_position()
+    fft_ax.set_position([fft_position.x0, fft_position.y0, 1.5 * signed_ax.get_position().width, fft_position.height])
     for ax, suffix, ylabel in (
         (x_ax, "x", "x [µm]"),
         (y_ax, "y", "y [µm] (image down)"),
@@ -146,7 +160,7 @@ def cell_figure(
         ratio_ax.plot(t, frame[key], lw=1.8, label=label)
         z_ax.plot(t, frame[f"{key}_z"], lw=1.8, label=label)
         part = spectra[(spectra.window_s == width) & (spectra.amplitude > 0)]
-        fft_ax.plot(part.frequency_hz, part.amplitude, lw=1.4, label=label)
+        fft_ax.plot(part.frequency_hz, part.amplitude, lw=1.4, label=f"{width:.1f} SD")
     ratio_ax.set(xlabel="Time [s]", ylabel="SD / Mean", title="Gaussian-window fluctuation")
     z_ax.set(xlabel="Time [s]", ylabel="Standardized SD / Mean", title="Standardized SD / Mean")
     time_max = float(np.nanmax(t))
@@ -158,8 +172,10 @@ def cell_figure(
         fft_ax.set_yscale("log")
     else:
         fft_ax.text(0.5, 0.5, "No valid FFT", transform=fft_ax.transAxes, ha="center")
-    for ax in (ratio_ax, z_ax):
-        ax.legend(ncol=2)
+    for data_ax, legend_ax in ((ratio_ax, ratio_legend_ax), (z_ax, z_legend_ax)):
+        legend_ax.axis("off")
+        handles, labels = data_ax.get_legend_handles_labels()
+        legend_ax.legend(handles, labels, loc="center", ncol=1, frameon=False)
     if not angle_fft.empty:
         good = np.isfinite(angle_fft.amplitude_rad) & (angle_fft.amplitude_rad > 0)
         fft_ax.plot(
@@ -168,9 +184,16 @@ def cell_figure(
             color="black",
             lw=1.2,
             alpha=0.45,
-            label="Wrapped angle",
+            label="Rotation Data",
         )
-    fft_ax.legend(ncol=2)
+    handles, labels = fft_ax.get_legend_handles_labels()
+    if "Rotation Data" in labels:
+        rotation_index = labels.index("Rotation Data")
+        order = [rotation_index, *(index for index in range(len(labels)) if index != rotation_index)]
+        handles = [handles[index] for index in order]
+        labels = [labels[index] for index in order]
+    fft_legend_ax.axis("off")
+    fft_legend_ax.legend(handles, labels, loc="upper left", ncol=1, frameon=False)
 
     center_detail = (
         f"Center-adjusted frames: {summary['corrected_center_frame_count']}"
