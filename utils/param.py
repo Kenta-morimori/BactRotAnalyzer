@@ -32,6 +32,9 @@ repellent_details_enabled = False
 curr_dir = os.getcwd()
 input_dir_bef = f"{curr_dir}/data"
 save_dir_bef = f"{curr_dir}/outputs"
+# Standard rotation analysis may write to a separate result tree while continuing
+# to share raw centroid observations with repellent-response analysis.
+raw_centroid_root: str | None = None
 
 
 def _read_config(day):

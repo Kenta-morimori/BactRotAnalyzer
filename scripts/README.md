@@ -77,7 +77,9 @@ python3 scripts/04_repellent_response_analysis.py --day repellent-response/20260
 
 **Output directory structure:**
 
-Generated outputs are saved in `outputs/{day}/repellent_response/`:
+Standard rotation results are saved in `outputs/rotation_analysis/{day}/` by default. Pass `--output-root <directory>` to choose another parent. The raw AVI centroid cache remains shared at `outputs/{day}/raw_centroid/`; older standard results are not moved by a new run.
+
+Generated repellent-response outputs are saved in `outputs/{day}/repellent_response/`:
 
 - `00_time_list/`: Time list and visualization
 - `01_brightness_change/`: Background intensity and rise detection results
@@ -142,7 +144,7 @@ python3 scripts/01_standard_analyisis/rotation_analysis_main.py --day [directory
 
 忌避応答解析は以下のコマンドで実行できます。
 
-標準解析と忌避応答解析は `outputs/{day}/raw_centroid/<method>/{AVI名}.csv` の原フレーム番号付き重心を共用します。標準解析の `centroid_coordinate.csv` は中心相対座標として引き続き保存されます。
+標準解析と忌避応答解析は `outputs/{day}/raw_centroid/<method>/{AVI名}.csv` の原フレーム番号付き重心を共用します。標準解析の中心相対座標などの結果は既定で `outputs/rotation_analysis/{day}/` に保存されます。`rotation_analysis_main.py --output-root <directory>` で親ディレクトリを変更できます。旧 `outputs/{day}/` の結果は自動移動・削除しません。[出力先の判断](../docs/adr/0005-standard-output-location.md)を参照してください。
 
 ```bash
 python3 scripts/04_repellent_response_analysis.py --day [day_directory]

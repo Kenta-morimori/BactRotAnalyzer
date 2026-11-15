@@ -1,3 +1,13 @@
+## Output locations
+
+- Standard rotation analysis: `outputs/rotation_analysis/<day>/` by default. Set `--output-root <directory>` on `rotation_analysis_main.py` to choose another parent directory. Its time, center-relative centroid, center, angular velocity, and optional fluctuation results stay together there.
+- Repellent response: `outputs/[suffix/]repellent-response/<day>/repellent_response/`. See [the output contract](../docs/analysis/repellent-workflow.md) and its `index.html` / `output_manifest.csv`.
+- Shared raw AVI centroid cache: `outputs/<day>/raw_centroid/<method>/`. Both analyses use the original frame and timestamp here.
+- Execution records: `outputs/_runs/`. The tracked `outputs/test_data/` is a documentation example; it is not a place for measured runs.
+- Existing standard results directly under `outputs/<day>/` remain readable. They are not migrated or deleted by a new run.
+
+The output-location decision is [ADR 0005](../docs/adr/0005-standard-output-location.md).
+
 ## English version
 # Data Directory
 Directory for the analysis results.

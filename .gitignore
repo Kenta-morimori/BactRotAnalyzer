@@ -8,6 +8,7 @@ models/*
 outputs/*
 !outputs/README.md
 !outputs/test_data
+outputs/test_data/raw_centroid/
 scripts/dev_*
 utils/functions/dev_*
 notebooks/
