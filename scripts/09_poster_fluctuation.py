@@ -269,6 +269,9 @@ def figure(
         stats_axes[2].plot(part.frequency_hz, part.amplitude, linewidth=1.4, label=label)
     stats_axes[0].set(xlabel="Time [s]", ylabel="SD / Mean", title="Gaussian-window SD / Mean")
     stats_axes[1].set(xlabel="Time [s]", ylabel="Standardized SD / Mean", title="Standardized SD / Mean")
+    time_max = float(np.nanmax(t))
+    for time_ax in stats_axes[:2]:
+        time_ax.set_xlim(0, time_max)
     stats_axes[2].set(xlabel="Frequency [Hz]", ylabel="Amp", title="FFT of standardized SD / Mean")
     stats_axes[2].set_xlim(0, rate_hz / 2)
     stats_axes[2].set_xticks(np.linspace(0, rate_hz / 2, 6))
@@ -287,6 +290,8 @@ def figure(
         single_axes[2].plot(single_part.frequency_hz, single_part.amplitude, linewidth=1.4, color="tab:orange")
         single_axes[0].set(xlabel="Time [s]", ylabel="SD / Mean", title="0.5 s SD / Mean")
         single_axes[1].set(xlabel="Time [s]", ylabel="Standardized SD / Mean", title="0.5 s standardized SD / Mean")
+        for time_ax in single_axes[:2]:
+            time_ax.set_xlim(0, time_max)
         single_axes[2].set(xlabel="Frequency [Hz]", ylabel="Amp", title="0.5 s FFT")
         single_axes[2].set_xlim(0, rate_hz / 2)
         single_axes[2].set_yscale("log")
@@ -294,25 +299,15 @@ def figure(
         good = np.isfinite(angle_fft.amplitude_rad) & (angle_fft.amplitude_rad > 0)
         fft_axes = (stats_axes[2], single_axes[2]) if not measured else (stats_axes[2],)
         for fft_panel in fft_axes:
-            angle_ax = fft_panel.twinx()
-            angle_ax.plot(
+            angle_line = fft_panel.plot(
                 angle_fft.loc[good, "frequency_hz"],
                 angle_fft.loc[good, "amplitude_rad"],
                 color="black",
                 linewidth=1.2,
                 alpha=0.45,
                 label="Wrapped angle",
-            )
-            angle_ax.set_yscale("log")
-            angle_ax.set_ylabel("Angle Amp [rad]", fontsize=23)
-            angle_ax.tick_params(labelsize=20)
-            shared_ylim = (
-                min(fft_panel.get_ylim()[0], angle_ax.get_ylim()[0]),
-                max(fft_panel.get_ylim()[1], angle_ax.get_ylim()[1]),
-            )
-            fft_panel.set_ylim(shared_ylim)
-            angle_ax.set_ylim(shared_ylim)
-        legend_handles.append(angle_ax.lines[0])
+            )[0]
+        legend_handles.append(angle_line)
         legend_labels.append("Wrapped angle")
     fig.legend(legend_handles, legend_labels, loc="outside lower center", ncol=len(legend_labels), fontsize=19)
     for ax, (column, label, ylabel, scale) in zip(band_axes, BAND_PANELS):
@@ -699,7 +694,7 @@ def main(args: argparse.Namespace, files_by_day: dict, settings_by_day: dict, de
             "Measured plots are 1_rotational_measurements/<day>/No.XX*.png (representatives have a condition suffix); simulations are in 2_simulation/. "
             "Measured PNGs contain t-x, t-y, x-y; synthetic case PNGs omit coordinates. Angle-derived cases contain inferred relative phase wrapped to [-pi, pi); the direct-speed case leaves the angle panel empty. All contain separate signed "
             "and absolute angular velocity, three displayed SD/Mean windows (0.1/0.5/1.0 s), standardized inputs, their FFTs, "
-            "and the wrapped-angle FFT on a separate rad-amplitude axis where an angle exists. Synthetic case sheets also show a dedicated 0.5 s SD/Mean, standardized SD/Mean and FFT row. All six windows remain in tables. "
+            "and the wrapped-angle FFT on the same Amp axis where an angle exists. The raw amplitudes have different units and are overlaid only for qualitative frequency comparison. Synthetic case sheets also show a dedicated 0.5 s SD/Mean, standardized SD/Mean and FFT row. All six windows remain in tables. "
             "Side-by-side Low/High, Low-only and Low-High mean FFT amplitude metrics for 0<f<1 Hz and 80<=f<100 Hz. "
             "Measured ratios include stops; the ratio is unavailable when either band has no bins or the high-band mean is zero. "
             "A full measured run also writes the candidate-cell comparison PNG and table (four cases when the SJW46 23C temperature ratio is available; otherwise three) under 1_rotational_measurements/. "
