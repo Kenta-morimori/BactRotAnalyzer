@@ -9,5 +9,6 @@
 | [0002](0002-local-conic-center-completion.md) | 局所楕円モデルによる中心推定と3点平均補完 |
 | [0003](0003-repellent-output-contract.md) | フェーズ別出力、背景前後解析、再計算と再描画の分離 |
 | [0004](0004-execution-provenance.md) | clean GitによるCLI実行、入力・ブランチ・環境を含むローカル実行履歴 |
+| [0005](0005-poster-repellent-screening.md) | 忌避応答候補の一次選別、中心の連続性と非停止時間の参考指標 |
 
 各ADRには状態、背景、決定、代替、影響・限界、検証方法を記載する。後日の方針変更は新ADRで置き換え、既存の判断を黙って書き換えない。
