@@ -78,7 +78,7 @@ def test_full_cell_analysis_preserves_frames_and_sliding_window():
     assert abs(summary["mean_absolute_angular_velocity_rad_s"] - 2 * np.pi * 7) < 0.5
 
 
-def test_cell_and_comparison_plots_accept_synthetic_data(tmp_path):
+def test_cell_and_comparison_plots_accept_synthetic_data(tmp_path, monkeypatch):
     script = runpy.run_path(
         str(Path(__file__).resolve().parents[1] / "scripts/10_poster_temperature_control.py"),
         run_name="temperature_test",
@@ -91,8 +91,22 @@ def test_cell_and_comparison_plots_accept_synthetic_data(tmp_path):
     angle = 2 * np.pi * 7 * time + 0.003 * np.sin(2 * np.pi * 3 * time)
     frame, spectra, ratios, _ = analyze_cell(cell_coordinates(_source(time, np.cos(angle), -np.sin(angle)), 1))
     summary = cell_summary(frame, ratios, 23, 1)
+    captured = {}
+    original_savefig = script["plt"].Figure.savefig
+
+    def capture(figure, target, *args, **kwargs):
+        captured[Path(target).name] = figure
+        return original_savefig(figure, target, *args, **kwargs)
+
+    monkeypatch.setattr(script["plt"].Figure, "savefig", capture)
     script["cell_figure"](frame, spectra, ratios, summary, tmp_path / "cell.png", 200)
     assert (tmp_path / "cell.png").stat().st_size > 1000
+    figure = captured["cell.png"]
+    assert figure.axes[2].get_box_aspect() == 1
+    fft_ax = next(ax for ax in figure.axes if ax.get_title() == "FFT of standardized fluctuation")
+    assert len(fft_ax.lines) == 3
+    assert figure.axes[-1].lines[0].get_color() == "black"
+    assert all(ax.get_box_aspect() == 1.5 for ax in figure.axes[-4:-1])
     rows = []
     groups = []
     for temp in (10, 23, 30):
@@ -101,6 +115,7 @@ def test_cell_and_comparison_plots_accept_synthetic_data(tmp_path):
         groups.append(ratios.assign(temperature_c=temp, sample_no=1))
     script["comparison_figures"](pd.DataFrame(rows), pd.concat(groups), tmp_path)
     assert len(list(tmp_path.glob("compare_*.png"))) == 5
+    assert captured["compare_low_frequency_relative_strength_0.5s_by_temperature.png"].get_figwidth() == 7
     script["comparison_figures"](pd.DataFrame(rows), pd.concat(groups), tmp_path, other_window_speed_plots=True)
     assert len(list(tmp_path.glob("compare_*.png"))) == 11
     assert (tmp_path / "compare_speed_vs_low_frequency_strength_other_windows.png").exists()
