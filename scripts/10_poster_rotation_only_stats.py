@@ -35,7 +35,12 @@ CONDITIONS = {
     "20231107": "YcgR-tet",
 }
 COLORS = {"20230607": "#2b6cb0", "20231005": "#dd6b20", "20231107": "#b83280"}
-REFERENCE_COLOR = "#27805a"
+NORMALIZED_COLORS = {
+    "SJW46": "#1f77b4",
+    "20231005": "#ff7f0e",
+    "20230607": "#2ca02c",
+    "20231107": "#d62728",
+}
 
 
 def original_cell_figures(
@@ -210,13 +215,14 @@ def normalized_ratio_figure(accepted: pd.DataFrame, reference: pd.DataFrame, out
     """Compare cell distributions by window and connect condition means."""
     fig, ax = plt.subplots(figsize=(8.5, 11), layout="constrained")
     base_positions = np.arange(len(WINDOWS_S), dtype=float)
-    groups = [("SJW46", "SJW46", reference, REFERENCE_COLOR)] + [
-        (day, label, accepted[accepted.day.eq(day)], COLORS[day]) for day, label in CONDITIONS.items()
+    groups = [("SJW46", reference)] + [
+        (day, accepted[accepted.day.eq(day)]) for day in ("20231005", "20230607", "20231107")
     ]
     mean_lines = []
-    for _, label, part, color in groups:
+    for key, part in groups:
         if part.empty:
             continue
+        color = NORMALIZED_COLORS[key]
         distributions = [part.loc[part.window_s.eq(width), "normalized_ratio"].to_numpy(float) for width in WINDOWS_S]
         ax.boxplot(
             distributions,
@@ -230,10 +236,9 @@ def normalized_ratio_figure(accepted: pd.DataFrame, reference: pd.DataFrame, out
             capprops={"color": to_rgba(color, 0.5), "linewidth": 2},
             medianprops={"color": to_rgba(color, 0.75), "linewidth": 2.6},
         )
-        mean_lines.append(
-            (label, part.sample_no.nunique(), color, [float(np.mean(values)) for values in distributions])
-        )
-    for label, count, color, means in mean_lines:
+        label = "SJW46" if key == "SJW46" else CONDITIONS[key]
+        mean_lines.append((label, color, [float(np.mean(values)) for values in distributions]))
+    for label, color, means in mean_lines:
         ax.plot(
             base_positions,
             means,
@@ -242,7 +247,7 @@ def normalized_ratio_figure(accepted: pd.DataFrame, reference: pd.DataFrame, out
             linewidth=3.8,
             markersize=11,
             zorder=5,
-            label=f"{label} (n={count})",
+            label=label,
         )
     ax.set_xticks(base_positions, [str(width) for width in WINDOWS_S])
     ax.set_xlim(-0.5, len(WINDOWS_S) - 0.5)
@@ -260,7 +265,7 @@ def normalized_ratio_figure(accepted: pd.DataFrame, reference: pd.DataFrame, out
     plt.close(fig)
 
 
-def group_figures(metrics: pd.DataFrame, reference: pd.DataFrame, output: Path) -> None:
+def group_figures(metrics: pd.DataFrame, reference: pd.DataFrame, output: Path, normalized_output: Path) -> None:
     accepted = metrics[metrics.selection_reason.eq("included")].copy()
     if accepted.empty:
         return
@@ -268,7 +273,7 @@ def group_figures(metrics: pd.DataFrame, reference: pd.DataFrame, output: Path) 
         ["day", "sample_no"]
     ).low_to_high_amplitude_ratio.transform("max")
     plt.rcParams["font.family"] = "Arial"
-    normalized_ratio_figure(accepted, reference, output)
+    normalized_ratio_figure(accepted, reference, normalized_output)
     definitions = (
         ("low_to_high_amplitude_ratio", "Low / High (80–100 Hz)", "Amp ratio", "raw_ratio.png", True),
         ("low_mean_amplitude", "Low band (0–1 Hz)", "Mean FFT amp", "low_amplitude.png", False),
@@ -443,7 +448,10 @@ def run(measurements: Path, temperature_root: Path, output: Path) -> None:
     stop_table.to_csv(output / "stop_intervals.csv", index=False)
     if spectra_rows:
         pd.concat(spectra_rows, ignore_index=True).to_csv(output / "tables" / "rotation_only_fft.csv", index=False)
-    group_figures(metrics, reference, output)
+    group_figures(metrics, reference, output, measurements)
+    previous_plot = output / "normalized_ratio.png"
+    if previous_plot.exists():
+        previous_plot.unlink()
     original_cell_figures(originals, original_bands, selections, output)
     selection_figure(selections, stop_table, output)
     (output / "method.json").write_text(
@@ -463,6 +471,7 @@ def run(measurements: Path, temperature_root: Path, output: Path) -> None:
                 "ratio_center": "geometric mean of cell ratios",
                 "normalization": "each cell maximum over 3 windows",
                 "sjw46_reference": "No.01–07 at 23 C; archived centroid-orbit FFT valid runs, no stop exclusion; normalized figure only",
+                "normalized_ratio_plot": "../normalized_ratio.png",
             },
             indent=2,
         )
@@ -507,7 +516,7 @@ def main() -> None:
             "sjw46_reference": "23 C No.01–07 archived centroid-orbit FFT valid runs; normalized figure only",
         },
         inputs=inputs,
-        outputs=[args.output_root],
+        outputs=[args.output_root, args.measurements_root / "normalized_ratio.png"],
     ) as run_record:
         args.output_root.mkdir(parents=True, exist_ok=True)
         (args.output_root / "tables").mkdir(parents=True, exist_ok=True)
