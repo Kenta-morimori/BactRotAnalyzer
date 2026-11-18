@@ -208,50 +208,54 @@ def load_sjw46_reference(temperature_root: Path) -> pd.DataFrame:
 
 def normalized_ratio_figure(accepted: pd.DataFrame, reference: pd.DataFrame, output: Path) -> None:
     """Compare cell distributions by window and connect condition means."""
-    fig, ax = plt.subplots(figsize=(10, 8), layout="constrained")
+    fig, ax = plt.subplots(figsize=(8.5, 11), layout="constrained")
     base_positions = np.arange(len(WINDOWS_S), dtype=float)
     groups = [("SJW46", "SJW46", reference, REFERENCE_COLOR)] + [
         (day, label, accepted[accepted.day.eq(day)], COLORS[day]) for day, label in CONDITIONS.items()
     ]
-    for index, (_, label, part, color) in enumerate(groups):
+    mean_lines = []
+    for _, label, part, color in groups:
         if part.empty:
             continue
-        positions = base_positions + (index - (len(groups) - 1) / 2) * 0.21
         distributions = [part.loc[part.window_s.eq(width), "normalized_ratio"].to_numpy(float) for width in WINDOWS_S]
         ax.boxplot(
             distributions,
-            positions=positions,
-            widths=0.19,
+            positions=base_positions,
+            widths=0.38,
             patch_artist=True,
             showfliers=False,
             manage_ticks=False,
-            boxprops={"facecolor": to_rgba(color, 0.10), "edgecolor": to_rgba(color, 0.72), "linewidth": 2},
-            whiskerprops={"color": to_rgba(color, 0.72), "linewidth": 1.8},
-            capprops={"color": to_rgba(color, 0.72), "linewidth": 1.8},
-            medianprops={"color": color, "linewidth": 2.4},
+            boxprops={"facecolor": to_rgba(color, 0.08), "edgecolor": to_rgba(color, 0.5), "linewidth": 2.2},
+            whiskerprops={"color": to_rgba(color, 0.5), "linewidth": 2},
+            capprops={"color": to_rgba(color, 0.5), "linewidth": 2},
+            medianprops={"color": to_rgba(color, 0.75), "linewidth": 2.6},
         )
-        means = [float(np.mean(values)) for values in distributions]
+        mean_lines.append(
+            (label, part.sample_no.nunique(), color, [float(np.mean(values)) for values in distributions])
+        )
+    for label, count, color, means in mean_lines:
         ax.plot(
-            positions,
+            base_positions,
             means,
             "-o",
             color=color,
-            linewidth=3.1,
-            markersize=9,
-            label=f"{label} (n={part.sample_no.nunique()})",
+            linewidth=3.8,
+            markersize=11,
+            zorder=5,
+            label=f"{label} (n={count})",
         )
     ax.set_xticks(base_positions, [str(width) for width in WINDOWS_S])
-    ax.set_xlim(-0.42, len(WINDOWS_S) - 0.58)
+    ax.set_xlim(-0.5, len(WINDOWS_S) - 0.5)
     ax.set_ylim(0, 1.05)
     ax.set_title(
-        "Each cell maximum = 1\nSJW46: 23°C centroid orbit, no stop exclusion; others: long axis, rotation only",
-        fontsize=19,
+        "Each cell maximum = 1\nSJW46: 23°C orbit, no stop cut\nOthers: long axis, rotation only",
+        fontsize=24,
     )
-    ax.set_xlabel("Window width [s]", fontsize=18)
-    ax.set_ylabel("Normalized amp ratio", fontsize=18)
-    ax.tick_params(labelsize=16)
+    ax.set_xlabel("Window width [s]", fontsize=26)
+    ax.set_ylabel("Normalized amp ratio", fontsize=26)
+    ax.tick_params(labelsize=21)
     ax.grid(axis="y", alpha=0.2)
-    fig.legend(loc="outside lower center", ncol=1, fontsize=17)
+    fig.legend(loc="outside lower center", ncol=1, fontsize=21)
     fig.savefig(output / "normalized_ratio.png", dpi=200)
     plt.close(fig)
 
