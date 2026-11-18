@@ -36,6 +36,130 @@ CONDITIONS = {
 COLORS = {"20230607": "#2b6cb0", "20231005": "#dd6b20", "20231107": "#b83280"}
 
 
+def original_cell_figures(
+    originals: dict[tuple[str, int], pd.DataFrame],
+    original_bands: pd.DataFrame,
+    output: Path,
+) -> None:
+    """Show each uncut velocity series beside its full-record band ratio."""
+    plt.rcParams["font.family"] = "Arial"
+    positive = original_bands.low_to_high_amplitude_ratio.to_numpy(float)
+    positive = positive[np.isfinite(positive) & (positive > 0)]
+    ratio_limits = (float(np.min(positive) / 1.4), float(np.max(positive) * 1.4)) if len(positive) else (1, 10)
+    for day, label in CONDITIONS.items():
+        cells = sorted(number for source_day, number in originals if source_day == day)
+        if not cells:
+            continue
+        fig, axes = plt.subplots(
+            len(cells),
+            2,
+            figsize=(20, 2.7 * len(cells) + 2),
+            gridspec_kw={"width_ratios": [3, 1.15]},
+            sharex="col",
+            layout="constrained",
+        )
+        axes = np.atleast_2d(axes)
+        for i, number in enumerate(cells):
+            frame = originals[(day, number)]
+            omega_ax, ratio_ax = axes[i]
+            omega_ax.plot(frame.time_sec, frame.long_axis_omega_rad_s, color=COLORS[day], linewidth=0.9)
+            omega_ax.axhline(0, color="black", linewidth=0.8, alpha=0.5)
+            omega_ax.set_xlim(0, float(frame.time_sec.max()))
+            omega_ax.set_ylabel("Angular velocity [rad/s]", fontsize=14)
+            omega_ax.text(
+                0.01,
+                0.96,
+                f"No.{number:02d}",
+                transform=omega_ax.transAxes,
+                ha="left",
+                va="top",
+                fontsize=18,
+                fontweight="bold",
+                bbox={"facecolor": "white", "alpha": 0.8, "edgecolor": "none"},
+            )
+            omega_ax.tick_params(labelsize=13)
+            omega_ax.grid(alpha=0.18)
+            band = original_bands[(original_bands.day.eq(day)) & (original_bands.sample_no.eq(number))]
+            band = band.sort_values("window_s")
+            ratio_ax.plot(
+                band.window_s, band.low_to_high_amplitude_ratio, "-o", color=COLORS[day], linewidth=2.2, markersize=6
+            )
+            ratio_ax.set_yscale("log")
+            ratio_ax.set_ylim(*ratio_limits)
+            ratio_ax.set_xlim(0.05, 1.05)
+            ratio_ax.set_xticks(WINDOWS_S)
+            ratio_ax.set_ylabel("Low / High", fontsize=14)
+            ratio_ax.tick_params(labelsize=13)
+            ratio_ax.grid(alpha=0.18)
+        axes[-1, 0].set_xlabel("Time [s]", fontsize=17)
+        axes[-1, 1].set_xlabel("Window width [s]", fontsize=17)
+        fig.suptitle(f"{label} | {day} | original full record", fontsize=24)
+        fig.savefig(output / f"original_full_record_{day}.png", dpi=180)
+        plt.close(fig)
+
+
+def selection_figure(selections: pd.DataFrame, stops: pd.DataFrame, output: Path) -> None:
+    """Map every original record to its candidate run and final inclusion."""
+    plt.rcParams["font.family"] = "Arial"
+    ordered = selections.copy()
+    ordered["day"] = pd.Categorical(ordered.day, categories=list(CONDITIONS), ordered=True)
+    ordered = ordered.sort_values(["day", "sample_no"]).reset_index(drop=True)
+    fig, ax = plt.subplots(figsize=(19, max(14, 0.67 * len(ordered) + 3)), layout="constrained")
+    labels = []
+    for i, row in enumerate(ordered.itertuples()):
+        y = len(ordered) - 1 - i
+        labels.append(f"{row.day}  No.{row.sample_no:02d}")
+        # The light bar is the complete six-second source record, not the selected run.
+        ax.plot([0, 6], [y, y], color="#cbd5e0", linewidth=7, solid_capstyle="butt")
+        if np.isfinite(row.start_s) and np.isfinite(row.end_s):
+            if row.selection_reason == "included":
+                color, alpha = "#228b57", 1.0
+            elif row.selection_reason == "user_excluded_no08":
+                color, alpha = "#718096", 0.85
+            else:
+                color, alpha = "#d69e2e", 0.95
+            ax.plot([row.start_s, row.end_s], [y, y], color=color, linewidth=8, alpha=alpha, solid_capstyle="butt")
+        cell_stops = stops[(stops.day.astype(str).eq(str(row.day))) & (stops.sample_no.eq(row.sample_no))]
+        for stop in cell_stops.itertuples():
+            ax.plot(
+                [stop.start_s, stop.end_s], [y + 0.21, y + 0.21], color="#c53030", linewidth=3, solid_capstyle="butt"
+            )
+        status = {
+            "included": "included",
+            "user_excluded_no08": "excluded: user choice",
+            "fewer_than_3_low_bins": "excluded: <3 low FFT bins",
+        }.get(row.selection_reason, row.selection_reason)
+        ax.text(
+            6.12,
+            y,
+            status,
+            va="center",
+            fontsize=14,
+            color="#22543d" if row.selection_reason == "included" else "#744210",
+        )
+    ax.set_yticks(np.arange(len(ordered)), labels[::-1])
+    ax.set_xlim(0, 8.4)
+    ax.set_xticks(np.arange(0, 7))
+    ax.set_xlabel("Original time [s]", fontsize=20)
+    ax.set_title("Longest candidate interval and final inclusion", fontsize=25)
+    ax.tick_params(labelsize=15)
+    ax.grid(axis="x", alpha=0.18)
+    for boundary in (10, 17):
+        ax.axhline(len(ordered) - boundary - 0.5, color="black", linewidth=1.2, alpha=0.5)
+    from matplotlib.lines import Line2D
+
+    handles = [
+        Line2D([0], [0], color="#cbd5e0", linewidth=7, label="Original record"),
+        Line2D([0], [0], color="#228b57", linewidth=7, label="Included run"),
+        Line2D([0], [0], color="#d69e2e", linewidth=7, label="Candidate; insufficient FFT bins"),
+        Line2D([0], [0], color="#718096", linewidth=7, label="User excluded"),
+        Line2D([0], [0], color="#c53030", linewidth=3, label="Stop candidate"),
+    ]
+    fig.legend(handles=handles, loc="outside lower center", ncol=3, fontsize=14)
+    fig.savefig(output / "selection_overview.png", dpi=200)
+    plt.close(fig)
+
+
 def _style(ax: plt.Axes, title: str, ylabel: str) -> None:
     ax.set_title(title, fontsize=21)
     ax.set_xlabel("Window width [s]", fontsize=18)
@@ -138,6 +262,8 @@ def group_figures(metrics: pd.DataFrame, output: Path) -> None:
 
 def run(measurements: Path, output: Path) -> None:
     index = pd.read_csv(measurements / "index.csv")
+    originals: dict[tuple[str, int], pd.DataFrame] = {}
+    original_band_rows: list[pd.DataFrame] = []
     selection_rows: list[dict] = []
     metric_rows: list[dict] = []
     stop_rows: list[dict] = []
@@ -147,6 +273,14 @@ def run(measurements: Path, output: Path) -> None:
             continue
         day, number = str(row.day), int(row.sample_no)
         frame = pd.read_csv(measurements / day / "tables" / f"No.{number:02d}_time_series.csv")
+        originals[(day, number)] = frame
+        original_band = pd.read_csv(measurements / row.band_ratio_file)
+        original_band = original_band[original_band.window_s.isin(WINDOWS_S)].copy()
+        if set(original_band.window_s) != set(WINDOWS_S) or len(original_band) != len(WINDOWS_S):
+            raise ValueError(f"{day} No.{number:02d}: full-record band table lacks a display window")
+        original_band.insert(0, "sample_no", number)
+        original_band.insert(0, "day", day)
+        original_band_rows.append(original_band)
         v2, stops = detect_stops(frame)
         selected = longest_rotation_interval(frame, stops)
         if day == "20230607" and number == 8:
@@ -207,15 +341,18 @@ def run(measurements: Path, output: Path) -> None:
     selections = pd.DataFrame(selection_rows)
     metrics = pd.DataFrame(metric_rows)
     summary = summarize_groups(metrics)
+    original_bands = pd.concat(original_band_rows, ignore_index=True)
     selections.to_csv(output / "selection.csv", index=False)
     metrics.to_csv(output / "cell_band_metrics.csv", index=False)
     summary.to_csv(output / "group_summary.csv", index=False)
-    pd.DataFrame(stop_rows, columns=["day", "sample_no", "start_s", "end_s", "method"]).to_csv(
-        output / "stop_intervals.csv", index=False
-    )
+    original_bands.to_csv(output / "original_full_record_band_ratio.csv", index=False)
+    stop_table = pd.DataFrame(stop_rows, columns=["day", "sample_no", "start_s", "end_s", "method"])
+    stop_table.to_csv(output / "stop_intervals.csv", index=False)
     if spectra_rows:
         pd.concat(spectra_rows, ignore_index=True).to_csv(output / "tables" / "rotation_only_fft.csv", index=False)
     group_figures(metrics, output)
+    original_cell_figures(originals, original_bands, output)
+    selection_figure(selections, stop_table, output)
     (output / "method.json").write_text(
         json.dumps(
             {
@@ -258,6 +395,7 @@ def main() -> None:
             inputs.append(
                 args.measurements_root / str(row.day) / "tables" / f"No.{int(row.sample_no):02d}_time_series.csv"
             )
+            inputs.append(args.measurements_root / row.band_ratio_file)
     with analysis_run(
         parameters={"measurements_root": str(args.measurements_root), "output_root": str(args.output_root)},
         inputs=inputs,
