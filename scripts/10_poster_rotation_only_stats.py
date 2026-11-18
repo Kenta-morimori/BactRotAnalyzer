@@ -39,9 +39,10 @@ COLORS = {"20230607": "#2b6cb0", "20231005": "#dd6b20", "20231107": "#b83280"}
 def original_cell_figures(
     originals: dict[tuple[str, int], pd.DataFrame],
     original_bands: pd.DataFrame,
+    selections: pd.DataFrame,
     output: Path,
 ) -> None:
-    """Show each uncut velocity series beside its full-record band ratio."""
+    """Show uncut velocity, selected analysis run, and full-record band ratio."""
     plt.rcParams["font.family"] = "Arial"
     positive = original_bands.low_to_high_amplitude_ratio.to_numpy(float)
     positive = positive[np.isfinite(positive) & (positive > 0)]
@@ -62,6 +63,10 @@ def original_cell_figures(
         for i, number in enumerate(cells):
             frame = originals[(day, number)]
             omega_ax, ratio_ax = axes[i]
+            selection = selections[(selections.day.eq(day)) & (selections.sample_no.eq(number))].iloc[0]
+            included = selection.selection_reason == "included"
+            if included:
+                omega_ax.axvspan(selection.start_s, selection.end_s, color="#228b57", alpha=0.18, zorder=0)
             omega_ax.plot(frame.time_sec, frame.long_axis_omega_rad_s, color=COLORS[day], linewidth=0.9)
             omega_ax.axhline(0, color="black", linewidth=0.8, alpha=0.5)
             omega_ax.set_xlim(0, float(frame.time_sec.max()))
@@ -69,7 +74,7 @@ def original_cell_figures(
             omega_ax.text(
                 0.01,
                 0.96,
-                f"No.{number:02d}",
+                f"No.{number:02d}  {'USED' if included else 'EXCLUDED'}",
                 transform=omega_ax.transAxes,
                 ha="left",
                 va="top",
@@ -95,7 +100,7 @@ def original_cell_figures(
         axes[-1, 1].set_xlabel("Window width [s]", fontsize=17)
         fig.suptitle(
             f"{label} | {day} | original full record\n"
-            "Low / High = mean FFT amp (0 < f < 1 Hz) / mean FFT amp (80 ≤ f < 100 Hz)",
+            "Green = interval used for fluctuation analysis; right = full-record Low / High (0–1 / 80–100 Hz)",
             fontsize=23,
         )
         fig.savefig(output / f"original_full_record_{day}.png", dpi=180)
@@ -355,7 +360,7 @@ def run(measurements: Path, output: Path) -> None:
     if spectra_rows:
         pd.concat(spectra_rows, ignore_index=True).to_csv(output / "tables" / "rotation_only_fft.csv", index=False)
     group_figures(metrics, output)
-    original_cell_figures(originals, original_bands, output)
+    original_cell_figures(originals, original_bands, selections, output)
     selection_figure(selections, stop_table, output)
     (output / "method.json").write_text(
         json.dumps(
