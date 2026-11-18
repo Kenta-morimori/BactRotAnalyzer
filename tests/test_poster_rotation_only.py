@@ -110,7 +110,11 @@ def test_sjw46_reference_uses_only_seven_23c_cells_and_normalizes_each(tmp_path)
         target = tmp_path / relative
         target.parent.mkdir(exist_ok=True)
         pd.DataFrame(
-            {"window_s": WINDOWS_S, "low_to_high_amplitude_ratio": [2 * number, 4 * number, 8 * number]}
+            {
+                "sample_no": [number] * len(WINDOWS_S),
+                "window_s": WINDOWS_S,
+                "low_to_high_amplitude_ratio": [2 * number, 4 * number, 8 * number],
+            }
         ).to_csv(target, index=False)
         reference_rows.append({"temperature_c": 23, "sample_no": number, "ratio_file": relative})
     reference_rows.append({"temperature_c": 10, "sample_no": 1, "ratio_file": "missing.csv"})

@@ -195,7 +195,9 @@ def load_sjw46_reference(temperature_root: Path) -> pd.DataFrame:
         values = band.low_to_high_amplitude_ratio.to_numpy(float)
         if not np.isfinite(values).all() or (values <= 0).any():
             raise ValueError(f"SJW46 23 C No.{int(row.sample_no):02d}: invalid band ratio")
-        band.insert(0, "sample_no", int(row.sample_no))
+        if "sample_no" in band and not band.sample_no.eq(int(row.sample_no)).all():
+            raise ValueError(f"SJW46 23 C No.{int(row.sample_no):02d}: sample number mismatch")
+        band["sample_no"] = int(row.sample_no)
         rows.append(band[["sample_no", "window_s", "low_to_high_amplitude_ratio"]])
     reference = pd.concat(rows, ignore_index=True)
     reference["normalized_ratio"] = reference.low_to_high_amplitude_ratio / reference.groupby(
