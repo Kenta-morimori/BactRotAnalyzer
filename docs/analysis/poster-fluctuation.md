@@ -1,5 +1,17 @@
 # ポスター用の長軸角・揺らぎ解析
 
+## 回転区間だけの群比較
+
+[ADR 0024](../adr/0024-poster-rotation-only-group-comparison.md)に従い、保存済みの実測時系列から最長の連続回転区間を選び、3条件の細胞を等重みで比較する。No.08（20230607）はユーザー指定で除外し、温度SJW46の重心周回角は群統計に入れない。以下はcleanなGitコミットから実行する。実測出力はGit管理外に置く。
+
+```bash
+python scripts/10_poster_rotation_only_stats.py \
+  --measurements-root outputs/poster_fluctuation/1_rotational_measurements \
+  --output-root outputs/poster_fluctuation/1_rotational_measurements/rotation_only_stats
+```
+
+`selection.csv` に元フレーム・時刻・最長区間・除外理由、`stop_intervals.csv` に停止候補、`cell_band_metrics.csv` に各窓のFFT分解能と低域/高域点数、`group_summary.csv` に細胞等重みの記述集計を保存する。`tables/` には選択区間の元フレーム付き時系列とFFTを置く。比較PNGは帯域比、細胞内最大値正規化、低域・高域振幅、60–80 Hz高域への感度を示す。AVIの対象と長軸追跡の目視判定は `visual_qc` 列で別管理し、未確認のまま確定採用を主張しない。
+
 ポスター図の配置と角度FFTは [ADR 0022](../adr/0022-poster-figure-layout-and-angle-fft.md)、候補比較は [ADR 0023](../adr/0023-poster-candidate-comparison.md) に従う。個別PNGではx-y軌跡を物理尺度・枠とも正方形にし、角速度と揺らぎ・FFTを横長、帯域指標3種を各2:3の縦長で表示する。SD/Meanと揺らぎFFTの図中の線は0.1・0.5・1.0秒の3窓幅に絞るが、計算・CSV・帯域指標の6窓幅は保持する。折り返し角度のFFT生振幅を黒線で揺らぎFFTと同じ対数 `Amp` 縦軸に重ね、`tables/*_wrapped_angle_fft.csv` に保存する。右縦軸は設けない。直接速度ノイズ対照には角度がないため黒線は表示しない。折り返しの鋸歯状波と高調波を含む。角度FFTの振幅はrad、標準化SD/MeanのFFT振幅は無次元なので、同じ縦軸の高さは物理的な強度比較を意味しない。
 
 SD/Meanと標準化SD/Meanの時系列図は、合成の0.5秒窓専用図を含めて横軸を0秒から記録の最大時刻までとする。
