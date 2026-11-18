@@ -45,7 +45,7 @@ def _style(ax: plt.Axes, title: str, ylabel: str) -> None:
     ax.grid(alpha=0.2)
 
 
-def group_figures(metrics: pd.DataFrame, summary: pd.DataFrame, output: Path) -> None:
+def group_figures(metrics: pd.DataFrame, output: Path) -> None:
     accepted = metrics[metrics.selection_reason.eq("included")].copy()
     if accepted.empty:
         return
@@ -215,7 +215,7 @@ def run(measurements: Path, output: Path) -> None:
     )
     if spectra_rows:
         pd.concat(spectra_rows, ignore_index=True).to_csv(output / "tables" / "rotation_only_fft.csv", index=False)
-    group_figures(metrics, summary, output)
+    group_figures(metrics, output)
     (output / "method.json").write_text(
         json.dumps(
             {
@@ -224,6 +224,10 @@ def run(measurements: Path, output: Path) -> None:
                 "high_bands_hz": HIGH_BANDS_HZ,
                 "minimum_low_bins_per_window": 3,
                 "stop_margin_s": 0.1,
+                "axis_stop_secant_width_s": 0.2,
+                "axis_stop_abs_speed_max_hz": 1.0,
+                "axis_stop_motion_rms_fraction_max": 0.35,
+                "axis_stop_minimum_support_s": 0.3,
                 "interval": "longest observed continuous rotation run",
                 "group_unit": "cell; one experimental day per condition; descriptive only",
                 "ratio_center": "geometric mean of cell ratios",

@@ -59,7 +59,7 @@ def detect_stops(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         if (
             np.isfinite(angle[left : right + 1]).all()
             and np.isfinite(time[left : right + 1]).all()
-            and np.all(np.diff(time[left : right + 1]) <= 1.5 * dt)
+            and np.all((np.diff(time[left : right + 1]) > 0) & (np.diff(time[left : right + 1]) <= 1.5 * dt))
         ):
             local_hz[i] = (angle[right] - angle[left]) / (time[right] - time[left]) / (2 * np.pi)
     row_frame = v2.frame_0based.to_numpy(int)
