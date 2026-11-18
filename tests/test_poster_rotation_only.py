@@ -73,9 +73,9 @@ def test_correlated_angle_and_centroid_pause_is_detected():
 def test_band_definitions_and_group_equal_cell_weight():
     spectrum = pd.DataFrame(
         {
-            "window_s": [0.1] * 5 + [0.5] * 5 + [1.0] * 5,
-            "frequency_hz": [0.25, 0.5, 0.75, 80, 90] * 3,
-            "amplitude": [2, 2, 2, 1, 1] * 3,
+            "window_s": [width for width in WINDOWS_S for _ in range(5)],
+            "frequency_hz": [0.25, 0.5, 0.75, 80, 90] * len(WINDOWS_S),
+            "amplitude": [2, 2, 2, 1, 1] * len(WINDOWS_S),
         }
     )
     bands = band_metrics(spectrum, (80, 100))
@@ -113,7 +113,7 @@ def test_sjw46_reference_uses_only_seven_23c_cells_and_normalizes_each(tmp_path)
             {
                 "sample_no": [number] * len(WINDOWS_S),
                 "window_s": WINDOWS_S,
-                "low_to_high_amplitude_ratio": [2 * number, 4 * number, 8 * number],
+                "low_to_high_amplitude_ratio": [2 * number, 3 * number, 4 * number, 8 * number],
             }
         ).to_csv(target, index=False)
         reference_rows.append({"temperature_c": 23, "sample_no": number, "ratio_file": relative})
@@ -122,7 +122,7 @@ def test_sjw46_reference_uses_only_seven_23c_cells_and_normalizes_each(tmp_path)
     script = Path(__file__).resolve().parents[1] / "scripts" / "10_poster_rotation_only_stats.py"
     load_reference = run_path(str(script))["load_sjw46_reference"]
     result = load_reference(tmp_path)
-    assert len(result) == 21
+    assert len(result) == 28
     assert set(result.sample_no) == set(range(1, 8))
     assert np.allclose(result.groupby("sample_no").normalized_ratio.max(), 1)
-    assert np.allclose(result.groupby("window_s").normalized_ratio.mean(), [0.25, 0.5, 1])
+    assert np.allclose(result.groupby("window_s").normalized_ratio.mean(), [0.25, 0.375, 0.5, 1])

@@ -469,7 +469,7 @@ def run(measurements: Path, temperature_root: Path, output: Path) -> None:
                 "interval": "longest observed continuous rotation run",
                 "group_unit": "cell; one experimental day per condition; descriptive only",
                 "ratio_center": "geometric mean of cell ratios",
-                "normalization": "each cell maximum over 3 windows",
+                "normalization": "each cell maximum over 4 windows",
                 "sjw46_reference": "No.01–07 at 23 C; archived centroid-orbit FFT valid runs, no stop exclusion; normalized figure only",
                 "normalized_ratio_plot": "../normalized_ratio.png",
             },

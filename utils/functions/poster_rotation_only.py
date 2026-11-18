@@ -13,7 +13,7 @@ from utils.functions.stopped_orbit_reference import (
     label_candidates,
 )
 
-WINDOWS_S = (0.1, 0.5, 1.0)
+WINDOWS_S = (0.1, 0.2, 0.5, 1.0)
 LOW_BAND_HZ = (0.0, 1.0)
 HIGH_BANDS_HZ = ((80.0, 100.0), (60.0, 80.0))
 
