@@ -10,7 +10,7 @@ python scripts/10_poster_rotation_only_stats.py \
   --output-root outputs/poster_fluctuation/1_rotational_measurements/rotation_only_stats
 ```
 
-`selection.csv` に元フレーム・時刻・最長区間・除外理由、`stop_intervals.csv` に停止候補、`cell_band_metrics.csv` に各窓のFFT分解能と低域/高域点数、`group_summary.csv` に細胞等重みの記述集計を保存する。`tables/` には選択区間の元フレーム付き時系列とFFTを置く。比較PNGは帯域比、細胞内最大値正規化、低域・高域振幅、60–80 Hz高域への感度を示す。AVIの対象と長軸追跡の目視判定は `visual_qc` 列で別管理し、未確認のまま確定採用を主張しない。
+`selection.csv` に元フレーム・時刻・最長区間・除外理由、`stop_intervals.csv` に停止候補、`cell_band_metrics.csv` に各窓のFFT分解能と低域/高域点数、`group_summary.csv` に細胞等重みの記述集計を保存する。`tables/` には選択区間の元フレーム付き時系列とFFTを置く。比較PNGは帯域比、細胞内最大値正規化、低域・高域振幅、60–80 Hz高域への感度を示す。`normalized_ratio.png` は細胞ごとの線・点を表示せず、各窓幅の箱ひげ図と条件別の算術平均を結ぶ線で比較する。AVIの対象と長軸追跡の目視判定は `visual_qc` 列で別管理し、未確認のまま確定採用を主張しない。
 
 採否前の点検図 `original_full_record_<day>.png` は各細胞の元の6秒間の符号付き長軸角速度を左、元記録全体のLow/High比（0.1/0.5/1.0秒窓）を右に並べる。左図には群統計への採否を `USED` / `EXCLUDED` と明記し、採用細胞の揺らぎ評価に使った連続区間を緑で示す。`original_full_record_band_ratio.csv` に図の比を保存する。`selection_overview.png` は全24細胞について元記録・最長候補区間・停止候補・群統計への採否を示す。除外理由と候補区間の時刻は採否一覧図・CSVで確認する。これらの全記録比は回転区間だけの群比と区別する。
 

@@ -178,6 +178,51 @@ def _style(ax: plt.Axes, title: str, ylabel: str) -> None:
     ax.grid(alpha=0.2)
 
 
+def normalized_ratio_figure(accepted: pd.DataFrame, output: Path) -> None:
+    """Compare cell distributions by window and connect condition means."""
+    fig, ax = plt.subplots(figsize=(9, 7), layout="constrained")
+    base_positions = np.arange(len(WINDOWS_S), dtype=float)
+    for index, (day, label) in enumerate(CONDITIONS.items()):
+        part = accepted[accepted.day.eq(day)]
+        if part.empty:
+            continue
+        positions = base_positions + (index - 1) * 0.22
+        distributions = [part.loc[part.window_s.eq(width), "normalized_ratio"].to_numpy(float) for width in WINDOWS_S]
+        ax.boxplot(
+            distributions,
+            positions=positions,
+            widths=0.17,
+            patch_artist=True,
+            showfliers=False,
+            manage_ticks=False,
+            boxprops={"facecolor": COLORS[day], "edgecolor": COLORS[day], "alpha": 0.24, "linewidth": 2},
+            whiskerprops={"color": COLORS[day], "linewidth": 1.8},
+            capprops={"color": COLORS[day], "linewidth": 1.8},
+            medianprops={"color": COLORS[day], "linewidth": 2.4},
+        )
+        means = [float(np.mean(values)) for values in distributions]
+        ax.plot(
+            positions,
+            means,
+            "-o",
+            color=COLORS[day],
+            linewidth=3.1,
+            markersize=9,
+            label=f"{label} (n={part.sample_no.nunique()})",
+        )
+    ax.set_xticks(base_positions, [str(width) for width in WINDOWS_S])
+    ax.set_xlim(-0.42, len(WINDOWS_S) - 0.58)
+    ax.set_ylim(0, 1.05)
+    ax.set_title("Each cell maximum = 1", fontsize=21)
+    ax.set_xlabel("Window width [s]", fontsize=18)
+    ax.set_ylabel("Normalized amp ratio", fontsize=18)
+    ax.tick_params(labelsize=16)
+    ax.grid(axis="y", alpha=0.2)
+    fig.legend(loc="outside lower center", ncol=1, fontsize=17)
+    fig.savefig(output / "normalized_ratio.png", dpi=200)
+    plt.close(fig)
+
+
 def group_figures(metrics: pd.DataFrame, output: Path) -> None:
     accepted = metrics[metrics.selection_reason.eq("included")].copy()
     if accepted.empty:
@@ -186,9 +231,9 @@ def group_figures(metrics: pd.DataFrame, output: Path) -> None:
         ["day", "sample_no"]
     ).low_to_high_amplitude_ratio.transform("max")
     plt.rcParams["font.family"] = "Arial"
+    normalized_ratio_figure(accepted, output)
     definitions = (
         ("low_to_high_amplitude_ratio", "Low / High (80–100 Hz)", "Amp ratio", "raw_ratio.png", True),
-        ("normalized_ratio", "Each cell maximum = 1", "Normalized amp ratio", "normalized_ratio.png", False),
         ("low_mean_amplitude", "Low band (0–1 Hz)", "Mean FFT amp", "low_amplitude.png", False),
         ("high_mean_amplitude", "High band (80–100 Hz)", "Mean FFT amp", "high_amplitude.png", False),
         (
