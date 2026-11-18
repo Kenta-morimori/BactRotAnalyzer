@@ -93,7 +93,11 @@ def original_cell_figures(
             ratio_ax.grid(alpha=0.18)
         axes[-1, 0].set_xlabel("Time [s]", fontsize=17)
         axes[-1, 1].set_xlabel("Window width [s]", fontsize=17)
-        fig.suptitle(f"{label} | {day} | original full record", fontsize=24)
+        fig.suptitle(
+            f"{label} | {day} | original full record\n"
+            "Low / High = mean FFT amp (0 < f < 1 Hz) / mean FFT amp (80 ≤ f < 100 Hz)",
+            fontsize=23,
+        )
         fig.savefig(output / f"original_full_record_{day}.png", dpi=180)
         plt.close(fig)
 
