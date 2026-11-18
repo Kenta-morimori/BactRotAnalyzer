@@ -14,6 +14,7 @@ import pandas as pd
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+from matplotlib.colors import to_rgba  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -34,6 +35,7 @@ CONDITIONS = {
     "20231107": "YcgR-tet",
 }
 COLORS = {"20230607": "#2b6cb0", "20231005": "#dd6b20", "20231107": "#b83280"}
+REFERENCE_COLOR = "#27805a"
 
 
 def original_cell_figures(
@@ -178,34 +180,60 @@ def _style(ax: plt.Axes, title: str, ylabel: str) -> None:
     ax.grid(alpha=0.2)
 
 
-def normalized_ratio_figure(accepted: pd.DataFrame, output: Path) -> None:
+def load_sjw46_reference(temperature_root: Path) -> pd.DataFrame:
+    """Read 23 C archived orbit-angle ratios for a visual reference only."""
+    summary = pd.read_csv(temperature_root / "cell_summary.csv")
+    cells = summary.loc[summary.temperature_c.eq(23) & summary.sample_no.between(1, 7), ["sample_no", "ratio_file"]]
+    if len(cells) != 7 or set(cells.sample_no) != set(range(1, 8)):
+        raise ValueError("SJW46 23 C reference requires the seven No.01–07 cells")
+    rows = []
+    for row in cells.itertuples(index=False):
+        band = pd.read_csv(temperature_root / str(row.ratio_file))
+        band = band[band.window_s.isin(WINDOWS_S)].copy()
+        if len(band) != len(WINDOWS_S) or set(band.window_s) != set(WINDOWS_S):
+            raise ValueError(f"SJW46 23 C No.{int(row.sample_no):02d}: missing display window")
+        values = band.low_to_high_amplitude_ratio.to_numpy(float)
+        if not np.isfinite(values).all() or (values <= 0).any():
+            raise ValueError(f"SJW46 23 C No.{int(row.sample_no):02d}: invalid band ratio")
+        band.insert(0, "sample_no", int(row.sample_no))
+        rows.append(band[["sample_no", "window_s", "low_to_high_amplitude_ratio"]])
+    reference = pd.concat(rows, ignore_index=True)
+    reference["normalized_ratio"] = reference.low_to_high_amplitude_ratio / reference.groupby(
+        "sample_no"
+    ).low_to_high_amplitude_ratio.transform("max")
+    return reference
+
+
+def normalized_ratio_figure(accepted: pd.DataFrame, reference: pd.DataFrame, output: Path) -> None:
     """Compare cell distributions by window and connect condition means."""
-    fig, ax = plt.subplots(figsize=(9, 7), layout="constrained")
+    fig, ax = plt.subplots(figsize=(10, 8), layout="constrained")
     base_positions = np.arange(len(WINDOWS_S), dtype=float)
-    for index, (day, label) in enumerate(CONDITIONS.items()):
-        part = accepted[accepted.day.eq(day)]
+    groups = [("SJW46", "SJW46", reference, REFERENCE_COLOR)] + [
+        (day, label, accepted[accepted.day.eq(day)], COLORS[day]) for day, label in CONDITIONS.items()
+    ]
+    for index, (_, label, part, color) in enumerate(groups):
         if part.empty:
             continue
-        positions = base_positions + (index - 1) * 0.22
+        positions = base_positions + (index - (len(groups) - 1) / 2) * 0.21
         distributions = [part.loc[part.window_s.eq(width), "normalized_ratio"].to_numpy(float) for width in WINDOWS_S]
         ax.boxplot(
             distributions,
             positions=positions,
-            widths=0.17,
+            widths=0.19,
             patch_artist=True,
             showfliers=False,
             manage_ticks=False,
-            boxprops={"facecolor": COLORS[day], "edgecolor": COLORS[day], "alpha": 0.24, "linewidth": 2},
-            whiskerprops={"color": COLORS[day], "linewidth": 1.8},
-            capprops={"color": COLORS[day], "linewidth": 1.8},
-            medianprops={"color": COLORS[day], "linewidth": 2.4},
+            boxprops={"facecolor": to_rgba(color, 0.10), "edgecolor": to_rgba(color, 0.72), "linewidth": 2},
+            whiskerprops={"color": to_rgba(color, 0.72), "linewidth": 1.8},
+            capprops={"color": to_rgba(color, 0.72), "linewidth": 1.8},
+            medianprops={"color": color, "linewidth": 2.4},
         )
         means = [float(np.mean(values)) for values in distributions]
         ax.plot(
             positions,
             means,
             "-o",
-            color=COLORS[day],
+            color=color,
             linewidth=3.1,
             markersize=9,
             label=f"{label} (n={part.sample_no.nunique()})",
@@ -213,7 +241,10 @@ def normalized_ratio_figure(accepted: pd.DataFrame, output: Path) -> None:
     ax.set_xticks(base_positions, [str(width) for width in WINDOWS_S])
     ax.set_xlim(-0.42, len(WINDOWS_S) - 0.58)
     ax.set_ylim(0, 1.05)
-    ax.set_title("Each cell maximum = 1", fontsize=21)
+    ax.set_title(
+        "Each cell maximum = 1\nSJW46: 23°C centroid orbit, no stop exclusion; others: long axis, rotation only",
+        fontsize=19,
+    )
     ax.set_xlabel("Window width [s]", fontsize=18)
     ax.set_ylabel("Normalized amp ratio", fontsize=18)
     ax.tick_params(labelsize=16)
@@ -223,7 +254,7 @@ def normalized_ratio_figure(accepted: pd.DataFrame, output: Path) -> None:
     plt.close(fig)
 
 
-def group_figures(metrics: pd.DataFrame, output: Path) -> None:
+def group_figures(metrics: pd.DataFrame, reference: pd.DataFrame, output: Path) -> None:
     accepted = metrics[metrics.selection_reason.eq("included")].copy()
     if accepted.empty:
         return
@@ -231,7 +262,7 @@ def group_figures(metrics: pd.DataFrame, output: Path) -> None:
         ["day", "sample_no"]
     ).low_to_high_amplitude_ratio.transform("max")
     plt.rcParams["font.family"] = "Arial"
-    normalized_ratio_figure(accepted, output)
+    normalized_ratio_figure(accepted, reference, output)
     definitions = (
         ("low_to_high_amplitude_ratio", "Low / High (80–100 Hz)", "Amp ratio", "raw_ratio.png", True),
         ("low_mean_amplitude", "Low band (0–1 Hz)", "Mean FFT amp", "low_amplitude.png", False),
@@ -314,7 +345,7 @@ def group_figures(metrics: pd.DataFrame, output: Path) -> None:
     plt.close(fig)
 
 
-def run(measurements: Path, output: Path) -> None:
+def run(measurements: Path, temperature_root: Path, output: Path) -> None:
     index = pd.read_csv(measurements / "index.csv")
     originals: dict[tuple[str, int], pd.DataFrame] = {}
     original_band_rows: list[pd.DataFrame] = []
@@ -396,15 +427,17 @@ def run(measurements: Path, output: Path) -> None:
     metrics = pd.DataFrame(metric_rows)
     summary = summarize_groups(metrics)
     original_bands = pd.concat(original_band_rows, ignore_index=True)
+    reference = load_sjw46_reference(temperature_root)
     selections.to_csv(output / "selection.csv", index=False)
     metrics.to_csv(output / "cell_band_metrics.csv", index=False)
     summary.to_csv(output / "group_summary.csv", index=False)
     original_bands.to_csv(output / "original_full_record_band_ratio.csv", index=False)
+    reference.to_csv(output / "sjw46_23c_reference_ratios.csv", index=False)
     stop_table = pd.DataFrame(stop_rows, columns=["day", "sample_no", "start_s", "end_s", "method"])
     stop_table.to_csv(output / "stop_intervals.csv", index=False)
     if spectra_rows:
         pd.concat(spectra_rows, ignore_index=True).to_csv(output / "tables" / "rotation_only_fft.csv", index=False)
-    group_figures(metrics, output)
+    group_figures(metrics, reference, output)
     original_cell_figures(originals, original_bands, selections, output)
     selection_figure(selections, stop_table, output)
     (output / "method.json").write_text(
@@ -423,6 +456,7 @@ def run(measurements: Path, output: Path) -> None:
                 "group_unit": "cell; one experimental day per condition; descriptive only",
                 "ratio_center": "geometric mean of cell ratios",
                 "normalization": "each cell maximum over 3 windows",
+                "sjw46_reference": "No.01–07 at 23 C; archived centroid-orbit FFT valid runs, no stop exclusion; normalized figure only",
             },
             indent=2,
         )
@@ -441,7 +475,11 @@ def main() -> None:
         type=Path,
         default=ROOT / "outputs/poster_fluctuation/1_rotational_measurements/rotation_only_stats",
     )
+    parser.add_argument(
+        "--temperature-root", type=Path, help="Temperature output root; defaults to measurements sibling"
+    )
     args = parser.parse_args()
+    temperature_root = args.temperature_root or args.measurements_root.parent / "3_Temperature_Control"
     index = pd.read_csv(args.measurements_root / "index.csv")
     inputs = [args.measurements_root / "index.csv"]
     for row in index.itertuples():
@@ -450,14 +488,24 @@ def main() -> None:
                 args.measurements_root / str(row.day) / "tables" / f"No.{int(row.sample_no):02d}_time_series.csv"
             )
             inputs.append(args.measurements_root / row.band_ratio_file)
+    temperature_summary = temperature_root / "cell_summary.csv"
+    reference_rows = pd.read_csv(temperature_summary)
+    reference_rows = reference_rows.loc[reference_rows.temperature_c.eq(23) & reference_rows.sample_no.between(1, 7)]
+    inputs.append(temperature_summary)
+    inputs.extend(temperature_root / str(row.ratio_file) for row in reference_rows.itertuples())
     with analysis_run(
-        parameters={"measurements_root": str(args.measurements_root), "output_root": str(args.output_root)},
+        parameters={
+            "measurements_root": str(args.measurements_root),
+            "temperature_root": str(temperature_root),
+            "output_root": str(args.output_root),
+            "sjw46_reference": "23 C No.01–07 archived centroid-orbit FFT valid runs; normalized figure only",
+        },
         inputs=inputs,
         outputs=[args.output_root],
     ) as run_record:
         args.output_root.mkdir(parents=True, exist_ok=True)
         (args.output_root / "tables").mkdir(parents=True, exist_ok=True)
-        run(args.measurements_root, args.output_root)
+        run(args.measurements_root, temperature_root, args.output_root)
     records = args.output_root / "_run_records"
     records.mkdir(exist_ok=True)
     shutil.copy2(run_record / "manifest.json", records / f"{run_record.name}.json")

@@ -1,5 +1,8 @@
 """Synthetic checks for rotation-only poster comparisons."""
 
+from pathlib import Path
+from runpy import run_path
+
 import numpy as np
 import pandas as pd
 
@@ -98,3 +101,24 @@ def test_band_definitions_and_group_equal_cell_weight():
     assert (summary.cell_count == 2).all()
     assert np.allclose(summary.ratio_geometric_mean, 3.0)
     assert np.allclose(summary.normalized_ratio_mean, 1.0)
+
+
+def test_sjw46_reference_uses_only_seven_23c_cells_and_normalizes_each(tmp_path):
+    reference_rows = []
+    for number in range(1, 8):
+        relative = f"23C/No.{number:02d}.csv"
+        target = tmp_path / relative
+        target.parent.mkdir(exist_ok=True)
+        pd.DataFrame(
+            {"window_s": WINDOWS_S, "low_to_high_amplitude_ratio": [2 * number, 4 * number, 8 * number]}
+        ).to_csv(target, index=False)
+        reference_rows.append({"temperature_c": 23, "sample_no": number, "ratio_file": relative})
+    reference_rows.append({"temperature_c": 10, "sample_no": 1, "ratio_file": "missing.csv"})
+    pd.DataFrame(reference_rows).to_csv(tmp_path / "cell_summary.csv", index=False)
+    script = Path(__file__).resolve().parents[1] / "scripts" / "10_poster_rotation_only_stats.py"
+    load_reference = run_path(str(script))["load_sjw46_reference"]
+    result = load_reference(tmp_path)
+    assert len(result) == 21
+    assert set(result.sample_no) == set(range(1, 8))
+    assert np.allclose(result.groupby("sample_no").normalized_ratio.max(), 1)
+    assert np.allclose(result.groupby("window_s").normalized_ratio.mean(), [0.25, 0.5, 1])
