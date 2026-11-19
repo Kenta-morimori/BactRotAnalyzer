@@ -229,6 +229,55 @@ def plot_centroid_mask_qc(
     plt.close(fig)
 
 
+def plot_low_high_by_window(summary: pd.DataFrame, ratios: pd.DataFrame, path: Path) -> None:
+    """Compare all candidates without sample labels or a legend."""
+    fig, ax = plt.subplots(figsize=(10.5, 8), constrained_layout=True)
+    widths = sorted(ratios.window_s.unique())
+    positions = {width: index for index, width in enumerate(widths)}
+    colors = plt.cm.tab10(np.linspace(0, 1, len(summary)))
+    for color, row in zip(colors, summary.itertuples()):
+        values = ratios.loc[ratios.case_id == row.case_id].sort_values("window_s")
+        ax.plot(
+            [positions[width] for width in values.window_s],
+            values.low_to_high_amplitude_ratio,
+            "o-",
+            color=color,
+            lw=3.2,
+            ms=11,
+        )
+    ax.set_xticks(range(len(widths)), [f"{width:g}" for width in widths])
+    ax.set_xlabel("Window width [s]", fontsize=26)
+    ax.set_ylabel("Pre-rise Low/High ratio", fontsize=26)
+    ax.tick_params(labelsize=24)
+    ax.grid(alpha=0.2)
+    fig.savefig(path, dpi=200)
+    plt.close(fig)
+
+
+def plot_low_high_vs_post_switching(summary: pd.DataFrame, path: Path) -> None:
+    """Show pre/post candidate metrics without sample labels or a legend."""
+    fig, ax = plt.subplots(figsize=(10.5, 8), constrained_layout=True)
+    colors = plt.cm.tab10(np.linspace(0, 1, len(summary)))
+    for color, row in zip(colors, summary.itertuples()):
+        ax.scatter(
+            row.low_high_ratio_0p5s,
+            row.sign_changes_per_observed_s,
+            color=color,
+            s=290,
+            edgecolor="black",
+            linewidth=0.8,
+            zorder=3,
+        )
+    ax.set_xlabel("Pre-rise Low/High ratio (0.5 s window)", fontsize=26)
+    ax.set_ylabel("Post-rise sign changes [1/s]", fontsize=26)
+    ax.set_xlim(left=0)
+    ax.set_ylim(bottom=0)
+    ax.tick_params(labelsize=24)
+    ax.grid(alpha=0.2)
+    fig.savefig(path, dpi=200)
+    plt.close(fig)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", required=True, type=Path)
@@ -319,6 +368,8 @@ def main() -> None:
         all_ratios = pd.concat(ratio_tables, ignore_index=True)
         summary.to_csv(args.output_dir / "summary.csv", index=False)
         all_ratios.to_csv(args.output_dir / "pre_low_high_by_window.csv", index=False)
+        plot_low_high_by_window(summary, all_ratios, args.output_dir / "compare_pre_low_high_by_window.png")
+        plot_low_high_vs_post_switching(summary, args.output_dir / "compare_pre_low_high_vs_post_switching.png")
         plot_overview(overviews, sliding_tables, args.output_dir / "candidate_prepost_overview.png")
         plot_centroid_mask_qc(overviews, args.output_dir / "centroid_mask_qc.png")
         if args.representative_case_id:
@@ -349,6 +400,8 @@ def main() -> None:
             f"representative case: {args.representative_case_id or 'none'}; "
             "representative_response.png and representative_centroid.png omit sample titles and legends, "
             "while keeping axis labels and units. "
+            "compare_pre_low_high_by_window.png and compare_pre_low_high_vs_post_switching.png "
+            "are separate candidate comparisons without sample legends or point labels. "
             "Radius excursion flags are review suggestions only and do not alter the analysis.\n",
             encoding="utf-8",
         )
