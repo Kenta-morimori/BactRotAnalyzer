@@ -232,21 +232,21 @@ def plot_centroid_mask_qc(
 def plot_low_high_by_window(summary: pd.DataFrame, ratios: pd.DataFrame, path: Path) -> None:
     """Compare all candidates without sample labels or a legend."""
     fig, ax = plt.subplots(figsize=(10.5, 8), constrained_layout=True)
-    widths = sorted(ratios.window_s.unique())
-    positions = {width: index for index, width in enumerate(widths)}
     for row in summary.itertuples():
-        values = ratios.loc[ratios.case_id == row.case_id].sort_values("window_s")
+        values = ratios.loc[(ratios.case_id == row.case_id) & (ratios.window_s <= 1.0)].sort_values("window_s")
         ax.plot(
-            [positions[width] for width in values.window_s],
+            values.window_s,
             values.low_to_high_amplitude_ratio,
             "o-",
             color="black",
             lw=3.2,
             ms=11,
+            clip_on=False,
         )
-    ax.set_xticks(range(len(widths)), [f"{width:g}" for width in widths])
+    ax.set_xlim(0, 1.0)
+    ax.set_xticks(np.arange(0, 1.01, 0.2))
     ax.set_xlabel("Window width [s]", fontsize=26)
-    ax.set_ylabel("Pre-rise Low/High ratio", fontsize=26)
+    ax.set_ylabel("Pre-rise Amp ratio", fontsize=26)
     ax.tick_params(labelsize=24)
     ax.grid(alpha=0.2)
     fig.savefig(path, dpi=200)
@@ -399,7 +399,8 @@ def main() -> None:
             "representative_response.png and representative_centroid.png omit sample titles and legends, "
             "while keeping axis labels and units. "
             "compare_pre_low_high_by_window.png and compare_pre_low_high_vs_post_switching.png "
-            "are separate black-only candidate comparisons without sample legends or point labels. "
+            "are separate black-only candidate comparisons without sample legends or point labels; "
+            "the width plot uses actual 0.1, 0.2, 0.5, and 1.0 s positions, while CSV retains all six widths. "
             "Radius excursion flags are review suggestions only and do not alter the analysis.\n",
             encoding="utf-8",
         )
