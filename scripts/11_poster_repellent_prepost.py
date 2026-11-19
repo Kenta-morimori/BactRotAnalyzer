@@ -236,6 +236,32 @@ def plot_comparison(summary: pd.DataFrame, ratios: pd.DataFrame, path: Path) -> 
     plt.close(fig)
 
 
+def plot_pre_low_high_vs_post_sign_changes(summary: pd.DataFrame, path: Path) -> None:
+    """Poster-sized single-panel view of the already computed pre/post metrics."""
+    fig, ax = plt.subplots(figsize=(10.5, 8), constrained_layout=True)
+    colors = plt.cm.tab10(np.linspace(0, 1, len(summary)))
+    for color, row in zip(colors, summary.itertuples()):
+        ax.scatter(
+            row.low_high_ratio_0p5s,
+            row.sign_changes_per_observed_s,
+            color=color,
+            s=210,
+            edgecolor="black",
+            linewidth=0.8,
+            label=row.label,
+            zorder=3,
+        )
+    ax.set_xlabel("Pre-rise low-frequency relative strength (0.5 s window)", fontsize=20)
+    ax.set_ylabel("Post-rise sign changes [1/s]", fontsize=20)
+    ax.set_xlim(left=0)
+    ax.set_ylim(bottom=0)
+    ax.tick_params(labelsize=18)
+    ax.grid(alpha=0.2)
+    ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=False, fontsize=17)
+    fig.savefig(path, dpi=200)
+    plt.close(fig)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", required=True, type=Path)
@@ -318,6 +344,7 @@ def main() -> None:
         plot_overview(overviews, args.output_dir / "candidate_prepost_overview.png")
         plot_centroid_mask_qc(overviews, args.output_dir / "centroid_mask_qc.png")
         plot_comparison(summary, all_ratios, args.output_dir / "compare_pre_low_high_and_post_switching.png")
+        plot_pre_low_high_vs_post_sign_changes(summary, args.output_dir / "pre_low_high_vs_post_sign_changes.png")
         (args.output_dir / "README.txt").write_text(
             "Private five-cell poster comparison. Pre-rise: Gaussian SD(|primary angular velocity|)/Mean, "
             "z-score, longest contiguous FFT, mean amplitude 0<f<1 Hz divided by 80<=f<100 Hz. "
@@ -326,6 +353,8 @@ def main() -> None:
             "Reviewed centroid failures are NaN; no interpolation across them. "
             "centroid_mask_qc.png overlays excluded original coordinates on retained centroid and center; "
             "candidate_prepost_overview.png colors negative CW velocity orange and positive CCW blue. "
+            "pre_low_high_vs_post_sign_changes.png plots the 0.5 s pre-rise Low/High ratio "
+            "against the post-rise diagnostic sign-change rate. "
             "Radius excursion flags are review suggestions only and do not alter the analysis.\n",
             encoding="utf-8",
         )
