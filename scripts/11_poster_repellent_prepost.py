@@ -126,12 +126,22 @@ def plot_overview(cases: list[tuple[dict, pd.DataFrame]], path: Path) -> None:
 def plot_comparison(summary: pd.DataFrame, ratios: pd.DataFrame, path: Path) -> None:
     fig, axes = plt.subplots(1, 3, figsize=(20, 7), constrained_layout=True)
     colors = plt.cm.tab10(np.linspace(0, 1, len(summary)))
+    widths = sorted(ratios.window_s.unique())
+    width_positions = {value: index for index, value in enumerate(widths)}
     for color, row in zip(colors, summary.itertuples()):
         r = ratios.loc[ratios.case_id == row.case_id]
-        axes[0].plot(r.window_s, r.low_to_high_amplitude_ratio, "o-", lw=2.3, ms=7, color=color, label=row.label)
+        axes[0].plot(
+            [width_positions[value] for value in r.window_s],
+            r.low_to_high_amplitude_ratio,
+            "o-",
+            lw=2.3,
+            ms=7,
+            color=color,
+            label=row.label,
+        )
     axes[0].set_xlabel("Window width [s]")
     axes[0].set_ylabel("Low/High amplitude ratio")
-    axes[0].set_xticks(sorted(ratios.window_s.unique()))
+    axes[0].set_xticks(range(len(widths)), [f"{value:g}" for value in widths])
     axes[0].legend(loc="upper center", bbox_to_anchor=(0.5, -0.23), ncol=1, frameon=False)
     x = np.arange(len(summary))
     axes[1].bar(x, summary.sign_changes_per_observed_s, color=colors, width=0.7)
