@@ -109,7 +109,7 @@ def _masked_time_spans(time: np.ndarray, invalid: np.ndarray) -> list[tuple[floa
 
 
 def plot_overview(cases: list[tuple[dict, pd.DataFrame, pd.DataFrame]], path: Path) -> None:
-    fig = plt.figure(figsize=(18, 5.8 * len(cases)))
+    fig = plt.figure(figsize=(18, 7.3 * len(cases)))
     outer = fig.add_gridspec(len(cases), 1, left=0.11, right=0.98, top=0.97, bottom=0.07, hspace=0.43)
     for row, (case, _raw, series) in enumerate(cases):
         inner = outer[row].subgridspec(2, 1, height_ratios=(1.4, 1), hspace=0.04)
@@ -123,10 +123,10 @@ def plot_overview(cases: list[tuple[dict, pd.DataFrame, pd.DataFrame]], path: Pa
         speed_ax.plot(t, np.where(omega < 0, omega, np.nan), lw=0.9, color="#d95f02", alpha=0.85)
         speed_ax.fill_between(t, 0, omega, where=omega < 0, color="#d95f02", alpha=0.17)
         speed_ax.axhline(0, color="black", lw=0.8)
-        speed_ax.set_ylabel("Angular velocity [rad/s]", fontsize=23)
+        speed_ax.set_ylabel("Angular velocity\n[rad/s]", fontsize=23)
         speed_ax.set_title(case["label"], fontsize=26)
         brightness_ax.plot(t, shown.background_intensity, lw=1.8, color="#6a4c93")
-        brightness_ax.set_ylabel("Brightness [a.u.]", fontsize=23)
+        brightness_ax.set_ylabel("Brightness\n[a.u.]", fontsize=23)
         brightness_ax.set_xlabel("Time [s]", fontsize=23)
         speed_ax.tick_params(labelbottom=False)
         for ax in (speed_ax, brightness_ax):
