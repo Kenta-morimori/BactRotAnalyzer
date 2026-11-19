@@ -29,7 +29,7 @@
 
 ```bash
 python3 scripts/11_poster_repellent_prepost.py \
-  --manifest outputs/poster_fluctuation/4_repellent_response/private_candidates.json \
+  --manifest outputs/poster_fluctuation/4_repellent_response/private_prepost_candidates.json \
   --source-root outputs \
   --output-dir outputs/poster_fluctuation/4_repellent_response
 ```
