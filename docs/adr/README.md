@@ -20,5 +20,6 @@
 | [0022](0022-poster-figure-layout-and-angle-fft.md) | ポスター図の縦横比、表示3窓幅、折り返し角度FFTの右縦軸 |
 | [0023](0023-poster-candidate-comparison.md) | 代表4細胞の帯域指標の最大値正規化と角度定義の明記 |
 | [0024](0024-poster-rotation-only-group-comparison.md) | 回転区間の選別と細胞単位の記述的帯域比較 |
+| [0025](0025-poster-repellent-prepost-comparison.md) | 忌避応答候補の上昇前Low/Highと上昇後の診断的符号変化頻度 |
 
 各ADRには状態、背景、決定、代替、影響・限界、検証方法を記載する。後日の方針変更は新ADRで置き換え、既存の判断を黙って書き換えない。
