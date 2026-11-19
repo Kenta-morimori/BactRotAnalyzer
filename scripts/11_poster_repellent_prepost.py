@@ -18,7 +18,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.lines import Line2D
-from matplotlib.patches import Patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -147,8 +146,6 @@ def plot_overview(
         brightness_ax.tick_params(labelbottom=False)
         for ax in (speed_ax, brightness_ax, sliding_ax):
             ax.axvline(rise, color="#d81b60", lw=3.0, ls="--")
-            for lo, hi in _masked_time_spans(t, shown.centroid_invalid.to_numpy(bool)):
-                ax.axvspan(lo, hi, color="#c62828", alpha=0.16, lw=0)
             ax.set_xlim(start, end)
             ax.tick_params(labelsize=20)
             ax.grid(alpha=0.18)
@@ -158,12 +155,11 @@ def plot_overview(
                 Line2D([], [], color="#2774ae", label="CCW (+)"),
                 Line2D([], [], color="#d95f02", label="CW (−)"),
                 Line2D([], [], color="#d81b60", ls="--", label="Brightness rise"),
-                Patch(facecolor="#c62828", alpha=0.16, label="Excluded centroid frames"),
                 Line2D([], [], color="#008b8b", label="1 s window, 1 frame step"),
             ],
             loc="lower center",
             bbox_to_anchor=(0.5, 0.015),
-            ncol=5,
+            ncol=4,
             frameon=False,
             fontsize=19,
         )
