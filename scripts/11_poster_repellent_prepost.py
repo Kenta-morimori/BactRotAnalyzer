@@ -234,14 +234,13 @@ def plot_low_high_by_window(summary: pd.DataFrame, ratios: pd.DataFrame, path: P
     fig, ax = plt.subplots(figsize=(10.5, 8), constrained_layout=True)
     widths = sorted(ratios.window_s.unique())
     positions = {width: index for index, width in enumerate(widths)}
-    colors = plt.cm.tab10(np.linspace(0, 1, len(summary)))
-    for color, row in zip(colors, summary.itertuples()):
+    for row in summary.itertuples():
         values = ratios.loc[ratios.case_id == row.case_id].sort_values("window_s")
         ax.plot(
             [positions[width] for width in values.window_s],
             values.low_to_high_amplitude_ratio,
             "o-",
-            color=color,
+            color="black",
             lw=3.2,
             ms=11,
         )
@@ -257,12 +256,11 @@ def plot_low_high_by_window(summary: pd.DataFrame, ratios: pd.DataFrame, path: P
 def plot_low_high_vs_post_switching(summary: pd.DataFrame, path: Path) -> None:
     """Show pre/post candidate metrics without sample labels or a legend."""
     fig, ax = plt.subplots(figsize=(10.5, 8), constrained_layout=True)
-    colors = plt.cm.tab10(np.linspace(0, 1, len(summary)))
-    for color, row in zip(colors, summary.itertuples()):
+    for row in summary.itertuples():
         ax.scatter(
             row.low_high_ratio_0p5s,
             row.sign_changes_per_observed_s,
-            color=color,
+            color="black",
             s=290,
             edgecolor="black",
             linewidth=0.8,
@@ -401,7 +399,7 @@ def main() -> None:
             "representative_response.png and representative_centroid.png omit sample titles and legends, "
             "while keeping axis labels and units. "
             "compare_pre_low_high_by_window.png and compare_pre_low_high_vs_post_switching.png "
-            "are separate candidate comparisons without sample legends or point labels. "
+            "are separate black-only candidate comparisons without sample legends or point labels. "
             "Radius excursion flags are review suggestions only and do not alter the analysis.\n",
             encoding="utf-8",
         )
