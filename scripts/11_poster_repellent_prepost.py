@@ -28,6 +28,7 @@ from utils.functions.poster_repellent_prepost import (  # noqa: E402
     pre_rise_fluctuation,
     radius_excursion_candidates,
     sign_change_summary,
+    sliding_sign_change_series,
     validate_series,
 )
 from utils.run_context import analysis_run  # noqa: E402
@@ -108,13 +109,16 @@ def _masked_time_spans(time: np.ndarray, invalid: np.ndarray) -> list[tuple[floa
     return [(float(time[run[0]]), float(time[run[-1]] + step)) for run in runs]
 
 
-def plot_overview(cases: list[tuple[dict, pd.DataFrame, pd.DataFrame]], path: Path) -> None:
-    fig = plt.figure(figsize=(18, 7.3 * len(cases)))
+def plot_overview(
+    cases: list[tuple[dict, pd.DataFrame, pd.DataFrame]], sliding: dict[str, pd.DataFrame], path: Path
+) -> None:
+    fig = plt.figure(figsize=(18, 9.2 * len(cases)))
     outer = fig.add_gridspec(len(cases), 1, left=0.11, right=0.98, top=0.97, bottom=0.07, hspace=0.43)
     for row, (case, _raw, series) in enumerate(cases):
-        inner = outer[row].subgridspec(2, 1, height_ratios=(1.4, 1), hspace=0.04)
+        inner = outer[row].subgridspec(3, 1, height_ratios=(1.4, 1, 1), hspace=0.04)
         speed_ax = fig.add_subplot(inner[0])
         brightness_ax = fig.add_subplot(inner[1], sharex=speed_ax)
+        sliding_ax = fig.add_subplot(inner[2], sharex=speed_ax)
         start, rise, end = case["analysis_start_s"], case["rise_time_s"], case["analysis_end_s"]
         shown = series.loc[(series.time_sec >= start) & (series.time_sec < end)]
         t = shown.time_sec.to_numpy(float)
@@ -127,9 +131,13 @@ def plot_overview(cases: list[tuple[dict, pd.DataFrame, pd.DataFrame]], path: Pa
         speed_ax.set_title(case["label"], fontsize=26)
         brightness_ax.plot(t, shown.background_intensity, lw=1.8, color="#6a4c93")
         brightness_ax.set_ylabel("Brightness\n[a.u.]", fontsize=23)
-        brightness_ax.set_xlabel("Time [s]", fontsize=23)
+        slide = sliding[case["id"]]
+        sliding_ax.plot(slide.time_sec, slide.sign_changes_per_observed_s, lw=1.8, color="#008b8b")
+        sliding_ax.set_ylabel("Sign changes\n[1/s]", fontsize=23)
+        sliding_ax.set_xlabel("Time [s]", fontsize=23)
         speed_ax.tick_params(labelbottom=False)
-        for ax in (speed_ax, brightness_ax):
+        brightness_ax.tick_params(labelbottom=False)
+        for ax in (speed_ax, brightness_ax, sliding_ax):
             ax.axvline(rise, color="#d81b60", lw=3.0, ls="--")
             for lo, hi in _masked_time_spans(t, shown.centroid_invalid.to_numpy(bool)):
                 ax.axvspan(lo, hi, color="#c62828", alpha=0.16, lw=0)
@@ -142,10 +150,11 @@ def plot_overview(cases: list[tuple[dict, pd.DataFrame, pd.DataFrame]], path: Pa
             Line2D([], [], color="#d95f02", label="CW (−)"),
             Line2D([], [], color="#d81b60", ls="--", label="Brightness rise"),
             Patch(facecolor="#c62828", alpha=0.16, label="Excluded centroid frames"),
+            Line2D([], [], color="#008b8b", label="1 s window, 1 frame step"),
         ],
         loc="lower center",
         bbox_to_anchor=(0.5, 0.015),
-        ncol=4,
+        ncol=5,
         frameon=False,
         fontsize=19,
     )
@@ -300,6 +309,7 @@ def main() -> None:
         tables = args.output_dir / "tables"
         tables.mkdir(exist_ok=True)
         summaries, ratio_tables, overviews = [], [], []
+        sliding_tables: dict[str, pd.DataFrame] = {}
         for case in cases:
             raw, _ = load_series(args.source_root, case)
             suggested = radius_excursion_candidates(raw)
@@ -311,6 +321,9 @@ def main() -> None:
             qc.to_csv(tables / f"{case['id']}_frame_qc.csv", index=False)
             pre, fft, ratios, metadata = pre_rise_fluctuation(series, case["analysis_start_s"], case["rise_time_s"])
             post, bins = sign_change_summary(series, case["rise_time_s"], case["analysis_end_s"])
+            sliding = sliding_sign_change_series(series, case["analysis_start_s"], case["analysis_end_s"])
+            sliding.to_csv(tables / f"{case['id']}_sliding_1s_sign_changes.csv", index=False)
+            sliding_tables[case["id"]] = sliding
             pre.to_csv(tables / f"{case['id']}_pre_sd_time_series.csv", index=False)
             fft.to_csv(tables / f"{case['id']}_pre_sd_fft.csv", index=False)
             bins.to_csv(tables / f"{case['id']}_post_1s_bins.csv", index=False)
@@ -343,7 +356,7 @@ def main() -> None:
         all_ratios = pd.concat(ratio_tables, ignore_index=True)
         summary.to_csv(args.output_dir / "summary.csv", index=False)
         all_ratios.to_csv(args.output_dir / "pre_low_high_by_window.csv", index=False)
-        plot_overview(overviews, args.output_dir / "candidate_prepost_overview.png")
+        plot_overview(overviews, sliding_tables, args.output_dir / "candidate_prepost_overview.png")
         plot_centroid_mask_qc(overviews, args.output_dir / "centroid_mask_qc.png")
         plot_comparison(summary, all_ratios, args.output_dir / "compare_pre_low_high_and_post_switching.png")
         plot_pre_low_high_vs_post_sign_changes(summary, args.output_dir / "pre_low_high_vs_post_sign_changes.png")
@@ -354,7 +367,8 @@ def main() -> None:
             "This is a diagnostic sign-change rate, not confirmed biological reversals. "
             "Reviewed centroid failures are NaN; no interpolation across them. "
             "centroid_mask_qc.png overlays excluded original coordinates on retained centroid and center; "
-            "candidate_prepost_overview.png stacks aligned angular velocity and brightness; "
+            "candidate_prepost_overview.png stacks aligned angular velocity, brightness, and a centered "
+            "1 s sign-change rate sliding one original frame at a time; "
             "negative CW velocity is orange and positive CCW is blue. "
             "compare_pre_low_high_and_post_switching.png has width-wise ratio and unlabeled scatter panels. "
             "pre_low_high_vs_post_sign_changes.png is the legend-free standalone scatter. "

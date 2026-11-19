@@ -133,6 +133,39 @@ def sign_change_summary(series: pd.DataFrame, start: float, end: float) -> tuple
     return summary, pd.DataFrame(rows)
 
 
+def sliding_sign_change_series(series: pd.DataFrame, start: float, end: float, *, width_s: float = 1.0) -> pd.DataFrame:
+    """Centered full-width windows at every original frame, with valid-time rates."""
+    if not start < end or width_s <= 0:
+        raise ValueError("analysis interval and sliding width must be positive")
+    shown = series.loc[(series.time_sec >= start) & (series.time_sec < end)].reset_index(drop=True)
+    t = shown.time_sec.to_numpy(float)
+    v = shown.angular_velocity_rad_s.to_numpy(float)
+    pairs = contiguous_eligible_pairs(shown)
+    changed = pairs & (np.sign(v[:-1]) != np.sign(v[1:]))
+    pair_seconds = np.where(pairs, np.diff(t), 0.0)
+    count_prefix = np.r_[0, np.cumsum(np.r_[0, changed.astype(int)])]
+    seconds_prefix = np.r_[0.0, np.cumsum(np.r_[0.0, pair_seconds])]
+    lo = t - width_s / 2
+    hi = t + width_s / 2
+    left = np.searchsorted(t, lo, side="left")
+    right = np.searchsorted(t, hi, side="left")
+    counts = count_prefix[right] - count_prefix[left]
+    seconds = seconds_prefix[right] - seconds_prefix[left]
+    full = (lo >= start) & (hi <= end) & np.isfinite(v)
+    rate = np.divide(counts, seconds, out=np.full(len(t), np.nan), where=seconds > 0)
+    return pd.DataFrame(
+        {
+            "source_frame_1based": shown.source_frame_1based.to_numpy(int),
+            "time_sec": t,
+            "window_start_s": lo,
+            "window_end_s": hi,
+            "sign_change_count": np.where(full, counts, np.nan),
+            "eligible_seconds": np.where(full, seconds, np.nan),
+            "sign_changes_per_observed_s": np.where(full, rate, np.nan),
+        }
+    )
+
+
 def pre_rise_fluctuation(
     series: pd.DataFrame, start: float, rise: float
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, list[dict]]:

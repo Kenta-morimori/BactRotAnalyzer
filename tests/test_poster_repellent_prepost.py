@@ -1,7 +1,11 @@
 import numpy as np
 import pandas as pd
 
-from utils.functions.poster_repellent_prepost import apply_masks, sign_change_summary
+from utils.functions.poster_repellent_prepost import (
+    apply_masks,
+    sign_change_summary,
+    sliding_sign_change_series,
+)
 
 
 def _synthetic_series():
@@ -42,3 +46,33 @@ def test_sign_change_rate_does_not_bridge_missing_or_frame_gap():
     assert np.isclose(result["eligible_seconds"], 0.01)
     assert np.isclose(result["sign_changes_per_observed_s"], 100.0)
     assert bins.sign_change_count.sum() == 1
+
+
+def test_sliding_sign_changes_step_each_frame_without_bridging_mask():
+    frame = np.arange(1, 18)
+    time = (frame - 1) / 10
+    velocity = np.where(frame <= 6, 1.0, np.where(frame <= 9, -1.0, np.where(frame <= 12, 1.0, -1.0)))
+    series = pd.DataFrame(
+        {
+            "source_frame_1based": frame,
+            "time_sec": time,
+            "centroid_x": np.ones(len(frame)),
+            "centroid_y": np.ones(len(frame)),
+            "center_x": np.zeros(len(frame)),
+            "center_y": np.zeros(len(frame)),
+            "angular_velocity_rad_s": velocity,
+            "background_intensity": np.ones(len(frame)),
+        }
+    )
+    clean = apply_masks(series, [[7, 7]])
+    rolling = sliding_sign_change_series(clean, 0.0, 1.7)
+    assert rolling.source_frame_1based.tolist() == frame.tolist()
+    assert np.allclose(np.diff(rolling.time_sec), 0.1)
+    at_one_second = rolling.loc[rolling.source_frame_1based == 11].iloc[0]
+    assert at_one_second.window_start_s == 0.5
+    assert at_one_second.window_end_s == 1.5
+    assert at_one_second.sign_change_count == 2
+    assert np.isclose(at_one_second.eligible_seconds, 0.7)
+    assert np.isclose(at_one_second.sign_changes_per_observed_s, 2 / 0.7)
+    assert np.isnan(rolling.loc[rolling.source_frame_1based == 7, "sign_changes_per_observed_s"].iloc[0])
+    assert np.isnan(rolling.loc[rolling.source_frame_1based == 1, "sign_changes_per_observed_s"].iloc[0])
