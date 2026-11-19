@@ -229,27 +229,38 @@ def plot_centroid_mask_qc(
     plt.close(fig)
 
 
-def plot_low_high_by_window(summary: pd.DataFrame, ratios: pd.DataFrame, path: Path) -> None:
-    """Compare all candidates without sample labels or a legend."""
+def plot_low_high_by_window(
+    summary: pd.DataFrame,
+    ratios: pd.DataFrame,
+    path: Path,
+    *,
+    max_window_s: float = 1.0,
+    show_labels: bool = False,
+) -> None:
+    """Compare candidates at their true window widths, optionally identifying cells."""
     fig, ax = plt.subplots(figsize=(10.5, 8), constrained_layout=True)
-    for row in summary.itertuples():
-        values = ratios.loc[(ratios.case_id == row.case_id) & (ratios.window_s <= 1.0)].sort_values("window_s")
+    colors = plt.cm.tab10.colors
+    for index, row in enumerate(summary.itertuples()):
+        values = ratios.loc[(ratios.case_id == row.case_id) & (ratios.window_s <= max_window_s)].sort_values("window_s")
         ax.plot(
             values.window_s,
             values.low_to_high_amplitude_ratio,
             "o-",
-            color="black",
+            color=colors[index % len(colors)] if show_labels else "black",
+            label=row.label if show_labels else None,
             lw=3.2,
             ms=11,
-            clip_on=False,
         )
-    ax.set_xlim(0, 1.0)
-    ax.set_xticks(np.arange(0, 1.01, 0.2))
+    ax.set_xlim(0, max_window_s + 0.05)
+    tick_step = 0.2 if max_window_s == 1.0 else 0.5
+    ax.set_xticks(np.arange(0, max_window_s + tick_step / 2, tick_step))
     ax.set_xlabel("Window width [s]", fontsize=26)
     ax.set_ylabel("Pre-rise Amp ratio", fontsize=26)
     ax.tick_params(labelsize=24)
     ax.grid(alpha=0.2)
-    fig.savefig(path, dpi=200)
+    if show_labels:
+        ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=False, fontsize=19)
+    fig.savefig(path, dpi=200, bbox_inches="tight" if show_labels else None)
     plt.close(fig)
 
 
@@ -367,6 +378,13 @@ def main() -> None:
         summary.to_csv(args.output_dir / "summary.csv", index=False)
         all_ratios.to_csv(args.output_dir / "pre_low_high_by_window.csv", index=False)
         plot_low_high_by_window(summary, all_ratios, args.output_dir / "compare_pre_low_high_by_window.png")
+        plot_low_high_by_window(
+            summary,
+            all_ratios,
+            args.output_dir / "compare_pre_low_high_by_window_2.0s_labeled.png",
+            max_window_s=2.0,
+            show_labels=True,
+        )
         plot_low_high_vs_post_switching(summary, args.output_dir / "compare_pre_low_high_vs_post_switching.png")
         plot_overview(overviews, sliding_tables, args.output_dir / "candidate_prepost_overview.png")
         plot_centroid_mask_qc(overviews, args.output_dir / "centroid_mask_qc.png")
@@ -400,7 +418,9 @@ def main() -> None:
             "while keeping axis labels and units. "
             "compare_pre_low_high_by_window.png and compare_pre_low_high_vs_post_switching.png "
             "are separate black-only candidate comparisons without sample legends or point labels; "
-            "the width plot uses actual 0.1, 0.2, 0.5, and 1.0 s positions, while CSV retains all six widths. "
+            "the width plot uses actual 0.1, 0.2, 0.5, and 1.0 s positions. "
+            "compare_pre_low_high_by_window_2.0s_labeled.png includes all six widths with cell colors and a legend. "
+            "The CSV retains all six widths. "
             "Radius excursion flags are review suggestions only and do not alter the analysis.\n",
             encoding="utf-8",
         )
