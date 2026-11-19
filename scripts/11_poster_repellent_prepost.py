@@ -110,10 +110,17 @@ def _masked_time_spans(time: np.ndarray, invalid: np.ndarray) -> list[tuple[floa
 
 
 def plot_overview(
-    cases: list[tuple[dict, pd.DataFrame, pd.DataFrame]], sliding: dict[str, pd.DataFrame], path: Path
+    cases: list[tuple[dict, pd.DataFrame, pd.DataFrame]],
+    sliding: dict[str, pd.DataFrame],
+    path: Path,
+    *,
+    show_case_titles: bool = True,
+    show_legend: bool = True,
 ) -> None:
     fig = plt.figure(figsize=(18, 9.2 * len(cases)))
-    outer = fig.add_gridspec(len(cases), 1, left=0.11, right=0.98, top=0.97, bottom=0.07, hspace=0.43)
+    outer = fig.add_gridspec(
+        len(cases), 1, left=0.11, right=0.98, top=0.97, bottom=0.07 if show_legend else 0.11, hspace=0.43
+    )
     for row, (case, _raw, series) in enumerate(cases):
         inner = outer[row].subgridspec(3, 1, height_ratios=(1.4, 1, 1), hspace=0.04)
         speed_ax = fig.add_subplot(inner[0])
@@ -128,7 +135,8 @@ def plot_overview(
         speed_ax.fill_between(t, 0, omega, where=omega < 0, color="#d95f02", alpha=0.17)
         speed_ax.axhline(0, color="black", lw=0.8)
         speed_ax.set_ylabel("Angular velocity\n[rad/s]", fontsize=23)
-        speed_ax.set_title(case["label"], fontsize=26)
+        if show_case_titles:
+            speed_ax.set_title(case["label"], fontsize=26)
         brightness_ax.plot(t, shown.background_intensity, lw=1.8, color="#6a4c93")
         brightness_ax.set_ylabel("Brightness\n[a.u.]", fontsize=23)
         slide = sliding[case["id"]]
@@ -144,28 +152,35 @@ def plot_overview(
             ax.set_xlim(start, end)
             ax.tick_params(labelsize=20)
             ax.grid(alpha=0.18)
-    fig.legend(
-        handles=[
-            Line2D([], [], color="#2774ae", label="CCW (+)"),
-            Line2D([], [], color="#d95f02", label="CW (−)"),
-            Line2D([], [], color="#d81b60", ls="--", label="Brightness rise"),
-            Patch(facecolor="#c62828", alpha=0.16, label="Excluded centroid frames"),
-            Line2D([], [], color="#008b8b", label="1 s window, 1 frame step"),
-        ],
-        loc="lower center",
-        bbox_to_anchor=(0.5, 0.015),
-        ncol=5,
-        frameon=False,
-        fontsize=19,
-    )
+    if show_legend:
+        fig.legend(
+            handles=[
+                Line2D([], [], color="#2774ae", label="CCW (+)"),
+                Line2D([], [], color="#d95f02", label="CW (−)"),
+                Line2D([], [], color="#d81b60", ls="--", label="Brightness rise"),
+                Patch(facecolor="#c62828", alpha=0.16, label="Excluded centroid frames"),
+                Line2D([], [], color="#008b8b", label="1 s window, 1 frame step"),
+            ],
+            loc="lower center",
+            bbox_to_anchor=(0.5, 0.015),
+            ncol=5,
+            frameon=False,
+            fontsize=19,
+        )
     fig.savefig(path, dpi=180)
     plt.close(fig)
 
 
-def plot_centroid_mask_qc(cases: list[tuple[dict, pd.DataFrame, pd.DataFrame]], path: Path) -> None:
+def plot_centroid_mask_qc(
+    cases: list[tuple[dict, pd.DataFrame, pd.DataFrame]],
+    path: Path,
+    *,
+    show_case_titles: bool = True,
+    show_legend: bool = True,
+) -> None:
     """Show original excluded coordinates alongside the retained centroid and center."""
     fig, axes = plt.subplots(len(cases), 2, figsize=(21, 4.7 * len(cases)))
-    fig.subplots_adjust(left=0.09, right=0.98, top=0.97, bottom=0.09, hspace=0.67, wspace=0.18)
+    fig.subplots_adjust(left=0.09, right=0.98, top=0.97, bottom=0.09 if show_legend else 0.16, hspace=0.67, wspace=0.18)
     if len(cases) == 1:
         axes = axes[None, :]
     for row, (case, raw, series) in enumerate(cases):
@@ -189,87 +204,28 @@ def plot_centroid_mask_qc(cases: list[tuple[dict, pd.DataFrame, pd.DataFrame]], 
                 ax.axvspan(lo, hi, color="#c62828", alpha=0.12, lw=0)
             ax.axvline(case["rise_time_s"], color="#d81b60", lw=1.8, ls="--")
             ax.set_xlim(start, end)
-            ax.set_title(f"{case['label']}: {axis}(t) · excluded {invalid.sum()} frames", fontsize=24)
+            if show_case_titles:
+                ax.set_title(f"{case['label']}: {axis}(t) · excluded {invalid.sum()} frames", fontsize=24)
             ax.set_xlabel("Time [s]", fontsize=22)
             ax.set_ylabel(f"Position [{unit}]", fontsize=22)
             ax.tick_params(labelsize=20)
             ax.grid(alpha=0.18)
-    fig.legend(
-        handles=[
-            Line2D([], [], color="#9ecae1", label="Original centroid"),
-            Line2D([], [], color="#2774ae", label="Retained centroid"),
-            Line2D([], [], color="#e6550d", label="Rotation center"),
-            Line2D([], [], color="#c62828", marker="x", ls="None", label="Excluded original centroid"),
-            Line2D([], [], color="#d81b60", ls="--", label="Brightness rise"),
-        ],
-        loc="lower center",
-        bbox_to_anchor=(0.5, 0.02),
-        ncol=5,
-        frameon=False,
-        fontsize=18,
-    )
-    fig.savefig(path, dpi=180)
-    plt.close(fig)
-
-
-def plot_comparison(summary: pd.DataFrame, ratios: pd.DataFrame, path: Path) -> None:
-    fig, axes = plt.subplots(1, 2, figsize=(20, 9))
-    fig.subplots_adjust(left=0.08, right=0.98, top=0.95, bottom=0.25, wspace=0.3)
-    colors = plt.cm.tab10(np.linspace(0, 1, len(summary)))
-    widths = sorted(ratios.window_s.unique())
-    width_positions = {value: index for index, value in enumerate(widths)}
-    for color, row in zip(colors, summary.itertuples()):
-        r = ratios.loc[ratios.case_id == row.case_id]
-        axes[0].plot(
-            [width_positions[value] for value in r.window_s],
-            r.low_to_high_amplitude_ratio,
-            "o-",
-            lw=3,
-            ms=10,
-            color=color,
-            label=row.label,
+    if show_legend:
+        fig.legend(
+            handles=[
+                Line2D([], [], color="#9ecae1", label="Original centroid"),
+                Line2D([], [], color="#2774ae", label="Retained centroid"),
+                Line2D([], [], color="#e6550d", label="Rotation center"),
+                Line2D([], [], color="#c62828", marker="x", ls="None", label="Excluded original centroid"),
+                Line2D([], [], color="#d81b60", ls="--", label="Brightness rise"),
+            ],
+            loc="lower center",
+            bbox_to_anchor=(0.5, 0.02),
+            ncol=5,
+            frameon=False,
+            fontsize=18,
         )
-    axes[0].set_xlabel("Window width [s]")
-    axes[0].set_ylabel("Pre-rise Low/High ratio")
-    axes[0].set_xticks(range(len(widths)), [f"{value:g}" for value in widths])
-    for color, row in zip(colors, summary.itertuples()):
-        axes[1].scatter(row.low_high_ratio_0p5s, row.sign_changes_per_observed_s, color=color, s=230)
-    axes[1].set_xlabel("Pre-rise Low/High ratio (0.5 s window)")
-    axes[1].set_ylabel("Post-rise sign changes [1/s]")
-    axes[1].set_xlim(left=0)
-    axes[1].set_ylim(bottom=0)
-    for ax in axes:
-        ax.tick_params(labelsize=21)
-        ax.xaxis.label.set_fontsize(23)
-        ax.yaxis.label.set_fontsize(23)
-        ax.grid(alpha=0.2)
-    handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, 0.04), ncol=5, frameon=False, fontsize=19)
     fig.savefig(path, dpi=180)
-    plt.close(fig)
-
-
-def plot_pre_low_high_vs_post_sign_changes(summary: pd.DataFrame, path: Path) -> None:
-    """Poster-sized single-panel view of the already computed pre/post metrics."""
-    fig, ax = plt.subplots(figsize=(10.5, 8), constrained_layout=True)
-    colors = plt.cm.tab10(np.linspace(0, 1, len(summary)))
-    for color, row in zip(colors, summary.itertuples()):
-        ax.scatter(
-            row.low_high_ratio_0p5s,
-            row.sign_changes_per_observed_s,
-            color=color,
-            s=290,
-            edgecolor="black",
-            linewidth=0.8,
-            zorder=3,
-        )
-    ax.set_xlabel("Pre-rise Low/High ratio (0.5 s window)", fontsize=26)
-    ax.set_ylabel("Post-rise sign changes [1/s]", fontsize=26)
-    ax.set_xlim(left=0)
-    ax.set_ylim(bottom=0)
-    ax.tick_params(labelsize=24)
-    ax.grid(alpha=0.2)
-    fig.savefig(path, dpi=200)
     plt.close(fig)
 
 
@@ -278,6 +234,7 @@ def main() -> None:
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--source-root", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--representative-case-id", type=str)
     args = parser.parse_args()
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
     if manifest.get("version") != 1 or not manifest.get("cases"):
@@ -285,6 +242,8 @@ def main() -> None:
     cases = manifest["cases"]
     if len({c["id"] for c in cases}) != len(cases):
         raise ValueError("case ids must be unique")
+    if args.representative_case_id and args.representative_case_id not in {c["id"] for c in cases}:
+        raise ValueError(f"representative case id not in manifest: {args.representative_case_id}")
     source_paths = []
     for case in cases:
         if case["input_kind"] == "source_aligned_csv":
@@ -301,7 +260,11 @@ def main() -> None:
                 )
             )
     with analysis_run(
-        parameters={"manifest": manifest, "source_root": str(args.source_root.resolve())},
+        parameters={
+            "manifest": manifest,
+            "source_root": str(args.source_root.resolve()),
+            "representative_case_id": args.representative_case_id,
+        },
         inputs=[args.manifest, *source_paths],
         outputs=[args.output_dir],
     ):
@@ -358,8 +321,21 @@ def main() -> None:
         all_ratios.to_csv(args.output_dir / "pre_low_high_by_window.csv", index=False)
         plot_overview(overviews, sliding_tables, args.output_dir / "candidate_prepost_overview.png")
         plot_centroid_mask_qc(overviews, args.output_dir / "centroid_mask_qc.png")
-        plot_comparison(summary, all_ratios, args.output_dir / "compare_pre_low_high_and_post_switching.png")
-        plot_pre_low_high_vs_post_sign_changes(summary, args.output_dir / "pre_low_high_vs_post_sign_changes.png")
+        if args.representative_case_id:
+            representative = [item for item in overviews if item[0]["id"] == args.representative_case_id]
+            plot_overview(
+                representative,
+                sliding_tables,
+                args.output_dir / "representative_response.png",
+                show_case_titles=False,
+                show_legend=False,
+            )
+            plot_centroid_mask_qc(
+                representative,
+                args.output_dir / "representative_centroid.png",
+                show_case_titles=False,
+                show_legend=False,
+            )
         (args.output_dir / "README_prepost.txt").write_text(
             "Private five-cell poster comparison. Pre-rise: Gaussian SD(|primary angular velocity|)/Mean, "
             "z-score, longest contiguous FFT, mean amplitude 0<f<1 Hz divided by 80<=f<100 Hz. "
@@ -370,8 +346,9 @@ def main() -> None:
             "candidate_prepost_overview.png stacks aligned angular velocity, brightness, and a centered "
             "1 s sign-change rate sliding one original frame at a time; "
             "negative CW velocity is orange and positive CCW is blue. "
-            "compare_pre_low_high_and_post_switching.png has width-wise ratio and unlabeled scatter panels. "
-            "pre_low_high_vs_post_sign_changes.png is the legend-free standalone scatter. "
+            f"representative case: {args.representative_case_id or 'none'}; "
+            "representative_response.png and representative_centroid.png omit sample titles and legends, "
+            "while keeping axis labels and units. "
             "Radius excursion flags are review suggestions only and do not alter the analysis.\n",
             encoding="utf-8",
         )
