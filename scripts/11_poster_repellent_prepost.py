@@ -360,7 +360,7 @@ def main() -> None:
         plot_centroid_mask_qc(overviews, args.output_dir / "centroid_mask_qc.png")
         plot_comparison(summary, all_ratios, args.output_dir / "compare_pre_low_high_and_post_switching.png")
         plot_pre_low_high_vs_post_sign_changes(summary, args.output_dir / "pre_low_high_vs_post_sign_changes.png")
-        (args.output_dir / "README.txt").write_text(
+        (args.output_dir / "README_prepost.txt").write_text(
             "Private five-cell poster comparison. Pre-rise: Gaussian SD(|primary angular velocity|)/Mean, "
             "z-score, longest contiguous FFT, mean amplitude 0<f<1 Hz divided by 80<=f<100 Hz. "
             "Post-rise: each adjacent nonzero signed velocity change once, divided by eligible observed seconds. "
