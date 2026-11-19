@@ -109,29 +109,32 @@ def _masked_time_spans(time: np.ndarray, invalid: np.ndarray) -> list[tuple[floa
 
 
 def plot_overview(cases: list[tuple[dict, pd.DataFrame, pd.DataFrame]], path: Path) -> None:
-    fig, axes = plt.subplots(len(cases), 2, figsize=(17, 3.8 * len(cases)), constrained_layout=True)
-    if len(cases) == 1:
-        axes = axes[None, :]
+    fig = plt.figure(figsize=(18, 5.8 * len(cases)))
+    outer = fig.add_gridspec(len(cases), 1, left=0.11, right=0.98, top=0.97, bottom=0.07, hspace=0.43)
     for row, (case, _raw, series) in enumerate(cases):
+        inner = outer[row].subgridspec(2, 1, height_ratios=(1.4, 1), hspace=0.04)
+        speed_ax = fig.add_subplot(inner[0])
+        brightness_ax = fig.add_subplot(inner[1], sharex=speed_ax)
         start, rise, end = case["analysis_start_s"], case["rise_time_s"], case["analysis_end_s"]
         shown = series.loc[(series.time_sec >= start) & (series.time_sec < end)]
         t = shown.time_sec.to_numpy(float)
         omega = shown.angular_velocity_rad_s.to_numpy(float)
-        axes[row, 0].plot(t, np.where(omega > 0, omega, np.nan), lw=0.8, color="#2774ae", alpha=0.8)
-        axes[row, 0].plot(t, np.where(omega < 0, omega, np.nan), lw=0.8, color="#d95f02", alpha=0.85)
-        axes[row, 0].fill_between(t, 0, omega, where=omega < 0, color="#d95f02", alpha=0.17)
-        axes[row, 0].axhline(0, color="black", lw=0.8)
-        axes[row, 0].set_ylabel("Angular velocity [rad/s]", fontsize=16)
-        axes[row, 1].plot(t, shown.background_intensity, lw=1.6, color="#6a4c93")
-        axes[row, 1].set_ylabel("Brightness [a.u.]", fontsize=16)
-        for ax in axes[row]:
-            ax.axvline(rise, color="#d81b60", lw=2.3, ls="--")
+        speed_ax.plot(t, np.where(omega > 0, omega, np.nan), lw=0.9, color="#2774ae", alpha=0.8)
+        speed_ax.plot(t, np.where(omega < 0, omega, np.nan), lw=0.9, color="#d95f02", alpha=0.85)
+        speed_ax.fill_between(t, 0, omega, where=omega < 0, color="#d95f02", alpha=0.17)
+        speed_ax.axhline(0, color="black", lw=0.8)
+        speed_ax.set_ylabel("Angular velocity [rad/s]", fontsize=23)
+        speed_ax.set_title(case["label"], fontsize=26)
+        brightness_ax.plot(t, shown.background_intensity, lw=1.8, color="#6a4c93")
+        brightness_ax.set_ylabel("Brightness [a.u.]", fontsize=23)
+        brightness_ax.set_xlabel("Time [s]", fontsize=23)
+        speed_ax.tick_params(labelbottom=False)
+        for ax in (speed_ax, brightness_ax):
+            ax.axvline(rise, color="#d81b60", lw=3.0, ls="--")
             for lo, hi in _masked_time_spans(t, shown.centroid_invalid.to_numpy(bool)):
                 ax.axvspan(lo, hi, color="#c62828", alpha=0.16, lw=0)
             ax.set_xlim(start, end)
-            ax.set_xlabel("Time [s]", fontsize=16)
-            ax.set_title(case["label"], fontsize=18)
-            ax.tick_params(labelsize=14)
+            ax.tick_params(labelsize=20)
             ax.grid(alpha=0.18)
     fig.legend(
         handles=[
@@ -141,10 +144,10 @@ def plot_overview(cases: list[tuple[dict, pd.DataFrame, pd.DataFrame]], path: Pa
             Patch(facecolor="#c62828", alpha=0.16, label="Excluded centroid frames"),
         ],
         loc="lower center",
-        bbox_to_anchor=(0.5, -0.02),
+        bbox_to_anchor=(0.5, 0.015),
         ncol=4,
         frameon=False,
-        fontsize=15,
+        fontsize=19,
     )
     fig.savefig(path, dpi=180)
     plt.close(fig)
@@ -152,7 +155,8 @@ def plot_overview(cases: list[tuple[dict, pd.DataFrame, pd.DataFrame]], path: Pa
 
 def plot_centroid_mask_qc(cases: list[tuple[dict, pd.DataFrame, pd.DataFrame]], path: Path) -> None:
     """Show original excluded coordinates alongside the retained centroid and center."""
-    fig, axes = plt.subplots(len(cases), 2, figsize=(17, 3.8 * len(cases)), constrained_layout=True)
+    fig, axes = plt.subplots(len(cases), 2, figsize=(21, 4.7 * len(cases)))
+    fig.subplots_adjust(left=0.09, right=0.98, top=0.97, bottom=0.09, hspace=0.67, wspace=0.18)
     if len(cases) == 1:
         axes = axes[None, :]
     for row, (case, raw, series) in enumerate(cases):
@@ -171,15 +175,15 @@ def plot_centroid_mask_qc(cases: list[tuple[dict, pd.DataFrame, pd.DataFrame]], 
             ax.plot(t, raw_coord, color="#9ecae1", lw=0.55, alpha=0.6)
             ax.plot(t, clean_coord, color="#2774ae", lw=0.65, alpha=0.8)
             ax.plot(t, center, color="#e6550d", lw=1.1, alpha=0.9)
-            ax.scatter(t[invalid], raw_coord[invalid], color="#c62828", marker="x", s=12, zorder=4)
+            ax.scatter(t[invalid], raw_coord[invalid], color="#c62828", marker="x", s=26, zorder=4)
             for lo, hi in _masked_time_spans(t, invalid):
                 ax.axvspan(lo, hi, color="#c62828", alpha=0.12, lw=0)
             ax.axvline(case["rise_time_s"], color="#d81b60", lw=1.8, ls="--")
             ax.set_xlim(start, end)
-            ax.set_title(f"{case['label']}: {axis}(t) · excluded {invalid.sum()} frames", fontsize=18)
-            ax.set_xlabel("Time [s]", fontsize=16)
-            ax.set_ylabel(f"Position [{unit}]", fontsize=16)
-            ax.tick_params(labelsize=14)
+            ax.set_title(f"{case['label']}: {axis}(t) · excluded {invalid.sum()} frames", fontsize=24)
+            ax.set_xlabel("Time [s]", fontsize=22)
+            ax.set_ylabel(f"Position [{unit}]", fontsize=22)
+            ax.tick_params(labelsize=20)
             ax.grid(alpha=0.18)
     fig.legend(
         handles=[
@@ -190,17 +194,18 @@ def plot_centroid_mask_qc(cases: list[tuple[dict, pd.DataFrame, pd.DataFrame]], 
             Line2D([], [], color="#d81b60", ls="--", label="Brightness rise"),
         ],
         loc="lower center",
-        bbox_to_anchor=(0.5, -0.02),
+        bbox_to_anchor=(0.5, 0.02),
         ncol=5,
         frameon=False,
-        fontsize=14,
+        fontsize=18,
     )
     fig.savefig(path, dpi=180)
     plt.close(fig)
 
 
 def plot_comparison(summary: pd.DataFrame, ratios: pd.DataFrame, path: Path) -> None:
-    fig, axes = plt.subplots(1, 3, figsize=(20, 7), constrained_layout=True)
+    fig, axes = plt.subplots(1, 2, figsize=(20, 9))
+    fig.subplots_adjust(left=0.08, right=0.98, top=0.95, bottom=0.25, wspace=0.3)
     colors = plt.cm.tab10(np.linspace(0, 1, len(summary)))
     widths = sorted(ratios.window_s.unique())
     width_positions = {value: index for index, value in enumerate(widths)}
@@ -210,28 +215,27 @@ def plot_comparison(summary: pd.DataFrame, ratios: pd.DataFrame, path: Path) -> 
             [width_positions[value] for value in r.window_s],
             r.low_to_high_amplitude_ratio,
             "o-",
-            lw=2.3,
-            ms=7,
+            lw=3,
+            ms=10,
             color=color,
             label=row.label,
         )
     axes[0].set_xlabel("Window width [s]")
-    axes[0].set_ylabel("Low/High amplitude ratio")
+    axes[0].set_ylabel("Pre-rise Low/High ratio")
     axes[0].set_xticks(range(len(widths)), [f"{value:g}" for value in widths])
-    axes[0].legend(loc="upper center", bbox_to_anchor=(0.5, -0.23), ncol=1, frameon=False)
-    x = np.arange(len(summary))
-    axes[1].bar(x, summary.sign_changes_per_observed_s, color=colors, width=0.7)
-    axes[1].set_xticks(x, summary.label, rotation=30, ha="right")
-    axes[1].set_ylabel("Diagnostic sign changes [1/s]")
     for color, row in zip(colors, summary.itertuples()):
-        axes[2].scatter(row.low_high_ratio_0p5s, row.sign_changes_per_observed_s, color=color, s=100, label=row.label)
-    axes[2].set_xlabel("Pre-rise Low/High ratio (0.5 s window)")
-    axes[2].set_ylabel("Post-rise sign changes [1/s]")
+        axes[1].scatter(row.low_high_ratio_0p5s, row.sign_changes_per_observed_s, color=color, s=230)
+    axes[1].set_xlabel("Pre-rise Low/High ratio (0.5 s window)")
+    axes[1].set_ylabel("Post-rise sign changes [1/s]")
+    axes[1].set_xlim(left=0)
+    axes[1].set_ylim(bottom=0)
     for ax in axes:
-        ax.tick_params(labelsize=16)
-        ax.xaxis.label.set_fontsize(17)
-        ax.yaxis.label.set_fontsize(17)
+        ax.tick_params(labelsize=21)
+        ax.xaxis.label.set_fontsize(23)
+        ax.yaxis.label.set_fontsize(23)
         ax.grid(alpha=0.2)
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, 0.04), ncol=5, frameon=False, fontsize=19)
     fig.savefig(path, dpi=180)
     plt.close(fig)
 
@@ -245,19 +249,17 @@ def plot_pre_low_high_vs_post_sign_changes(summary: pd.DataFrame, path: Path) ->
             row.low_high_ratio_0p5s,
             row.sign_changes_per_observed_s,
             color=color,
-            s=210,
+            s=290,
             edgecolor="black",
             linewidth=0.8,
-            label=row.label,
             zorder=3,
         )
-    ax.set_xlabel("Pre-rise low-frequency relative strength (0.5 s window)", fontsize=20)
-    ax.set_ylabel("Post-rise sign changes [1/s]", fontsize=20)
+    ax.set_xlabel("Pre-rise Low/High ratio (0.5 s window)", fontsize=26)
+    ax.set_ylabel("Post-rise sign changes [1/s]", fontsize=26)
     ax.set_xlim(left=0)
     ax.set_ylim(bottom=0)
-    ax.tick_params(labelsize=18)
+    ax.tick_params(labelsize=24)
     ax.grid(alpha=0.2)
-    ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=False, fontsize=17)
     fig.savefig(path, dpi=200)
     plt.close(fig)
 
@@ -352,9 +354,10 @@ def main() -> None:
             "This is a diagnostic sign-change rate, not confirmed biological reversals. "
             "Reviewed centroid failures are NaN; no interpolation across them. "
             "centroid_mask_qc.png overlays excluded original coordinates on retained centroid and center; "
-            "candidate_prepost_overview.png colors negative CW velocity orange and positive CCW blue. "
-            "pre_low_high_vs_post_sign_changes.png plots the 0.5 s pre-rise Low/High ratio "
-            "against the post-rise diagnostic sign-change rate. "
+            "candidate_prepost_overview.png stacks aligned angular velocity and brightness; "
+            "negative CW velocity is orange and positive CCW is blue. "
+            "compare_pre_low_high_and_post_switching.png has width-wise ratio and unlabeled scatter panels. "
+            "pre_low_high_vs_post_sign_changes.png is the legend-free standalone scatter. "
             "Radius excursion flags are review suggestions only and do not alter the analysis.\n",
             encoding="utf-8",
         )

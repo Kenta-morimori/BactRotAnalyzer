@@ -36,6 +36,6 @@ python3 scripts/11_poster_repellent_prepost.py \
 
 出力には細胞別の欠損・確認候補表、上昇前SD/Mean時系列とFFT、1秒ごとの符号変化表、窓幅別Low/High表、比較図、実行記録を含む。`summary.csv` は各細胞の元フレーム数、欠損数、0.5秒窓のLow/High比、符号変化回数、適格観測秒、1秒当たりの値をまとめる。確認候補フラグは自動除外ではない。
 
-`centroid_mask_qc.png` は元の重心、残した重心、回転中心を重ね、除外した元の重心を赤い×と薄赤の時間帯で示す。単位は入力に合わせてµmまたはpx。`candidate_prepost_overview.png` ではCCW正を青、CW負を橙で示し、除外区間を薄赤で示す。
+`centroid_mask_qc.png` は元の重心、残した重心、回転中心を重ね、除外した元の重心を赤い×と薄赤の時間帯で示す。単位は入力に合わせてµmまたはpx。`candidate_prepost_overview.png` は試料ごとに角速度と背景輝度を上下へ連結して時間軸をそろえ、CCW正を青、CW負を橙、除外区間を薄赤で示す。
 
-`pre_low_high_vs_post_sign_changes.png` は上昇前の0.5秒窓Low/High比を横軸、上昇後の有効観測1秒当たりの符号変化回数を縦軸にした単独図。符号変化は診断値であり、生物学的な回転方向切替を確定する値ではない。
+`compare_pre_low_high_and_post_switching.png` は窓幅別Low/High比と散布図の2面を持つ。`pre_low_high_vs_post_sign_changes.png` は上昇前の0.5秒窓Low/High比を横軸、上昇後の有効観測1秒当たりの符号変化回数を縦軸にした凡例なしの単独図。符号変化は診断値であり、生物学的な回転方向切替を確定する値ではない。
