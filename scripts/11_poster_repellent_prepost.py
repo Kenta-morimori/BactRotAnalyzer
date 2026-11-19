@@ -17,6 +17,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -95,30 +97,104 @@ def load_series(source_root: Path, case: dict) -> tuple[pd.DataFrame, list[Path]
     return validate_series(series), paths
 
 
-def plot_overview(cases: list[tuple[dict, pd.DataFrame]], path: Path) -> None:
+def _masked_time_spans(time: np.ndarray, invalid: np.ndarray) -> list[tuple[float, float]]:
+    """Return inclusive runs as plot spans without joining separate gaps."""
+    indices = np.flatnonzero(invalid)
+    if not len(indices):
+        return []
+    breaks = np.flatnonzero(np.diff(indices) != 1) + 1
+    runs = np.split(indices, breaks)
+    step = float(np.median(np.diff(time))) if len(time) > 1 else 0.0
+    return [(float(time[run[0]]), float(time[run[-1]] + step)) for run in runs]
+
+
+def plot_overview(cases: list[tuple[dict, pd.DataFrame, pd.DataFrame]], path: Path) -> None:
     fig, axes = plt.subplots(len(cases), 2, figsize=(17, 3.8 * len(cases)), constrained_layout=True)
     if len(cases) == 1:
         axes = axes[None, :]
-    for row, (case, series) in enumerate(cases):
+    for row, (case, _raw, series) in enumerate(cases):
         start, rise, end = case["analysis_start_s"], case["rise_time_s"], case["analysis_end_s"]
         shown = series.loc[(series.time_sec >= start) & (series.time_sec < end)]
         t = shown.time_sec.to_numpy(float)
         omega = shown.angular_velocity_rad_s.to_numpy(float)
-        axes[row, 0].plot(t, omega, lw=0.7, color="#2774ae", alpha=0.75)
+        axes[row, 0].plot(t, np.where(omega > 0, omega, np.nan), lw=0.8, color="#2774ae", alpha=0.8)
+        axes[row, 0].plot(t, np.where(omega < 0, omega, np.nan), lw=0.8, color="#d95f02", alpha=0.85)
+        axes[row, 0].fill_between(t, 0, omega, where=omega < 0, color="#d95f02", alpha=0.17)
         axes[row, 0].axhline(0, color="black", lw=0.8)
         axes[row, 0].set_ylabel("Angular velocity [rad/s]", fontsize=16)
         axes[row, 1].plot(t, shown.background_intensity, lw=1.6, color="#6a4c93")
         axes[row, 1].set_ylabel("Brightness [a.u.]", fontsize=16)
         for ax in axes[row]:
             ax.axvline(rise, color="#d81b60", lw=2.3, ls="--")
+            for lo, hi in _masked_time_spans(t, shown.centroid_invalid.to_numpy(bool)):
+                ax.axvspan(lo, hi, color="#c62828", alpha=0.16, lw=0)
             ax.set_xlim(start, end)
             ax.set_xlabel("Time [s]", fontsize=16)
             ax.set_title(case["label"], fontsize=18)
             ax.tick_params(labelsize=14)
             ax.grid(alpha=0.18)
-        bad = shown.loc[shown.centroid_invalid, "time_sec"].to_numpy(float)
-        if len(bad):
-            axes[row, 0].scatter(bad, np.zeros(len(bad)), marker="x", color="red", s=25, zorder=5)
+    fig.legend(
+        handles=[
+            Line2D([], [], color="#2774ae", label="CCW (+)"),
+            Line2D([], [], color="#d95f02", label="CW (−)"),
+            Line2D([], [], color="#d81b60", ls="--", label="Brightness rise"),
+            Patch(facecolor="#c62828", alpha=0.16, label="Excluded centroid frames"),
+        ],
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.02),
+        ncol=4,
+        frameon=False,
+        fontsize=15,
+    )
+    fig.savefig(path, dpi=180)
+    plt.close(fig)
+
+
+def plot_centroid_mask_qc(cases: list[tuple[dict, pd.DataFrame, pd.DataFrame]], path: Path) -> None:
+    """Show original excluded coordinates alongside the retained centroid and center."""
+    fig, axes = plt.subplots(len(cases), 2, figsize=(17, 3.8 * len(cases)), constrained_layout=True)
+    if len(cases) == 1:
+        axes = axes[None, :]
+    for row, (case, raw, series) in enumerate(cases):
+        start, end = case["analysis_start_s"], case["analysis_end_s"]
+        included = (raw.time_sec >= start) & (raw.time_sec < end)
+        original = raw.loc[included]
+        clean = series.loc[included]
+        t = original.time_sec.to_numpy(float)
+        invalid = clean.centroid_invalid.to_numpy(bool)
+        unit = "px" if case["input_kind"] == "source_aligned_csv" else "µm"
+        for col, axis in enumerate(("x", "y")):
+            ax = axes[row, col]
+            raw_coord = original[f"centroid_{axis}"].to_numpy(float)
+            clean_coord = clean[f"centroid_{axis}"].to_numpy(float)
+            center = clean[f"center_{axis}"].to_numpy(float)
+            ax.plot(t, raw_coord, color="#9ecae1", lw=0.55, alpha=0.6)
+            ax.plot(t, clean_coord, color="#2774ae", lw=0.65, alpha=0.8)
+            ax.plot(t, center, color="#e6550d", lw=1.1, alpha=0.9)
+            ax.scatter(t[invalid], raw_coord[invalid], color="#c62828", marker="x", s=12, zorder=4)
+            for lo, hi in _masked_time_spans(t, invalid):
+                ax.axvspan(lo, hi, color="#c62828", alpha=0.12, lw=0)
+            ax.axvline(case["rise_time_s"], color="#d81b60", lw=1.8, ls="--")
+            ax.set_xlim(start, end)
+            ax.set_title(f"{case['label']}: {axis}(t) · excluded {invalid.sum()} frames", fontsize=18)
+            ax.set_xlabel("Time [s]", fontsize=16)
+            ax.set_ylabel(f"Position [{unit}]", fontsize=16)
+            ax.tick_params(labelsize=14)
+            ax.grid(alpha=0.18)
+    fig.legend(
+        handles=[
+            Line2D([], [], color="#9ecae1", label="Original centroid"),
+            Line2D([], [], color="#2774ae", label="Retained centroid"),
+            Line2D([], [], color="#e6550d", label="Rotation center"),
+            Line2D([], [], color="#c62828", marker="x", ls="None", label="Excluded original centroid"),
+            Line2D([], [], color="#d81b60", ls="--", label="Brightness rise"),
+        ],
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.02),
+        ncol=5,
+        frameon=False,
+        fontsize=14,
+    )
     fig.savefig(path, dpi=180)
     plt.close(fig)
 
@@ -229,7 +305,7 @@ def main() -> None:
                     **post,
                 }
             )
-            overviews.append((case, series))
+            overviews.append((case, raw, series))
             print(
                 f"{case['id']}: pre 0.5s Low/High={summaries[-1]['low_high_ratio_0p5s']:.4g}, "
                 f"post sign changes/s={post['sign_changes_per_observed_s']:.4g}, "
@@ -240,6 +316,7 @@ def main() -> None:
         summary.to_csv(args.output_dir / "summary.csv", index=False)
         all_ratios.to_csv(args.output_dir / "pre_low_high_by_window.csv", index=False)
         plot_overview(overviews, args.output_dir / "candidate_prepost_overview.png")
+        plot_centroid_mask_qc(overviews, args.output_dir / "centroid_mask_qc.png")
         plot_comparison(summary, all_ratios, args.output_dir / "compare_pre_low_high_and_post_switching.png")
         (args.output_dir / "README.txt").write_text(
             "Private five-cell poster comparison. Pre-rise: Gaussian SD(|primary angular velocity|)/Mean, "
@@ -247,6 +324,8 @@ def main() -> None:
             "Post-rise: each adjacent nonzero signed velocity change once, divided by eligible observed seconds. "
             "This is a diagnostic sign-change rate, not confirmed biological reversals. "
             "Reviewed centroid failures are NaN; no interpolation across them. "
+            "centroid_mask_qc.png overlays excluded original coordinates on retained centroid and center; "
+            "candidate_prepost_overview.png colors negative CW velocity orange and positive CCW blue. "
             "Radius excursion flags are review suggestions only and do not alter the analysis.\n",
             encoding="utf-8",
         )
